@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="pt" translate="no">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f9f9f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Nova Logistics · Plano de Investimento</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232a78d6'/%3E%3Ctext x='32' y='42' font-family='system-ui,sans-serif' font-size='26' font-weight='800' fill='white' text-anchor='middle'%3ENL%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    color-scheme: light;
+    --page:           #f9f9f7;
+    --surface:        #fcfcfb;
+    --ink:            #0b0b0b;
+    --ink-2:          #52514e;
+    --ink-muted:      #898781;
+    --hairline:       #e1e0d9;
+    --border:         rgba(11,11,11,0.10);
+    --track:          #f0efec;
+    --accent:         #2a78d6;   /* categorical slot 1 (blue) */
+    --accent-soft:    #cde2fb;
+    --good:           #0ca30c;
+    --good-text:      #006300;
+    --warning:        #fab219;
+    --serious:        #ec835a;
+    --critical:       #d03b3b;
+    --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+    --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7; --s8: #e34948;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --page:           #0d0d0d;
+      --surface:        #1a1a19;
+      --ink:            #ffffff;
+      --ink-2:          #c3c2b7;
+      --ink-muted:      #898781;
+      --hairline:       #2c2c2a;
+      --border:         rgba(255,255,255,0.10);
+      --track:          #383835;
+      --accent:         #3987e5;
+      --accent-soft:    #184f95;
+      --good-text:      #0ca30c;
+      --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+      --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--page);
+    color: var(--ink);
+    min-height: 100dvh;
+    padding-bottom: calc(64px + env(safe-area-inset-bottom));
+  }
+
+  /* ---------- Header ---------- */
+  header {
+    position: sticky; top: 0; z-index: 20;
+    background: color-mix(in srgb, var(--page) 88%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--hairline);
+    padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .logo {
+    width: 38px; height: 38px; border-radius: 10px; flex: none;
+    background: var(--accent); color: #fff;
+    display: grid; place-items: center;
+    font-weight: 800; font-size: 15px; letter-spacing: .5px;
+  }
+  .brand { flex: 1; min-width: 0; }
+  .brand h1 { font-size: 16px; font-weight: 700; line-height: 1.15; }
+  .brand p  { font-size: 12px; color: var(--ink-2); line-height: 1.3;
+              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .refresh-btn {
+    flex: none; width: 40px; height: 40px; border-radius: 50%;
+    border: 1px solid var(--border); background: var(--surface); color: var(--ink-2);
+    display: grid; place-items: center; cursor: pointer; touch-action: manipulation;
+  }
+  .refresh-btn:active { background: var(--track); }
+  .refresh-btn svg { width: 18px; height: 18px; }
+  .refresh-btn.spinning svg { animation: spin 0.9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .updated-bar {
+    text-align: center; font-size: 11px; color: var(--ink-muted);
+    padding: 6px 16px 0;
+  }
+  .updated-bar .stale { color: var(--serious); }
+
+  /* ---------- Layout ---------- */
+  main { padding: 12px 14px 24px; max-width: 720px; margin: 0 auto; }
+  .panel { display: none; }
+  .panel.active { display: block; animation: fadein .18s ease; }
+  @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; } }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+  }
+  .section-title {
+    font-size: 12px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--ink-muted);
+    margin: 18px 2px 8px;
+  }
+  .section-title:first-child { margin-top: 4px; }
+
+  /* ---------- Stat tiles ---------- */
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  .tile {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 12px 14px;
+  }
+  .tile.wide { grid-column: 1 / -1; }
+  .tile .t-label { font-size: 12px; color: var(--ink-2); line-height: 1.25; margin-bottom: 5px; }
+  .tile .t-value { font-size: 22px; font-weight: 750; letter-spacing: -0.01em; line-height: 1.1; }
+  .tile .t-value small { font-size: 12px; font-weight: 600; color: var(--ink-muted); margin-left: 3px; }
+  .tile .t-sub { font-size: 11px; color: var(--ink-muted); margin-top: 4px; }
+
+  /* ---------- Progress bars ---------- */
+  .bar { height: 8px; border-radius: 4px; background: var(--track); overflow: hidden; margin-top: 10px; }
+  .bar > i { display: block; height: 100%; border-radius: 4px; background: var(--accent); min-width: 2px; }
+  .bar-legend { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-2); margin-top: 6px; }
+
+  /* ---------- Chips / status ---------- */
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; font-weight: 600; line-height: 1;
+    padding: 4px 8px; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--ink-2); background: var(--track);
+  }
+  .chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-muted); flex: none; }
+  .status { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; }
+  .status.good     { color: var(--good-text); }
+  .status.warn     { color: var(--serious); }
+  .status.neutral  { color: var(--ink-2); }
+
+  /* ---------- Filter row ---------- */
+  .filters {
+    display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 10px;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  }
+  .filters::-webkit-scrollbar { display: none; }
+  .filters button {
+    flex: none; font-size: 13px; font-weight: 600; padding: 7px 14px;
+    border-radius: 999px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--ink-2); cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px; touch-action: manipulation;
+  }
+  .filters button .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .filters button.on { background: var(--ink); color: var(--page); border-color: var(--ink); }
+
+  /* ---------- Movement rows ---------- */
+  .mov {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 12px 2px; border-bottom: 1px solid var(--hairline);
+  }
+  .mov:last-child { border-bottom: none; }
+  .mov .m-main { flex: 1; min-width: 0; }
+  .mov .m-item { font-size: 14px; font-weight: 650; line-height: 1.3; }
+  .mov .m-desc { font-size: 12px; color: var(--ink-2); line-height: 1.35; margin-top: 2px; }
+  .mov .m-date { font-size: 11px; color: var(--ink-muted); margin-top: 4px; }
+  .mov .m-side { text-align: right; flex: none; }
+  .mov .m-val { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .mov .m-payer { margin-top: 5px; }
+
+  /* ---------- Plano rows ---------- */
+  .inv { padding: 13px 2px; border-bottom: 1px solid var(--hairline); }
+  .inv:last-child { border-bottom: none; }
+  .inv .i-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .inv .i-name { font-size: 14px; font-weight: 650; line-height: 1.3; }
+  .inv .i-tipo { font-size: 11px; color: var(--ink-muted); margin-top: 2px; }
+  .inv .i-nums { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-2); margin-top: 7px; font-variant-numeric: tabular-nums; }
+  .inv .i-nums b { color: var(--ink); font-weight: 700; }
+
+  /* ---------- Sócio cards ---------- */
+  .socio { display: flex; flex-direction: column; gap: 2px; }
+  .socio-head { display: flex; align-items: center; gap: 12px; }
+  .avatar {
+    width: 42px; height: 42px; border-radius: 50%; flex: none;
+    color: #fff; display: grid; place-items: center;
+    font-weight: 800; font-size: 15px;
+  }
+  .socio-head .s-name { font-size: 16px; font-weight: 700; }
+  .socio-head .s-part { font-size: 12px; color: var(--ink-muted); }
+  .socio-head .s-saldo { margin-left: auto; text-align: right; }
+  .socio-head .s-saldo .v { font-size: 16px; font-weight: 750; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .socio-nums { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-2); margin-top: 8px; font-variant-numeric: tabular-nums; }
+
+  /* ---------- Generic table ---------- */
+  .tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th { text-align: left; font-size: 11px; font-weight: 700; letter-spacing: .05em;
+       text-transform: uppercase; color: var(--ink-muted);
+       padding: 8px 10px 6px; border-bottom: 1px solid var(--hairline); white-space: nowrap; }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--hairline);
+       color: var(--ink); vertical-align: top; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+
+  /* ---------- Empty / error states ---------- */
+  .state { text-align: center; padding: 42px 20px; color: var(--ink-2); }
+  .state .icon { font-size: 34px; margin-bottom: 10px; }
+  .state h3 { font-size: 15px; font-weight: 700; color: var(--ink); margin-bottom: 6px; }
+  .state p { font-size: 13px; line-height: 1.5; max-width: 420px; margin: 0 auto; }
+  .state .hint { margin-top: 12px; font-size: 12px; color: var(--ink-muted); }
+  .retry {
+    margin-top: 16px; font-size: 14px; font-weight: 650;
+    padding: 10px 22px; border-radius: 999px; border: none;
+    background: var(--accent); color: #fff; cursor: pointer; touch-action: manipulation;
+  }
+
+  /* ---------- Skeleton ---------- */
+  .skel { border-radius: 10px; background: var(--track); animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+
+  /* ---------- Bottom nav ---------- */
+  nav {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-top: 1px solid var(--hairline);
+    display: flex;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  nav button {
+    flex: 1; border: none; background: none; cursor: pointer;
+    padding: 8px 2px 7px; color: var(--ink-muted);
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    font-family: inherit; font-size: 10px; font-weight: 600; touch-action: manipulation;
+  }
+  nav button svg { width: 22px; height: 22px; }
+  nav button.on { color: var(--accent); }
+
+  footer { text-align: center; font-size: 11px; color: var(--ink-muted); padding: 8px 16px 20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">NL</div>
+  <div class="brand">
+    <h1>Nova Logistics</h1>
+    <p>Plano de Investimento · Transportes</p>
+  </div>
+  <button class="refresh-btn" id="refreshBtn" aria-label="Atualizar dados" title="Atualizar">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/>
+    </svg>
+  </button>
+</header>
+
+<div class="updated-bar" id="updatedBar"></div>
+
+<main id="main"></main>
+
+<nav id="nav"></nav>
+
+<script>
+"use strict";
+
+/* =====================================================================
+   CONFIGURAÇÃO
+   Para adicionar uma folha nova do Excel (ex.: Faturação, Vendas,
+   Contas Correntes da empresa), basta acrescentar uma entrada em TABS.
+   render: "auto" mostra a folha como tabela sem programação extra;
+   os renders dedicados (resumo, movimentos, ...) estão definidos abaixo.
+   ===================================================================== */
+const SHEET_ID = "1iLkuI2Lom-klgfCtcrfSJMvbitZpXpWGPzoSQjZ0G1I";
+
+const TABS = [
+  { id: "resumo",     sheet: "Resumo",                    label: "Resumo",     render: "resumo",
+    icon: '<path d="M3 12h5l2-7 4 14 2-7h5"/>' },
+  { id: "movimentos", sheet: "Movimentos Investimentos",  label: "Movimentos", render: "movimentos",
+    icon: '<path d="M7 17l10-10"/><polyline points="17 15 17 7 9 7"/><rect x="3" y="3" width="18" height="18" rx="3"/>' },
+  { id: "plano",      sheet: "Investimentos Iniciais",    label: "Plano",      render: "plano",
+    icon: '<path d="M9 11l3 3 8-8"/><path d="M21 12v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h11"/>' },
+  { id: "socios",     sheet: "Sócios - Contas Correntes", label: "Sócios",     render: "socios",
+    icon: '<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3 2.8-5 5.5-5s4.9 2 5.5 5"/><circle cx="17" cy="9" r="2.5"/><path d="M15.5 14.4c2.4.2 4.3 2 4.9 4.6"/>' },
+  { id: "acertos",    sheet: "Acertos entre Sócios",      label: "Acertos",    render: "acertos",
+    icon: '<path d="M4 7h13"/><polyline points="14 4 17 7 14 10"/><path d="M20 17H7"/><polyline points="10 14 7 17 10 20"/>' },
+  /* Exemplo futuro:
+  { id: "faturacao", sheet: "Faturação", label: "Faturação", render: "auto",
+    icon: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>' },
+  */
+];
+
+/* Cores fixas por sócio (ordem fixa — nunca reciclar) */
+const SOCIO_COLORS = ["var(--s1)", "var(--s2)", "var(--s3)", "var(--s4)",
+                      "var(--s5)", "var(--s6)", "var(--s7)", "var(--s8)"];
+const socioColorIndex = new Map();
+function socioColor(name) {
+  const key = (name || "").trim();
+  if (!socioColorIndex.has(key)) socioColorIndex.set(key, socioColorIndex.size % SOCIO_COLORS.length);
+  return SOCIO_COLORS[socioColorIndex.get(key)];
+}
+
+/* =====================================================================
+   DADOS — cada folha é lida do Google Sheets em CSV.
+   Requer partilha "Qualquer pessoa com o link → Leitor".
+   ?src=<base-url> permite testar com CSVs locais (<base>/<folha>.csv).
+   ===================================================================== */
+const SRC_OVERRIDE = new URLSearchParams(location.search).get("src");
+
+function csvUrl(sheetName) {
+  if (SRC_OVERRIDE) return SRC_OVERRIDE.replace(/\/$/, "") + "/" + encodeURIComponent(sheetName) + ".csv";
+  return "https://docs.google.com/spreadsheets/d/" + SHEET_ID +
+         "/gviz/tq?tqx=out:csv&sheet=" + encodeURIComponent(sheetName) +
+         "&t=" + Date.now();  // evita cache
+}
+
+/* Parser CSV (RFC 4180: aspas, vírgulas e quebras de linha em células) */
+function parseCSV(text) {
+  const rows = []; let row = [], cell = "", inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQ) {
+      if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else inQ = false; }
+      else cell += c;
+    } else if (c === '"') inQ = true;
+    else if (c === ",") { row.push(cell); cell = ""; }
+    else if (c === "\n" || c === "\r") {
+      if (c === "\r" && text[i + 1] === "\n") i++;
+      row.push(cell); rows.push(row); row = []; cell = "";
+    } else cell += c;
+  }
+  if (cell !== "" || row.length) { row.push(cell); rows.push(row); }
+  return rows;
+}
+
+/* Números em formato PT: "1 422 500", "25,0%", "(7 545)", "-" */
+function parseNum(v) {
+  if (v == null) return null;
+  let s = String(v).replace(/[\s  ]/g, "").replace(/(MZN|MT)/gi, "");
+  if (s === "" || s === "-" || s === "—") return null;
+  let neg = false;
+  if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }
+  if (s.startsWith("-")) { neg = true; s = s.slice(1); }
+  const pct = s.endsWith("%");
+  if (pct) s = s.slice(0, -1);
+  // vírgula = decimal; ponto pode ser milhares ou decimal
+  if (s.includes(",")) s = s.replace(/\./g, "").replace(",", ".");
+  const n = parseFloat(s);
+  if (isNaN(n)) return null;
+  return (neg ? -n : n);
+}
+
+/* milhares separados por espaço, como no Excel: 2 500 / 1 422 500 */
+function fmtMZN(n) {
+  if (n == null || isNaN(n)) return "—";
+  const abs = String(Math.abs(Math.round(n))).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  return (n < 0 ? "−" : "") + abs;
+}
+function fmtPct(n) { return n == null ? "—" : String(Math.round(n)) + "%"; }
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+/* Encontra a linha de cabeçalho cuja 1.ª célula preenchida é `firstCol` */
+function findHeaderRow(rows, firstCol) {
+  const want = firstCol.toLowerCase();
+  for (let i = 0; i < rows.length; i++) {
+    const first = (rows[i].find(c => c && c.trim()) || "").trim().toLowerCase();
+    if (first === want) return i;
+  }
+  return -1;
+}
+function colIndex(header, name) {
+  const want = name.toLowerCase();
+  return header.findIndex(h => (h || "").trim().toLowerCase().includes(want));
+}
+function isRowEmpty(r) { return !r || r.every(c => !c || !c.trim()); }
+
+/* ---------- fetch com cache local (funciona offline) ---------- */
+const CACHE_PREFIX = "nl_sheet_";
+
+async function loadSheet(sheetName, force) {
+  const key = CACHE_PREFIX + sheetName;
+  try {
+    const res = await fetch(csvUrl(sheetName), { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const text = await res.text();
+    if (/<html/i.test(text.slice(0, 300))) throw new Error("acesso negado");
+    const rows = parseCSV(text);
+    try { localStorage.setItem(key, JSON.stringify({ t: Date.now(), rows })); } catch (e) {}
+    return { rows, fromCache: false, time: Date.now() };
+  } catch (err) {
+    const cached = localStorage.getItem(key);
+    if (cached && !force) {
+      const { t, rows } = JSON.parse(cached);
+      return { rows, fromCache: true, time: t };
+    }
+    throw err;
+  }
+}
+
+/* =====================================================================
+   RENDERS
+   ===================================================================== */
+
+/* --- Resumo: pares rótulo→valor a partir de "INDICADORES GERAIS" --- */
+function renderResumo(rows) {
+  const pairs = [];
+  for (const r of rows) {
+    const cells = r.map(c => (c || "").trim()).filter(Boolean);
+    if (cells.length >= 2) {
+      const val = parseNum(cells[cells.length - 1]);
+      if (val != null && !/^\d/.test(cells[0])) pairs.push([cells[0], val]);
+    }
+  }
+  const find = re => { const p = pairs.find(([l]) => re.test(l)); return p ? p[1] : null; };
+  const total  = find(/total\s+investimento/i);
+  const pago   = find(/j[áa]\s*investido/i);
+  const falta  = find(/falta\s*investir/i);
+  const mensal = find(/despesa\s*recorrente/i);
+  const alvo   = find(/contribui[çc][ãa]o\s*alvo/i);
+  const pct = (total && pago != null) ? Math.max(0, Math.min(100, pago / total * 100)) : null;
+
+  let html = "";
+  if (total != null || pago != null) {
+    html += `<div class="card">
+      <div class="t-label" style="font-size:12px;color:var(--ink-2)">Execução do investimento</div>
+      <div style="font-size:28px;font-weight:800;letter-spacing:-0.01em;margin-top:4px">
+        ${pct != null ? fmtPct(pct) : "—"} <span style="font-size:13px;font-weight:600;color:var(--ink-muted)">realizado</span>
+      </div>
+      <div class="bar"><i style="width:${pct ?? 0}%"></i></div>
+      <div class="bar-legend">
+        <span>Investido: <b>${fmtMZN(pago)}</b> MZN</span>
+        <span>Total: <b>${fmtMZN(total)}</b> MZN</span>
+      </div>
+    </div>`;
+  }
+  html += `<div class="tiles">
+    ${tile("Já Investido (Pago)", pago, null, "MZN")}
+    ${tile("Falta Investir", falta, null, "MZN")}
+    ${tile("Total CAPEX Estimado", total, null, "MZN")}
+    ${tile("Despesa Mensal (fase inicial)", mensal, null, "MZN")}
+    ${alvo != null ? `<div class="tile wide">
+        <div class="t-label">Contribuição alvo por sócio</div>
+        <div class="t-value">${fmtMZN(alvo)}<small>MZN</small></div>
+        <div class="t-sub">Participação igual · 25% por sócio</div>
+      </div>` : ""}
+  </div>`;
+
+  /* restantes indicadores que não reconhecemos ficam listados */
+  const known = /total\s+investimento|j[áa]\s*investido|falta\s*investir|despesa\s*recorrente|contribui[çc][ãa]o\s*alvo/i;
+  const extras = pairs.filter(([l]) => !known.test(l));
+  if (extras.length) {
+    html += `<div class="section-title">Outros indicadores</div><div class="card">` +
+      extras.map(([l, v], i) => `<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;${i < extras.length - 1 ? "border-bottom:1px solid var(--hairline);" : ""}font-size:13px">
+        <span style="color:var(--ink-2)">${esc(l)}</span><b style="font-variant-numeric:tabular-nums;white-space:nowrap">${fmtMZN(v)}</b>
+      </div>`).join("") + `</div>`;
+  }
+  return html || emptyState("Sem dados no Resumo");
+}
+function tile(label, value, sub, unit) {
+  return `<div class="tile">
+    <div class="t-label">${esc(label)}</div>
+    <div class="t-value">${fmtMZN(value)}${unit ? `<small>${unit}</small>` : ""}</div>
+    ${sub ? `<div class="t-sub">${esc(sub)}</div>` : ""}
+  </div>`;
+}
+
+/* --- Movimentos: lista filtrável por sócio --- */
+let movFilter = "Todos";
+function renderMovimentos(rows) {
+  const h = findHeaderRow(rows, "Data");
+  if (h < 0) return renderAuto(rows);
+  const header = rows[h];
+  const iData = colIndex(header, "data"), iItem = colIndex(header, "item"),
+        iDesc = colIndex(header, "descrição") >= 0 ? colIndex(header, "descrição") : colIndex(header, "descricao"),
+        iVal = colIndex(header, "valor"), iPor = colIndex(header, "pago por");
+
+  const movs = [];
+  for (let i = h + 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (isRowEmpty(r)) continue;
+    const val = parseNum(r[iVal]);
+    const por = (r[iPor] || "").trim();
+    if (val == null || val === 0 || !por) continue; // ignora linhas de fórmula vazias
+    movs.push({
+      data: (r[iData] || "").trim(),
+      item: (r[iItem] || "").trim(),
+      desc: iDesc >= 0 ? (r[iDesc] || "").trim() : "",
+      val, por
+    });
+  }
+  if (!movs.length) return emptyState("Ainda não há movimentos registados.");
+
+  const socios = [...new Set(movs.map(m => m.por))];
+  socios.forEach(socioColor); // fixa a ordem das cores
+  const shown = movFilter === "Todos" ? movs : movs.filter(m => m.por === movFilter);
+  const total = shown.reduce((s, m) => s + m.val, 0);
+
+  const chips = ["Todos", ...socios].map(s =>
+    `<button class="${movFilter === s ? "on" : ""}" data-socio="${esc(s)}">
+       ${s !== "Todos" ? `<span class="dot" style="background:${socioColor(s)}"></span>` : ""}${esc(s)}
+     </button>`).join("");
+
+  const list = shown.map(m => `<div class="mov">
+      <div class="m-main">
+        <div class="m-item">${esc(m.item)}</div>
+        ${m.desc ? `<div class="m-desc">${esc(m.desc)}</div>` : ""}
+        ${m.data ? `<div class="m-date">${esc(m.data)}</div>` : ""}
+      </div>
+      <div class="m-side">
+        <div class="m-val">${fmtMZN(m.val)} <small style="font-weight:600;color:var(--ink-muted)">MZN</small></div>
+        <div class="m-payer"><span class="chip"><span class="dot" style="background:${socioColor(m.por)}"></span>${esc(m.por)}</span></div>
+      </div>
+    </div>`).join("");
+
+  return `<div class="filters" id="movFilters">${chips}</div>
+    <div class="card" style="display:flex;justify-content:space-between;align-items:baseline">
+      <span style="font-size:12px;color:var(--ink-2)">${shown.length} movimento${shown.length === 1 ? "" : "s"}${movFilter !== "Todos" ? " · " + esc(movFilter) : ""}</span>
+      <b style="font-size:16px;font-variant-numeric:tabular-nums">${fmtMZN(total)} <small style="font-size:11px;color:var(--ink-muted)">MZN</small></b>
+    </div>
+    <div class="card">${list}</div>
+    <p style="font-size:11px;color:var(--ink-muted);text-align:center;margin:4px 0 8px">
+      Todos os investimentos são divididos em partes iguais (25% por sócio).</p>`;
+}
+
+/* --- Plano (Investimentos Iniciais) --- */
+function renderPlano(rows) {
+  const h = findHeaderRow(rows, "Item");
+  if (h < 0) return renderAuto(rows);
+  const header = rows[h];
+  const iItem = colIndex(header, "item"), iTipo = colIndex(header, "tipo"),
+        iTot = colIndex(header, "valor total"), iPago = colIndex(header, "já pago") >= 0 ? colIndex(header, "já pago") : colIndex(header, "pago"),
+        iFalta = colIndex(header, "falta"), iSit = colIndex(header, "situação") >= 0 ? colIndex(header, "situação") : colIndex(header, "situacao");
+
+  const items = [], totals = [];
+  for (let i = h + 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (isRowEmpty(r)) continue;
+    const name = (r[iItem] || "").trim();
+    if (!name) continue;
+    const rec = {
+      name, tipo: (r[iTipo] || "").trim(),
+      total: parseNum(r[iTot]), pago: parseNum(r[iPago]), falta: parseNum(r[iFalta]),
+      sit: iSit >= 0 ? (r[iSit] || "").trim() : ""
+    };
+    // linhas de totais começam por TOTAL/DESPESA em maiúsculas ("Despesas Extras" é um item)
+    if (/^(TOTAL|DESPESAS?)(\s|$)/.test(name)) {
+      const nums = r.map(parseNum).filter(n => n != null);
+      totals.push({ name, total: rec.total, pago: rec.pago, falta: rec.falta, nums });
+    } else items.push(rec);
+  }
+  if (!items.length && !totals.length) return emptyState("Sem itens no plano.");
+
+  const sitStatus = s => /pago/i.test(s) ? "good" : /curso|reservado/i.test(s) ? "neutral" : "warn";
+  const sitIcon = s => /pago/i.test(s) ? "✓" : /curso|reservado/i.test(s) ? "◷" : "!";
+
+  const list = items.map(it => {
+    const pct = (it.total && it.pago != null) ? Math.max(0, Math.min(100, it.pago / it.total * 100)) : null;
+    return `<div class="inv">
+      <div class="i-top">
+        <div>
+          <div class="i-name">${esc(it.name)}</div>
+          ${it.tipo ? `<div class="i-tipo">${esc(it.tipo)}</div>` : ""}
+        </div>
+        ${it.sit ? `<span class="status ${sitStatus(it.sit)}">${sitIcon(it.sit)} ${esc(it.sit)}</span>` : ""}
+      </div>
+      ${pct != null ? `<div class="bar"><i style="width:${pct}%"></i></div>` : ""}
+      <div class="i-nums">
+        <span>Pago: <b>${fmtMZN(it.pago)}</b></span>
+        <span>Falta: <b>${fmtMZN(it.falta)}</b></span>
+        <span>Total: <b>${fmtMZN(it.total)}</b></span>
+      </div>
+    </div>`;
+  }).join("");
+
+  const totHtml = totals.length ? `<div class="section-title">Totais</div><div class="card">` +
+    totals.map((t, i) => {
+      const labeled = [t.pago != null && `Pago: <b>${fmtMZN(t.pago)}</b>`,
+                       t.falta != null && `Falta: <b>${fmtMZN(t.falta)}</b>`,
+                       t.total != null && `Total: <b>${fmtMZN(t.total)}</b>`].filter(Boolean);
+      const vals = labeled.length ? labeled.join(" · ")
+                 : `<b>${t.nums.map(fmtMZN).join(" · ")}</b>`;
+      return `<div style="padding:8px 0;${i < totals.length - 1 ? "border-bottom:1px solid var(--hairline)" : ""}">
+        <div style="font-size:12px;font-weight:650">${esc(t.name)}</div>
+        <div style="font-size:12px;color:var(--ink-2);margin-top:3px;font-variant-numeric:tabular-nums">${vals}</div>
+      </div>`;
+    }).join("") + `</div>` : "";
+
+  return `<div class="card">${list}</div>${totHtml}`;
+}
+
+/* --- Sócios (Contas Correntes) --- */
+function renderSocios(rows) {
+  const h = findHeaderRow(rows, "Sócio");
+  if (h < 0) return renderAuto(rows);
+  const header = rows[h];
+  const iNome = colIndex(header, "sócio") >= 0 ? colIndex(header, "sócio") : colIndex(header, "socio"),
+        iPart = colIndex(header, "participação") >= 0 ? colIndex(header, "participação") : colIndex(header, "participacao"),
+        iPago = colIndex(header, "pago"), iQuota = colIndex(header, "quota"),
+        iSaldo = colIndex(header, "saldo"), iSit = colIndex(header, "situação") >= 0 ? colIndex(header, "situação") : colIndex(header, "situacao");
+
+  const socios = [];
+  for (let i = h + 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (isRowEmpty(r)) continue;
+    const nome = (r[iNome] || "").trim();
+    if (!nome || /^total/i.test(nome)) continue;
+    socios.push({
+      nome, part: (r[iPart] || "").trim(),
+      pago: parseNum(r[iPago]), quota: parseNum(r[iQuota]),
+      saldo: parseNum(r[iSaldo]), sit: iSit >= 0 ? (r[iSit] || "").trim() : ""
+    });
+  }
+  if (!socios.length) return emptyState("Sem dados de sócios.");
+  socios.forEach(s => socioColor(s.nome));
+
+  return socios.map(s => {
+    const pct = (s.quota && s.pago != null) ? Math.max(0, Math.min(100, s.pago / s.quota * 100)) : null;
+    const credor = s.saldo != null && s.saldo > 0;
+    const emDia  = s.saldo != null && s.saldo === 0;
+    return `<div class="card socio">
+      <div class="socio-head">
+        <div class="avatar" style="background:${socioColor(s.nome)}">${esc(s.nome.slice(0, 2).toUpperCase())}</div>
+        <div>
+          <div class="s-name">${esc(s.nome)}</div>
+          <div class="s-part">Participação ${esc(s.part || "—")}</div>
+        </div>
+        <div class="s-saldo">
+          <div class="v" style="color:${credor ? "var(--good-text)" : emDia ? "var(--ink)" : "var(--serious)"}">${fmtMZN(s.saldo)} <small style="font-size:11px;color:var(--ink-muted)">MZN</small></div>
+          <span class="status ${credor ? "good" : emDia ? "neutral" : "warn"}" style="font-size:11px">
+            ${credor ? "✓ A receber" : emDia ? "✓ Em dia" : "! Falta contribuir"}</span>
+        </div>
+      </div>
+      ${pct != null ? `<div class="bar"><i style="width:${pct}%;background:${socioColor(s.nome)}"></i></div>` : ""}
+      <div class="socio-nums">
+        <span>Pago: <b>${fmtMZN(s.pago)}</b></span>
+        <span>Quota: <b>${fmtMZN(s.quota)}</b></span>
+      </div>
+      ${s.sit ? `<div style="font-size:12px;color:var(--ink-2);margin-top:7px">${esc(s.sit)}</div>` : ""}
+    </div>`;
+  }).join("") +
+  `<p style="font-size:11px;color:var(--ink-muted);text-align:center;margin:2px 0 8px">
+     Saldo positivo = crédito a receber · Saldo negativo = valor por contribuir</p>`;
+}
+
+/* --- Acertos entre Sócios --- */
+function renderAcertos(rows) {
+  const h = findHeaderRow(rows, "Data");
+  if (h < 0) return renderAuto(rows);
+  const dataRows = rows.slice(h + 1).filter(r => !isRowEmpty(r));
+  if (!dataRows.length) {
+    return emptyState("Sem acertos registados.",
+      "Quando um sócio reembolsar outro, o registo no Excel aparece aqui automaticamente.");
+  }
+  return tableHTML(rows[h], dataRows);
+}
+
+/* --- Render automático (folhas futuras): tabela genérica --- */
+function renderAuto(rows) {
+  const clean = rows.filter(r => !isRowEmpty(r));
+  if (!clean.length) return emptyState("Folha sem dados.");
+  // cabeçalho = linha mais "densa" nas primeiras 6 linhas
+  let hi = 0, best = 0;
+  clean.slice(0, 6).forEach((r, i) => {
+    const filled = r.filter(c => c && c.trim()).length;
+    if (filled > best) { best = filled; hi = i; }
+  });
+  return tableHTML(clean[hi], clean.slice(hi + 1));
+}
+
+function tableHTML(header, dataRows) {
+  const cols = header.map((c, i) => ({ name: (c || "").trim(), i })).filter(c => c.name);
+  const head = cols.map(c => `<th>${esc(c.name)}</th>`).join("");
+  const body = dataRows.map(r => "<tr>" + cols.map(c => {
+    const raw = (r[c.i] || "").trim();
+    const n = parseNum(raw);
+    const numeric = n != null && /[\d]/.test(raw) && !/[a-zA-ZÀ-ú]{3,}/.test(raw);
+    return `<td class="${numeric ? "num" : ""}">${numeric ? fmtMZN(n) : esc(raw) || "—"}</td>`;
+  }).join("") + "</tr>").join("");
+  return `<div class="card tablewrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
+function emptyState(title, sub) {
+  return `<div class="state">
+    <div class="icon">🗂️</div>
+    <h3>${esc(title)}</h3>
+    ${sub ? `<p>${esc(sub)}</p>` : ""}
+  </div>`;
+}
+function errorState(tabId) {
+  return `<div class="state">
+    <div class="icon">📡</div>
+    <h3>Não foi possível carregar os dados</h3>
+    <p>Verifica a ligação à internet. Se o problema continuar, o ficheiro no Google Drive
+       tem de estar partilhado como <b>«Qualquer pessoa com o link — Leitor»</b>.</p>
+    <button class="retry" onclick="refreshAll(true)">Tentar novamente</button>
+  </div>`;
+}
+
+/* =====================================================================
+   APP — navegação + carregamento
+   ===================================================================== */
+const RENDERERS = {
+  resumo: renderResumo, movimentos: renderMovimentos, plano: renderPlano,
+  socios: renderSocios, acertos: renderAcertos, auto: renderAuto
+};
+const state = { active: TABS[0].id, data: {}, meta: {} };
+
+const mainEl = document.getElementById("main");
+const navEl = document.getElementById("nav");
+const updatedEl = document.getElementById("updatedBar");
+const refreshBtn = document.getElementById("refreshBtn");
+
+navEl.innerHTML = TABS.map(t =>
+  `<button data-tab="${t.id}" class="${t.id === state.active ? "on" : ""}" aria-label="${esc(t.label)}">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${t.icon}</svg>
+    <span>${esc(t.label)}</span>
+  </button>`).join("");
+
+mainEl.innerHTML = TABS.map(t => `<section class="panel ${t.id === state.active ? "active" : ""}" id="panel-${t.id}">${skeleton()}</section>`).join("");
+
+function skeleton() {
+  return `<div class="tiles">
+    <div class="skel" style="height:84px"></div><div class="skel" style="height:84px"></div>
+    <div class="skel wide" style="grid-column:1/-1;height:120px"></div>
+    <div class="skel wide" style="grid-column:1/-1;height:180px"></div>
+  </div>`;
+}
+
+navEl.addEventListener("click", e => {
+  const btn = e.target.closest("button[data-tab]");
+  if (!btn) return;
+  state.active = btn.dataset.tab;
+  navEl.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.tab === state.active));
+  document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === "panel-" + state.active));
+  window.scrollTo({ top: 0 });
+});
+
+mainEl.addEventListener("click", e => {
+  const chip = e.target.closest("#movFilters button");
+  if (chip) {
+    movFilter = chip.dataset.socio;
+    const tab = TABS.find(t => t.id === "movimentos");
+    if (state.data[tab.sheet]) paint(tab);
+  }
+});
+
+function paint(tab) {
+  const panel = document.getElementById("panel-" + tab.id);
+  const rows = state.data[tab.sheet];
+  try {
+    panel.innerHTML = (RENDERERS[tab.render] || renderAuto)(rows);
+  } catch (err) {
+    console.error("render", tab.id, err);
+    panel.innerHTML = renderAuto(rows); // nunca deixar um separador em branco
+  }
+}
+
+function setUpdated() {
+  const metas = Object.values(state.meta);
+  if (!metas.length) { updatedEl.textContent = ""; return; }
+  const anyCache = metas.some(m => m.fromCache);
+  const t = new Date(Math.min(...metas.map(m => m.time)));
+  const stamp = t.toLocaleDateString("pt-PT", { day: "2-digit", month: "2-digit" }) +
+    " " + t.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
+  updatedEl.innerHTML = anyCache
+    ? `<span class="stale">Sem ligação — a mostrar dados guardados de ${stamp}</span>`
+    : `Atualizado em ${stamp}`;
+}
+
+async function refreshAll(force) {
+  refreshBtn.classList.add("spinning");
+  const results = await Promise.all(TABS.map(tab =>
+    loadSheet(tab.sheet, force).then(r => ({ tab, ...r })).catch(err => ({ tab, err }))));
+  // pintar sempre pela ordem de TABS → cores dos sócios estáveis entre visitas
+  for (const r of results) {
+    if (r.err) {
+      console.error("load", r.tab.sheet, r.err);
+      delete state.meta[r.tab.sheet];
+      document.getElementById("panel-" + r.tab.id).innerHTML = errorState(r.tab.id);
+    } else {
+      state.data[r.tab.sheet] = r.rows;
+      state.meta[r.tab.sheet] = { fromCache: r.fromCache, time: r.time };
+      paint(r.tab);
+    }
+  }
+  setUpdated();
+  refreshBtn.classList.remove("spinning");
+}
+
+refreshBtn.addEventListener("click", () => refreshAll(true));
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) refreshAll(false); // reabrir a app → dados frescos
+});
+
+refreshAll(false);
+</script>
+
+<footer>Nova Logistics · Consulta apenas — os dados são geridos no Excel do Google Drive.</footer>
+
+</body>
+</html>
