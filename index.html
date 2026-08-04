@@ -144,6 +144,23 @@
   .status.warn     { color: var(--serious); }
   .status.neutral  { color: var(--ink-2); }
 
+  /* ---------- Sub-tabs (topo de uma secção) ---------- */
+  .subtabs {
+    display: flex; gap: 2px; overflow-x: auto;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+    border-bottom: 1px solid var(--hairline);
+    margin: 0 0 12px; padding: 0 2px;
+  }
+  .subtabs::-webkit-scrollbar { display: none; }
+  .subtabs button {
+    flex: none; border: none; background: none; cursor: pointer;
+    font-family: inherit; font-size: 13.5px; font-weight: 650;
+    color: var(--ink-muted); padding: 10px 12px 9px;
+    border-bottom: 2.5px solid transparent; margin-bottom: -1px;
+    touch-action: manipulation; white-space: nowrap;
+  }
+  .subtabs button.on { color: var(--ink); border-bottom-color: var(--accent); }
+
   /* ---------- Filter row ---------- */
   .filters {
     display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 10px;
@@ -271,29 +288,39 @@
 
 /* =====================================================================
    CONFIGURAÇÃO
-   Para adicionar uma folha nova do Excel (ex.: Faturação, Vendas,
-   Contas Correntes da empresa), basta acrescentar uma entrada em TABS.
-   render: "auto" mostra a folha como tabela sem programação extra;
-   os renders dedicados (resumo, movimentos, ...) estão definidos abaixo.
+   Cada entrada de NAV é um separador em baixo. `views` são os
+   sub-separadores mostrados no topo dessa secção (com uma só view,
+   a barra de sub-separadores não aparece).
+   Para adicionar uma área nova (ex.: Faturação, Vendas, RH), basta
+   acrescentar uma entrada em NAV; render: "auto" mostra a folha como
+   tabela sem programação extra.
    ===================================================================== */
 const SHEET_ID = "1iLkuI2Lom-klgfCtcrfSJMvbitZpXpWGPzoSQjZ0G1I";
 
-const TABS = [
-  { id: "resumo",     sheet: "Resumo",                    label: "Resumo",     render: "resumo",
-    icon: '<path d="M3 12h5l2-7 4 14 2-7h5"/>' },
-  { id: "movimentos", sheet: "Movimentos Investimentos",  label: "Movimentos", render: "movimentos",
-    icon: '<path d="M7 17l10-10"/><polyline points="17 15 17 7 9 7"/><rect x="3" y="3" width="18" height="18" rx="3"/>' },
-  { id: "plano",      sheet: "Investimentos Iniciais",    label: "Plano",      render: "plano",
-    icon: '<path d="M9 11l3 3 8-8"/><path d="M21 12v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h11"/>' },
-  { id: "socios",     sheet: "Sócios - Contas Correntes", label: "Sócios",     render: "socios",
-    icon: '<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3 2.8-5 5.5-5s4.9 2 5.5 5"/><circle cx="17" cy="9" r="2.5"/><path d="M15.5 14.4c2.4.2 4.3 2 4.9 4.6"/>' },
-  { id: "acertos",    sheet: "Acertos entre Sócios",      label: "Acertos",    render: "acertos",
-    icon: '<path d="M4 7h13"/><polyline points="14 4 17 7 14 10"/><path d="M20 17H7"/><polyline points="10 14 7 17 10 20"/>' },
+const NAV = [
+  { id: "resumo", label: "Resumo",
+    icon: '<path d="M3 12h5l2-7 4 14 2-7h5"/>',
+    views: [
+      { id: "resumo", sheet: "Resumo", label: "Resumo", render: "resumo" },
+    ] },
+  { id: "investimentos", label: "Investimentos",
+    icon: '<path d="M7 17l10-10"/><polyline points="17 15 17 7 9 7"/><rect x="3" y="3" width="18" height="18" rx="3"/>',
+    views: [
+      { id: "movimentos", sheet: "Movimentos Investimentos",  label: "Movimentos", render: "movimentos" },
+      { id: "plano",      sheet: "Investimentos Iniciais",    label: "Plano",      render: "plano" },
+      { id: "socios",     sheet: "Sócios - Contas Correntes", label: "Sócios",     render: "socios" },
+      { id: "acertos",    sheet: "Acertos entre Sócios",      label: "Acertos",    render: "acertos" },
+    ] },
   /* Exemplo futuro:
-  { id: "faturacao", sheet: "Faturação", label: "Faturação", render: "auto",
-    icon: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>' },
+  { id: "faturacao", label: "Faturação",
+    icon: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>',
+    views: [
+      { id: "vendas",   sheet: "Vendas",   label: "Vendas",   render: "auto" },
+      { id: "despesas", sheet: "Despesas", label: "Despesas", render: "auto" },
+    ] },
   */
 ];
+const ALL_VIEWS = NAV.flatMap(g => g.views);
 
 /* Cores fixas por sócio (ordem fixa — nunca reciclar) */
 const SOCIO_COLORS = ["var(--s1)", "var(--s2)", "var(--s3)", "var(--s4)",
@@ -712,20 +739,31 @@ const RENDERERS = {
   resumo: renderResumo, movimentos: renderMovimentos, plano: renderPlano,
   socios: renderSocios, acertos: renderAcertos, auto: renderAuto
 };
-const state = { active: TABS[0].id, data: {}, meta: {} };
+const state = {
+  activeGroup: NAV[0].id,
+  activeView: Object.fromEntries(NAV.map(g => [g.id, g.views[0].id])),
+  data: {}, meta: {}
+};
 
 const mainEl = document.getElementById("main");
 const navEl = document.getElementById("nav");
 const updatedEl = document.getElementById("updatedBar");
 const refreshBtn = document.getElementById("refreshBtn");
 
-navEl.innerHTML = TABS.map(t =>
-  `<button data-tab="${t.id}" class="${t.id === state.active ? "on" : ""}" aria-label="${esc(t.label)}">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${t.icon}</svg>
-    <span>${esc(t.label)}</span>
+navEl.innerHTML = NAV.map(g =>
+  `<button data-group="${g.id}" class="${g.id === state.activeGroup ? "on" : ""}" aria-label="${esc(g.label)}">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${g.icon}</svg>
+    <span>${esc(g.label)}</span>
   </button>`).join("");
 
-mainEl.innerHTML = TABS.map(t => `<section class="panel ${t.id === state.active ? "active" : ""}" id="panel-${t.id}">${skeleton()}</section>`).join("");
+mainEl.innerHTML = NAV.map(g => `
+  <section class="panel ${g.id === state.activeGroup ? "active" : ""}" id="panel-${g.id}">
+    ${g.views.length > 1 ? `<div class="subtabs" data-group="${g.id}">
+      ${g.views.map(v => `<button data-view="${v.id}" class="${v.id === state.activeView[g.id] ? "on" : ""}">${esc(v.label)}</button>`).join("")}
+    </div>` : ""}
+    ${g.views.map(v => `<div class="subpanel" id="view-${v.id}"
+      style="${v.id === state.activeView[g.id] ? "" : "display:none"}">${skeleton()}</div>`).join("")}
+  </section>`).join("");
 
 function skeleton() {
   return `<div class="tiles">
@@ -736,30 +774,44 @@ function skeleton() {
 }
 
 navEl.addEventListener("click", e => {
-  const btn = e.target.closest("button[data-tab]");
+  const btn = e.target.closest("button[data-group]");
   if (!btn) return;
-  state.active = btn.dataset.tab;
-  navEl.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.tab === state.active));
-  document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === "panel-" + state.active));
+  state.activeGroup = btn.dataset.group;
+  navEl.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.group === state.activeGroup));
+  document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === "panel-" + state.activeGroup));
   window.scrollTo({ top: 0 });
 });
 
 mainEl.addEventListener("click", e => {
+  const sub = e.target.closest(".subtabs button[data-view]");
+  if (sub) {
+    const groupId = sub.closest(".subtabs").dataset.group;
+    const group = NAV.find(g => g.id === groupId);
+    state.activeView[groupId] = sub.dataset.view;
+    sub.closest(".subtabs").querySelectorAll("button").forEach(b =>
+      b.classList.toggle("on", b.dataset.view === sub.dataset.view));
+    group.views.forEach(v => {
+      document.getElementById("view-" + v.id).style.display =
+        v.id === state.activeView[groupId] ? "" : "none";
+    });
+    window.scrollTo({ top: 0 });
+    return;
+  }
   const chip = e.target.closest("#movFilters button");
   if (chip) {
     movFilter = chip.dataset.socio;
-    const tab = TABS.find(t => t.id === "movimentos");
-    if (state.data[tab.sheet]) paint(tab);
+    const view = ALL_VIEWS.find(v => v.id === "movimentos");
+    if (state.data[view.sheet]) paint(view);
   }
 });
 
-function paint(tab) {
-  const panel = document.getElementById("panel-" + tab.id);
-  const rows = state.data[tab.sheet];
+function paint(view) {
+  const panel = document.getElementById("view-" + view.id);
+  const rows = state.data[view.sheet];
   try {
-    panel.innerHTML = (RENDERERS[tab.render] || renderAuto)(rows);
+    panel.innerHTML = (RENDERERS[view.render] || renderAuto)(rows);
   } catch (err) {
-    console.error("render", tab.id, err);
+    console.error("render", view.id, err);
     panel.innerHTML = renderAuto(rows); // nunca deixar um separador em branco
   }
 }
@@ -778,18 +830,18 @@ function setUpdated() {
 
 async function refreshAll(force) {
   refreshBtn.classList.add("spinning");
-  const results = await Promise.all(TABS.map(tab =>
-    loadSheet(tab.sheet, force).then(r => ({ tab, ...r })).catch(err => ({ tab, err }))));
-  // pintar sempre pela ordem de TABS → cores dos sócios estáveis entre visitas
+  const results = await Promise.all(ALL_VIEWS.map(view =>
+    loadSheet(view.sheet, force).then(r => ({ view, ...r })).catch(err => ({ view, err }))));
+  // pintar sempre pela ordem de ALL_VIEWS → cores dos sócios estáveis entre visitas
   for (const r of results) {
     if (r.err) {
-      console.error("load", r.tab.sheet, r.err);
-      delete state.meta[r.tab.sheet];
-      document.getElementById("panel-" + r.tab.id).innerHTML = errorState(r.tab.id);
+      console.error("load", r.view.sheet, r.err);
+      delete state.meta[r.view.sheet];
+      document.getElementById("view-" + r.view.id).innerHTML = errorState(r.view.id);
     } else {
-      state.data[r.tab.sheet] = r.rows;
-      state.meta[r.tab.sheet] = { fromCache: r.fromCache, time: r.time };
-      paint(r.tab);
+      state.data[r.view.sheet] = r.rows;
+      state.meta[r.view.sheet] = { fromCache: r.fromCache, time: r.time };
+      paint(r.view);
     }
   }
   setUpdated();
