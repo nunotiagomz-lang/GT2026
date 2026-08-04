@@ -445,6 +445,13 @@ async function loadSheet(sheetName, force) {
    EXTRATORES — transformam as linhas CSV de cada folha em dados
    estruturados (reutilizados pelos renders e pelo dashboard do Resumo)
    ===================================================================== */
+/* nomes dos sócios, lidos da folha "Sócios - Contas Correntes" */
+function socioNames() {
+  const sr = state.data["Sócios - Contas Correntes"] || null;
+  const s = sr ? extractSocios(sr) : null;
+  return s ? s.map(x => x.nome) : [];
+}
+
 function extractMovs(rows) {
   const h = findHeaderRow(rows, "Data");
   if (h < 0) return null;
@@ -452,19 +459,43 @@ function extractMovs(rows) {
   const iData = colIndex(header, "data"), iItem = colIndex(header, "item"),
         iDesc = colIndex(header, "descrição") >= 0 ? colIndex(header, "descrição") : colIndex(header, "descricao"),
         iVal = colIndex(header, "valor"), iPor = colIndex(header, "pago por");
+
+  /* Formato novo: uma coluna por sócio com o valor pago por esse sócio
+     nessa linha (permite vários pagadores num movimento). As colunas são
+     detetadas pelos nomes dos sócios; "Quota X" / "Verificação" ficam de fora. */
+  const names = socioNames();
+  const socioCols = [];
+  header.forEach((cell, i) => {
+    const t = (cell || "").trim();
+    if (!t || /quota|verifica|%/i.test(t)) return;
+    const match = names.find(n =>
+      t.toLowerCase() === n.toLowerCase() || t.toLowerCase().includes(n.toLowerCase()));
+    if (match) socioCols.push({ name: match, i });
+  });
+
   const movs = [];
   for (let i = h + 1; i < rows.length; i++) {
     const r = rows[i];
     if (isRowEmpty(r)) continue;
-    const val = parseNum(r[iVal]);
-    const por = (r[iPor] || "").trim();
-    if (val == null || val === 0 || !por) continue; // ignora linhas de fórmula vazias
-    movs.push({
+    const item = (r[iItem] || "").trim();
+    const base = {
       data: (r[iData] || "").trim(),
-      item: (r[iItem] || "").trim(),
-      desc: iDesc >= 0 ? (r[iDesc] || "").trim() : "",
-      val, por
-    });
+      item,
+      desc: iDesc >= 0 ? (r[iDesc] || "").trim() : ""
+    };
+    if (socioCols.length) {
+      if (!item || /^TOTAL/.test(item)) continue; // ignora vazias e linhas de totais
+      for (const c of socioCols) {
+        const val = parseNum(r[c.i]);
+        if (val != null && val !== 0) movs.push({ ...base, val, por: c.name });
+      }
+    } else {
+      /* formato antigo: coluna única "Valor Pago" + "Pago por" */
+      const val = parseNum(r[iVal]);
+      const por = (r[iPor] || "").trim();
+      if (val == null || val === 0 || !por) continue; // ignora linhas de fórmula vazias
+      movs.push({ ...base, val, por });
+    }
   }
   return movs;
 }
