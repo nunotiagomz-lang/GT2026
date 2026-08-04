@@ -485,16 +485,19 @@ function extractMovs(rows) {
     };
     if (socioCols.length) {
       if (!item || /^TOTAL/.test(item)) continue; // ignora vazias e linhas de totais
+      const pagadores = [];
       for (const c of socioCols) {
         const val = parseNum(r[c.i]);
-        if (val != null && val !== 0) movs.push({ ...base, val, por: c.name });
+        if (val != null && val !== 0) pagadores.push({ por: c.name, val });
       }
+      if (pagadores.length) movs.push({ ...base,
+        total: pagadores.reduce((a, p) => a + p.val, 0), pagadores });
     } else {
       /* formato antigo: coluna única "Valor Pago" + "Pago por" */
       const val = parseNum(r[iVal]);
       const por = (r[iPor] || "").trim();
       if (val == null || val === 0 || !por) continue; // ignora linhas de fórmula vazias
-      movs.push({ ...base, val, por });
+      movs.push({ ...base, total: val, pagadores: [{ por, val }] });
     }
   }
   return movs;
@@ -629,7 +632,7 @@ function renderResumo(rows) {
   }
 
   /* --- Indicadores --- */
-  const acumulado = movs.length ? movs.reduce((a, m) => a + m.val, 0) : null;
+  const acumulado = movs.length ? movs.reduce((a, m) => a + m.total, 0) : null;
   const ultimaData = [...movs].reverse().find(m => m.data)?.data;
   html += `<div class="tiles">
     ${tile("Já Investido (Pago)", pago, null, "MZN")}
@@ -669,9 +672,9 @@ function renderResumo(rows) {
           ${m.data ? `<div class="m-date">${esc(m.data)}</div>` : ""}
         </div>
         <div class="m-side">
-          <div class="m-val" style="font-size:13px">${fmtMZN(m.val)}</div>
-          <div style="font-size:11px;color:var(--ink-muted);margin-top:2px">
-            <span class="dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${socioColor(m.por)};margin-right:3px"></span>${esc(m.por)}</div>
+          <div class="m-val" style="font-size:13px">${fmtMZN(m.total)}</div>
+          <div style="font-size:11px;color:var(--ink-muted);margin-top:2px;text-align:right">
+            ${m.pagadores.map(p => `<span class="dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${socioColor(p.por)};margin-right:3px"></span>${esc(p.por)}`).join(" ")}</div>
         </div>
       </div>`).join("") +
       `<div class="goto" data-goto="investimentos:movimentos" style="text-align:center;padding:10px 0 2px;font-size:13px;font-weight:650;color:var(--accent);cursor:pointer">Ver todos os movimentos ›</div>
@@ -722,36 +725,51 @@ function renderMovimentos(rows) {
   if (movs == null) return renderAuto(rows);
   if (!movs.length) return emptyState("Ainda não há movimentos registados.");
 
-  const socios = [...new Set(movs.map(m => m.por))];
+  /* sócios presentes, pela ordem da folha de contas correntes */
+  const ordem = socioNames();
+  const presentes = [...new Set(movs.flatMap(m => m.pagadores.map(p => p.por)))];
+  const socios = [...ordem.filter(n => presentes.includes(n)),
+                  ...presentes.filter(n => !ordem.includes(n))];
   socios.forEach(socioColor); // fixa a ordem das cores
-  const shown = movFilter === "Todos" ? movs : movs.filter(m => m.por === movFilter);
-  const total = shown.reduce((s, m) => s + m.val, 0);
+
+  const shown = movFilter === "Todos" ? movs
+    : movs.filter(m => m.pagadores.some(p => p.por === movFilter));
+  /* com filtro ativo, conta apenas a parte desse sócio */
+  const valorDe = m => movFilter === "Todos" ? m.total
+    : (m.pagadores.find(p => p.por === movFilter)?.val ?? 0);
+  const total = shown.reduce((s, m) => s + valorDe(m), 0);
 
   const chips = ["Todos", ...socios].map(s =>
     `<button class="${movFilter === s ? "on" : ""}" data-socio="${esc(s)}">
        ${s !== "Todos" ? `<span class="dot" style="background:${socioColor(s)}"></span>` : ""}${esc(s)}
      </button>`).join("");
 
-  const list = shown.map(m => `<div class="mov">
+  const list = shown.map(m => {
+    const v = valorDe(m);
+    const payers = m.pagadores.map(p =>
+      `<span class="chip" style="${movFilter === p.por ? "border-color:" + socioColor(p.por) : ""}">
+        <span class="dot" style="background:${socioColor(p.por)}"></span>${esc(p.por)}${m.pagadores.length > 1 ? ` · ${fmtMZN(p.val)}` : ""}
+      </span>`).join("");
+    return `<div class="mov" style="flex-wrap:wrap">
       <div class="m-main">
         <div class="m-item">${esc(m.item)}</div>
         ${m.desc ? `<div class="m-desc">${esc(m.desc)}</div>` : ""}
         ${m.data ? `<div class="m-date">${esc(m.data)}</div>` : ""}
       </div>
       <div class="m-side">
-        <div class="m-val">${fmtMZN(m.val)} <small style="font-weight:600;color:var(--ink-muted)">MZN</small></div>
-        <div class="m-payer"><span class="chip"><span class="dot" style="background:${socioColor(m.por)}"></span>${esc(m.por)}</span></div>
+        <div class="m-val">${fmtMZN(v)} <small style="font-weight:600;color:var(--ink-muted)">MZN</small></div>
+        ${v !== m.total ? `<div style="font-size:11px;color:var(--ink-muted);margin-top:2px">de ${fmtMZN(m.total)} no total</div>` : ""}
       </div>
-    </div>`).join("");
+      <div style="flex-basis:100%;display:flex;flex-wrap:wrap;gap:5px;margin-top:7px">${payers}</div>
+    </div>`;
+  }).join("");
 
   return `<div class="filters" id="movFilters">${chips}</div>
     <div class="card" style="display:flex;justify-content:space-between;align-items:baseline">
       <span style="font-size:12px;color:var(--ink-2)">${shown.length} movimento${shown.length === 1 ? "" : "s"}${movFilter !== "Todos" ? " · " + esc(movFilter) : ""}</span>
       <b style="font-size:16px;font-variant-numeric:tabular-nums">${fmtMZN(total)} <small style="font-size:11px;color:var(--ink-muted)">MZN</small></b>
     </div>
-    <div class="card">${list}</div>
-    <p style="font-size:11px;color:var(--ink-muted);text-align:center;margin:4px 0 8px">
-      Todos os investimentos são divididos em partes iguais (25% por sócio).</p>`;
+    <div class="card">${list}</div>`;
 }
 
 /* --- Plano (Investimentos Iniciais) --- */
