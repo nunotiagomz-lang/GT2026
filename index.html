@@ -213,6 +213,13 @@
   .socio-head .s-saldo .v { font-size: 16px; font-weight: 750; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .socio-nums { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-2); margin-top: 8px; font-variant-numeric: tabular-nums; }
 
+  /* ---------- Sócios num relance (dashboard) ---------- */
+  .glance { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .glance-item { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+  .glance-item .g-name { font-size: 12px; font-weight: 650; max-width: 100%;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .glance-item .g-saldo { font-size: 11.5px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
   /* ---------- Generic table ---------- */
   .tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   table { border-collapse: collapse; width: 100%; font-size: 13px; }
@@ -311,14 +318,15 @@ const NAV = [
       { id: "socios",     sheet: "Sócios - Contas Correntes", label: "Sócios",     render: "socios" },
       { id: "acertos",    sheet: "Acertos entre Sócios",      label: "Acertos",    render: "acertos" },
     ] },
-  /* Exemplo futuro:
-  { id: "faturacao", label: "Faturação",
-    icon: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>',
-    views: [
-      { id: "vendas",   sheet: "Vendas",   label: "Vendas",   render: "auto" },
-      { id: "despesas", sheet: "Despesas", label: "Despesas", render: "auto" },
-    ] },
-  */
+  /* Áreas futuras: soon:true mostra "Em breve" e não carrega dados.
+     Para ativar, remover soon e preencher views com as folhas do Excel:
+     views: [{ id: "vendas", sheet: "Vendas", label: "Vendas", render: "auto" }] */
+  { id: "faturacao", label: "Faturação", soon: true, views: [],
+    icon: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>' },
+  { id: "vendas", label: "Vendas", soon: true, views: [],
+    icon: '<circle cx="9" cy="20" r="1.6"/><circle cx="17" cy="20" r="1.6"/><path d="M3 4h2.5l2.2 11.2a1.5 1.5 0 0 0 1.5 1.3h8.3a1.5 1.5 0 0 0 1.5-1.2L20.8 8H6.2"/>' },
+  { id: "rh", label: "RH", soon: true, views: [],
+    icon: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-3.6 3.6-6 7-6s6.2 2.4 7 6"/>' },
 ];
 const ALL_VIEWS = NAV.flatMap(g => g.views);
 
@@ -434,10 +442,96 @@ async function loadSheet(sheetName, force) {
 }
 
 /* =====================================================================
+   EXTRATORES — transformam as linhas CSV de cada folha em dados
+   estruturados (reutilizados pelos renders e pelo dashboard do Resumo)
+   ===================================================================== */
+function extractMovs(rows) {
+  const h = findHeaderRow(rows, "Data");
+  if (h < 0) return null;
+  const header = rows[h];
+  const iData = colIndex(header, "data"), iItem = colIndex(header, "item"),
+        iDesc = colIndex(header, "descrição") >= 0 ? colIndex(header, "descrição") : colIndex(header, "descricao"),
+        iVal = colIndex(header, "valor"), iPor = colIndex(header, "pago por");
+  const movs = [];
+  for (let i = h + 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (isRowEmpty(r)) continue;
+    const val = parseNum(r[iVal]);
+    const por = (r[iPor] || "").trim();
+    if (val == null || val === 0 || !por) continue; // ignora linhas de fórmula vazias
+    movs.push({
+      data: (r[iData] || "").trim(),
+      item: (r[iItem] || "").trim(),
+      desc: iDesc >= 0 ? (r[iDesc] || "").trim() : "",
+      val, por
+    });
+  }
+  return movs;
+}
+
+function extractPlano(rows) {
+  const h = findHeaderRow(rows, "Item");
+  if (h < 0) return null;
+  const header = rows[h];
+  const iItem = colIndex(header, "item"), iTipo = colIndex(header, "tipo"),
+        iTot = colIndex(header, "valor total"), iPago = colIndex(header, "já pago") >= 0 ? colIndex(header, "já pago") : colIndex(header, "pago"),
+        iFalta = colIndex(header, "falta"), iSit = colIndex(header, "situação") >= 0 ? colIndex(header, "situação") : colIndex(header, "situacao");
+  const items = [], totals = [];
+  for (let i = h + 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (isRowEmpty(r)) continue;
+    const name = (r[iItem] || "").trim();
+    if (!name) continue;
+    const rec = {
+      name, tipo: (r[iTipo] || "").trim(),
+      total: parseNum(r[iTot]), pago: parseNum(r[iPago]), falta: parseNum(r[iFalta]),
+      sit: iSit >= 0 ? (r[iSit] || "").trim() : ""
+    };
+    // linhas de totais começam por TOTAL/DESPESA em maiúsculas ("Despesas Extras" é um item)
+    if (/^(TOTAL|DESPESAS?)(\s|$)/.test(name)) {
+      const nums = r.map(parseNum).filter(n => n != null);
+      totals.push({ name, total: rec.total, pago: rec.pago, falta: rec.falta, nums });
+    } else items.push(rec);
+  }
+  return { items, totals };
+}
+
+function extractSocios(rows) {
+  const h = findHeaderRow(rows, "Sócio");
+  if (h < 0) return null;
+  const header = rows[h];
+  const iNome = colIndex(header, "sócio") >= 0 ? colIndex(header, "sócio") : colIndex(header, "socio"),
+        iPart = colIndex(header, "participação") >= 0 ? colIndex(header, "participação") : colIndex(header, "participacao"),
+        iPago = colIndex(header, "pago"), iQuota = colIndex(header, "quota"),
+        iSaldo = colIndex(header, "saldo"), iSit = colIndex(header, "situação") >= 0 ? colIndex(header, "situação") : colIndex(header, "situacao");
+  const socios = [];
+  for (let i = h + 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (isRowEmpty(r)) continue;
+    const nome = (r[iNome] || "").trim();
+    if (!nome || /^total/i.test(nome)) continue;
+    socios.push({
+      nome, part: (r[iPart] || "").trim(),
+      pago: parseNum(r[iPago]), quota: parseNum(r[iQuota]),
+      saldo: parseNum(r[iSaldo]), sit: iSit >= 0 ? (r[iSit] || "").trim() : ""
+    });
+  }
+  return socios;
+}
+
+/* dados já carregados de outra view (null se ainda não disponíveis) */
+function sheetRows(viewId) {
+  const v = ALL_VIEWS.find(x => x.id === viewId);
+  return v ? (state.data[v.sheet] || null) : null;
+}
+
+/* =====================================================================
    RENDERS
    ===================================================================== */
 
-/* --- Resumo: pares rótulo→valor a partir de "INDICADORES GERAIS" --- */
+/* --- Resumo: dashboard geral ---
+   Indicadores vêm da folha "Resumo"; alertas, sócios, últimos movimentos
+   e próximos pagamentos são calculados das outras folhas já carregadas. */
 function renderResumo(rows) {
   const pairs = [];
   for (const r of rows) {
@@ -455,7 +549,40 @@ function renderResumo(rows) {
   const alvo   = find(/contribui[çc][ãa]o\s*alvo/i);
   const pct = (total && pago != null) ? Math.max(0, Math.min(100, pago / total * 100)) : null;
 
+  /* dados das outras folhas (podem ainda não estar carregados) */
+  const movRows = sheetRows("movimentos"), socRows = sheetRows("socios"), plRows = sheetRows("plano");
+  const movs   = movRows ? (extractMovs(movRows) || []) : [];
+  const socios = socRows ? (extractSocios(socRows) || []) : [];
+  const plano  = plRows ? extractPlano(plRows) : null;
+  socios.forEach(s => socioColor(s.nome));
+
   let html = "";
+
+  /* --- Alertas --- */
+  const emFalta = socios.filter(s => s.saldo != null && s.saldo < 0);
+  const totalEmFalta = emFalta.reduce((a, s) => a - s.saldo, 0);
+  const porConfirmar = plano ? plano.items.filter(it => /confirmar/i.test(it.sit) && (it.falta || 0) > 0) : [];
+  const valorPorConfirmar = porConfirmar.reduce((a, it) => a + (it.falta || 0), 0);
+  const alertas = [];
+  if (emFalta.length) alertas.push({ goto: "investimentos:socios",
+    txt: `<b>${emFalta.length} sócio${emFalta.length > 1 ? "s" : ""}</b> com contribuição em falta — total <b>${fmtMZN(totalEmFalta)} MZN</b>` });
+  if (porConfirmar.length) alertas.push({ goto: "investimentos:plano",
+    txt: `<b>${porConfirmar.length} ${porConfirmar.length > 1 ? "itens" : "item"}</b> do plano por confirmar — <b>${fmtMZN(valorPorConfirmar)} MZN</b> por pagar` });
+  if (alertas.length) {
+    html += `<div class="card" style="border-left:4px solid var(--serious);padding-left:13px">` +
+      alertas.map((a, i) => `<div class="goto" data-goto="${a.goto}" style="display:flex;align-items:center;gap:8px;padding:6px 0;${i < alertas.length - 1 ? "border-bottom:1px solid var(--hairline);" : ""}cursor:pointer">
+        <span style="color:var(--serious);font-weight:800">!</span>
+        <span style="flex:1;font-size:13px;line-height:1.4">${a.txt}</span>
+        <span style="color:var(--ink-muted)">›</span>
+      </div>`).join("") + `</div>`;
+  } else if (socios.length) {
+    html += `<div class="card" style="display:flex;align-items:center;gap:8px">
+      <span class="status good" style="font-size:13px">✓ Tudo em dia</span>
+      <span style="font-size:12px;color:var(--ink-muted)">— sem contribuições em falta</span>
+    </div>`;
+  }
+
+  /* --- Execução do investimento --- */
   if (total != null || pago != null) {
     html += `<div class="card">
       <div class="t-label" style="font-size:12px;color:var(--ink-2)">Execução do investimento</div>
@@ -469,19 +596,76 @@ function renderResumo(rows) {
       </div>
     </div>`;
   }
+
+  /* --- Indicadores --- */
+  const acumulado = movs.length ? movs.reduce((a, m) => a + m.val, 0) : null;
+  const ultimaData = [...movs].reverse().find(m => m.data)?.data;
   html += `<div class="tiles">
     ${tile("Já Investido (Pago)", pago, null, "MZN")}
     ${tile("Falta Investir", falta, null, "MZN")}
     ${tile("Total CAPEX Estimado", total, null, "MZN")}
     ${tile("Despesa Mensal (fase inicial)", mensal, null, "MZN")}
-    ${alvo != null ? `<div class="tile wide">
-        <div class="t-label">Contribuição alvo por sócio</div>
-        <div class="t-value">${fmtMZN(alvo)}<small>MZN</small></div>
-        <div class="t-sub">Participação igual · 25% por sócio</div>
-      </div>` : ""}
+    ${acumulado != null ? tile("Investimento Acumulado (movimentos)", acumulado,
+        ultimaData ? "Último movimento: " + ultimaData : null, "MZN") : ""}
+    ${alvo != null ? tile("Contribuição Alvo por Sócio", alvo, "Participação igual · 25% por sócio", "MZN") : ""}
   </div>`;
 
-  /* restantes indicadores que não reconhecemos ficam listados */
+  /* --- Sócios num relance --- */
+  if (socios.length) {
+    html += `<div class="section-title">Sócios</div>
+    <div class="card"><div class="glance">` +
+      socios.map(s => {
+        const credor = s.saldo != null && s.saldo > 0;
+        const emDia = s.saldo != null && s.saldo === 0;
+        const cor = credor ? "var(--good-text)" : emDia ? "var(--ink)" : "var(--serious)";
+        return `<div class="goto glance-item" data-goto="investimentos:socios">
+          <div class="avatar" style="background:${socioColor(s.nome)};width:38px;height:38px;font-size:13px">${esc(s.nome.slice(0, 2).toUpperCase())}</div>
+          <div class="g-name">${esc(s.nome)}</div>
+          <div class="g-saldo" style="color:${cor}">${fmtMZN(s.saldo)}</div>
+        </div>`;
+      }).join("") + `</div>
+      <div style="font-size:10.5px;color:var(--ink-muted);text-align:center;margin-top:8px">Saldo em MZN · verde = a receber · laranja = falta contribuir</div>
+    </div>`;
+  }
+
+  /* --- Últimos movimentos --- */
+  if (movs.length) {
+    const ultimos = movs.slice(-3).reverse();
+    html += `<div class="section-title">Últimos movimentos</div><div class="card">` +
+      ultimos.map(m => `<div class="mov">
+        <div class="m-main">
+          <div class="m-item" style="font-size:13px">${esc(m.item)}</div>
+          ${m.data ? `<div class="m-date">${esc(m.data)}</div>` : ""}
+        </div>
+        <div class="m-side">
+          <div class="m-val" style="font-size:13px">${fmtMZN(m.val)}</div>
+          <div style="font-size:11px;color:var(--ink-muted);margin-top:2px">
+            <span class="dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${socioColor(m.por)};margin-right:3px"></span>${esc(m.por)}</div>
+        </div>
+      </div>`).join("") +
+      `<div class="goto" data-goto="investimentos:movimentos" style="text-align:center;padding:10px 0 2px;font-size:13px;font-weight:650;color:var(--accent);cursor:pointer">Ver todos os movimentos ›</div>
+    </div>`;
+  }
+
+  /* --- Próximos pagamentos (maiores valores em falta do plano) --- */
+  if (plano) {
+    const pendentes = plano.items.filter(it => (it.falta || 0) > 0)
+      .sort((a, b) => b.falta - a.falta).slice(0, 4);
+    if (pendentes.length) {
+      const maxFalta = pendentes[0].falta;
+      html += `<div class="section-title">Próximos pagamentos</div>
+      <div class="card goto" data-goto="investimentos:plano" style="cursor:pointer">` +
+        pendentes.map((it, i) => `<div style="padding:8px 0;${i < pendentes.length - 1 ? "border-bottom:1px solid var(--hairline)" : ""}">
+          <div style="display:flex;justify-content:space-between;gap:10px;font-size:13px">
+            <span style="flex:1;min-width:0">${esc(it.name)}</span>
+            <b style="font-variant-numeric:tabular-nums;white-space:nowrap">${fmtMZN(it.falta)} <small style="font-weight:600;color:var(--ink-muted)">MZN</small></b>
+          </div>
+          <div class="bar" style="height:5px;margin-top:6px"><i style="width:${Math.max(3, it.falta / maxFalta * 100)}%"></i></div>
+        </div>`).join("") + `</div>`;
+    }
+  }
+
+  /* restantes indicadores da folha Resumo que não reconhecemos */
   const known = /total\s+investimento|j[áa]\s*investido|falta\s*investir|despesa\s*recorrente|contribui[çc][ãa]o\s*alvo/i;
   const extras = pairs.filter(([l]) => !known.test(l));
   if (extras.length) {
@@ -503,27 +687,8 @@ function tile(label, value, sub, unit) {
 /* --- Movimentos: lista filtrável por sócio --- */
 let movFilter = "Todos";
 function renderMovimentos(rows) {
-  const h = findHeaderRow(rows, "Data");
-  if (h < 0) return renderAuto(rows);
-  const header = rows[h];
-  const iData = colIndex(header, "data"), iItem = colIndex(header, "item"),
-        iDesc = colIndex(header, "descrição") >= 0 ? colIndex(header, "descrição") : colIndex(header, "descricao"),
-        iVal = colIndex(header, "valor"), iPor = colIndex(header, "pago por");
-
-  const movs = [];
-  for (let i = h + 1; i < rows.length; i++) {
-    const r = rows[i];
-    if (isRowEmpty(r)) continue;
-    const val = parseNum(r[iVal]);
-    const por = (r[iPor] || "").trim();
-    if (val == null || val === 0 || !por) continue; // ignora linhas de fórmula vazias
-    movs.push({
-      data: (r[iData] || "").trim(),
-      item: (r[iItem] || "").trim(),
-      desc: iDesc >= 0 ? (r[iDesc] || "").trim() : "",
-      val, por
-    });
-  }
+  const movs = extractMovs(rows);
+  if (movs == null) return renderAuto(rows);
   if (!movs.length) return emptyState("Ainda não há movimentos registados.");
 
   const socios = [...new Set(movs.map(m => m.por))];
@@ -560,30 +725,9 @@ function renderMovimentos(rows) {
 
 /* --- Plano (Investimentos Iniciais) --- */
 function renderPlano(rows) {
-  const h = findHeaderRow(rows, "Item");
-  if (h < 0) return renderAuto(rows);
-  const header = rows[h];
-  const iItem = colIndex(header, "item"), iTipo = colIndex(header, "tipo"),
-        iTot = colIndex(header, "valor total"), iPago = colIndex(header, "já pago") >= 0 ? colIndex(header, "já pago") : colIndex(header, "pago"),
-        iFalta = colIndex(header, "falta"), iSit = colIndex(header, "situação") >= 0 ? colIndex(header, "situação") : colIndex(header, "situacao");
-
-  const items = [], totals = [];
-  for (let i = h + 1; i < rows.length; i++) {
-    const r = rows[i];
-    if (isRowEmpty(r)) continue;
-    const name = (r[iItem] || "").trim();
-    if (!name) continue;
-    const rec = {
-      name, tipo: (r[iTipo] || "").trim(),
-      total: parseNum(r[iTot]), pago: parseNum(r[iPago]), falta: parseNum(r[iFalta]),
-      sit: iSit >= 0 ? (r[iSit] || "").trim() : ""
-    };
-    // linhas de totais começam por TOTAL/DESPESA em maiúsculas ("Despesas Extras" é um item)
-    if (/^(TOTAL|DESPESAS?)(\s|$)/.test(name)) {
-      const nums = r.map(parseNum).filter(n => n != null);
-      totals.push({ name, total: rec.total, pago: rec.pago, falta: rec.falta, nums });
-    } else items.push(rec);
-  }
+  const plano = extractPlano(rows);
+  if (plano == null) return renderAuto(rows);
+  const { items, totals } = plano;
   if (!items.length && !totals.length) return emptyState("Sem itens no plano.");
 
   const sitStatus = s => /pago/i.test(s) ? "good" : /curso|reservado/i.test(s) ? "neutral" : "warn";
@@ -626,26 +770,8 @@ function renderPlano(rows) {
 
 /* --- Sócios (Contas Correntes) --- */
 function renderSocios(rows) {
-  const h = findHeaderRow(rows, "Sócio");
-  if (h < 0) return renderAuto(rows);
-  const header = rows[h];
-  const iNome = colIndex(header, "sócio") >= 0 ? colIndex(header, "sócio") : colIndex(header, "socio"),
-        iPart = colIndex(header, "participação") >= 0 ? colIndex(header, "participação") : colIndex(header, "participacao"),
-        iPago = colIndex(header, "pago"), iQuota = colIndex(header, "quota"),
-        iSaldo = colIndex(header, "saldo"), iSit = colIndex(header, "situação") >= 0 ? colIndex(header, "situação") : colIndex(header, "situacao");
-
-  const socios = [];
-  for (let i = h + 1; i < rows.length; i++) {
-    const r = rows[i];
-    if (isRowEmpty(r)) continue;
-    const nome = (r[iNome] || "").trim();
-    if (!nome || /^total/i.test(nome)) continue;
-    socios.push({
-      nome, part: (r[iPart] || "").trim(),
-      pago: parseNum(r[iPago]), quota: parseNum(r[iQuota]),
-      saldo: parseNum(r[iSaldo]), sit: iSit >= 0 ? (r[iSit] || "").trim() : ""
-    });
-  }
+  const socios = extractSocios(rows);
+  if (socios == null) return renderAuto(rows);
   if (!socios.length) return emptyState("Sem dados de sócios.");
   socios.forEach(s => socioColor(s.nome));
 
@@ -741,7 +867,7 @@ const RENDERERS = {
 };
 const state = {
   activeGroup: NAV[0].id,
-  activeView: Object.fromEntries(NAV.map(g => [g.id, g.views[0].id])),
+  activeView: Object.fromEntries(NAV.map(g => [g.id, g.views[0]?.id])),
   data: {}, meta: {}
 };
 
@@ -758,6 +884,11 @@ navEl.innerHTML = NAV.map(g =>
 
 mainEl.innerHTML = NAV.map(g => `
   <section class="panel ${g.id === state.activeGroup ? "active" : ""}" id="panel-${g.id}">
+    ${g.soon ? `<div class="state">
+      <div class="icon">🚧</div>
+      <h3>Em breve</h3>
+      <p>A área de ${esc(g.label)} será ativada quando os dados estiverem prontos no Excel.</p>
+    </div>` : ""}
     ${g.views.length > 1 ? `<div class="subtabs" data-group="${g.id}">
       ${g.views.map(v => `<button data-view="${v.id}" class="${v.id === state.activeView[g.id] ? "on" : ""}">${esc(v.label)}</button>`).join("")}
     </div>` : ""}
@@ -773,28 +904,39 @@ function skeleton() {
   </div>`;
 }
 
+function gotoView(groupId, viewId) {
+  const group = NAV.find(g => g.id === groupId);
+  if (!group) return;
+  state.activeGroup = groupId;
+  navEl.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.group === groupId));
+  document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === "panel-" + groupId));
+  if (viewId && group.views.some(v => v.id === viewId)) {
+    state.activeView[groupId] = viewId;
+    const subtabs = document.querySelector(`.subtabs[data-group="${groupId}"]`);
+    if (subtabs) subtabs.querySelectorAll("button").forEach(b =>
+      b.classList.toggle("on", b.dataset.view === viewId));
+    group.views.forEach(v => {
+      document.getElementById("view-" + v.id).style.display = v.id === viewId ? "" : "none";
+    });
+  }
+  window.scrollTo({ top: 0 });
+}
+
 navEl.addEventListener("click", e => {
   const btn = e.target.closest("button[data-group]");
-  if (!btn) return;
-  state.activeGroup = btn.dataset.group;
-  navEl.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.group === state.activeGroup));
-  document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === "panel-" + state.activeGroup));
-  window.scrollTo({ top: 0 });
+  if (btn) gotoView(btn.dataset.group);
 });
 
 mainEl.addEventListener("click", e => {
   const sub = e.target.closest(".subtabs button[data-view]");
   if (sub) {
-    const groupId = sub.closest(".subtabs").dataset.group;
-    const group = NAV.find(g => g.id === groupId);
-    state.activeView[groupId] = sub.dataset.view;
-    sub.closest(".subtabs").querySelectorAll("button").forEach(b =>
-      b.classList.toggle("on", b.dataset.view === sub.dataset.view));
-    group.views.forEach(v => {
-      document.getElementById("view-" + v.id).style.display =
-        v.id === state.activeView[groupId] ? "" : "none";
-    });
-    window.scrollTo({ top: 0 });
+    gotoView(sub.closest(".subtabs").dataset.group, sub.dataset.view);
+    return;
+  }
+  const jump = e.target.closest("[data-goto]");
+  if (jump) {
+    const [g, v] = jump.dataset.goto.split(":");
+    gotoView(g, v);
     return;
   }
   const chip = e.target.closest("#movFilters button");
@@ -832,15 +974,19 @@ async function refreshAll(force) {
   refreshBtn.classList.add("spinning");
   const results = await Promise.all(ALL_VIEWS.map(view =>
     loadSheet(view.sheet, force).then(r => ({ view, ...r })).catch(err => ({ view, err }))));
-  // pintar sempre pela ordem de ALL_VIEWS → cores dos sócios estáveis entre visitas
+  // 1.ª passagem: guardar todos os dados (o dashboard do Resumo usa várias folhas)
+  for (const r of results) {
+    if (r.err) continue;
+    state.data[r.view.sheet] = r.rows;
+    state.meta[r.view.sheet] = { fromCache: r.fromCache, time: r.time };
+  }
+  // 2.ª passagem: pintar pela ordem de ALL_VIEWS → cores dos sócios estáveis
   for (const r of results) {
     if (r.err) {
       console.error("load", r.view.sheet, r.err);
       delete state.meta[r.view.sheet];
       document.getElementById("view-" + r.view.id).innerHTML = errorState(r.view.id);
     } else {
-      state.data[r.view.sheet] = r.rows;
-      state.meta[r.view.sheet] = { fromCache: r.fromCache, time: r.time };
       paint(r.view);
     }
   }
