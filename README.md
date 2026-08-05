@@ -16,14 +16,39 @@ sub-separadores no topo mostram as folhas do Excel dessa área.
 
 | Área (em baixo) | Sub-separador (em cima) | Folha do Excel | Apresentação |
 |---|---|---|---|
-| Resumo | — | `Resumo` | Indicadores gerais + barra de execução do investimento |
-| Investimentos | Movimentos | `Movimentos Investimentos` | Lista de movimentos, filtrável por sócio |
+| Resumo | — | `Resumo` + cálculos das outras folhas | Dashboard: alertas, execução, sócios, últimos movimentos, próximos pagamentos |
+| Investimentos | Movimentos | `Movimentos Investimentos` | Lista de movimentos (colunas por sócio), filtrável por sócio |
 | Investimentos | Plano | `Investimentos Iniciais` | Itens do plano com progresso pago/estimado e totais |
 | Investimentos | Sócios | `Sócios - Contas Correntes` | Cartão por sócio: pago, quota e saldo (credor / falta contribuir) |
 | Investimentos | Acertos | `Acertos entre Sócios` | Tabela de reembolsos entre sócios |
+| Viagens | — | `Viagens` | Lista de viagens → detalhe da viagem → abastecimentos |
+| Faturação | — | *(em breve)* | — |
+| Viaturas | — | *(em breve)* | — |
 
-No futuro, áreas novas (Faturação, Vendas, Recursos Humanos, …) entram como novos
-separadores em baixo, cada uma com os seus próprios sub-separadores.
+### Abastecimentos (ficheiro separado)
+
+Os abastecimentos vêm de um segundo ficheiro no Drive, chamado
+**«planilha de abastecimentos»**, com **uma folha por viagem** cujo nome é o
+código da viagem (ex.: `vf15`). No detalhe de uma viagem, o botão
+"⛽ Abastecimentos" abre a folha correspondente.
+
+Para ligar: partilhar esse ficheiro como «Qualquer pessoa com o link — Leitor»
+e colocar o ID do ficheiro na constante `ABASTECIMENTOS_ID` no topo do
+`<script>` de `index.html` (o ID é a parte do link entre `/d/` e `/edit`).
+
+## Roadmap (ideias já acordadas para o futuro)
+
+- **Faturação** (separador em baixo, por ativar): faturas emitidas e clientes,
+  com **aging de recebíveis** (quem deve, quanto, há quantos dias) e alertas de
+  vencidos no Resumo. Incluir como sub-separadores a **Tesouraria** (caixa/banco,
+  entradas e saídas) e os **Resultados mensais (P&L)** com evolução ao longo dos
+  meses.
+- **Viaturas** (separador em baixo, por ativar): manutenções por viatura
+  (revisões, pneus com km, avarias, custos, próximas intervenções) e
+  **documentação de cada viatura** vinda de uma pasta do Drive organizada por
+  matrícula (seguro, inspeção, licenças, com validades e alertas no Resumo).
+- **Privacidade**: quando entrarem dados de faturação/clientes/salários,
+  ponderar um PIN de acesso na app ou alojamento com login.
 
 ## Requisito único: partilha do ficheiro
 
