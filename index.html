@@ -304,6 +304,11 @@
    ===================================================================== */
 const SHEET_ID = "1iLkuI2Lom-klgfCtcrfSJMvbitZpXpWGPzoSQjZ0G1I";
 
+/* Ficheiro "planilha de abastecimentos" no Drive: uma folha por viagem,
+   com o nome igual ao código da viagem (ex.: vf15). Colocar aqui o ID
+   do ficheiro (partilhado como "qualquer pessoa com o link — leitor"). */
+const ABASTECIMENTOS_ID = "";
+
 const NAV = [
   { id: "resumo", label: "Resumo",
     icon: '<path d="M3 12h5l2-7 4 14 2-7h5"/>',
@@ -323,10 +328,13 @@ const NAV = [
      views: [{ id: "vendas", sheet: "Vendas", label: "Vendas", render: "auto" }] */
   { id: "faturacao", label: "Faturação", soon: true, views: [],
     icon: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>' },
-  { id: "vendas", label: "Vendas", soon: true, views: [],
-    icon: '<circle cx="9" cy="20" r="1.6"/><circle cx="17" cy="20" r="1.6"/><path d="M3 4h2.5l2.2 11.2a1.5 1.5 0 0 0 1.5 1.3h8.3a1.5 1.5 0 0 0 1.5-1.2L20.8 8H6.2"/>' },
-  { id: "rh", label: "RH", soon: true, views: [],
-    icon: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-3.6 3.6-6 7-6s6.2 2.4 7 6"/>' },
+  { id: "viagens", label: "Viagens",
+    icon: '<circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/><path d="M6 17V7a2 2 0 0 1 2-2h5v12"/><path d="M13 9h4l3 4v4h-2"/><path d="M8 19h8"/>',
+    views: [
+      { id: "viagens", sheet: "Viagens", label: "Viagens", render: "viagens" },
+    ] },
+  { id: "viaturas", label: "Viaturas", soon: true, views: [],
+    icon: '<rect x="3" y="8" width="12" height="8" rx="1.5"/><path d="M15 11h3.5l2.5 3v2h-2"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/>' },
 ];
 const ALL_VIEWS = NAV.flatMap(g => g.views);
 
@@ -865,6 +873,189 @@ function renderAcertos(rows) {
   return tableHTML(rows[h], dataRows);
 }
 
+/* --- Viagens: lista → detalhe → abastecimentos ---
+   A folha "Viagens" tem uma linha por viagem. A lista mostra os campos
+   principais; tocar numa viagem abre o detalhe completo, e daí o botão
+   "Abastecimentos" abre a folha com o código da viagem no ficheiro
+   "planilha de abastecimentos". */
+const viagemNav = { mode: "lista", sel: null };
+const abastCache = {};
+
+function extractViagens(rows) {
+  let h = -1;
+  for (let i = 0; i < Math.min(rows.length, 8); i++) {
+    if (rows[i].some(c => /c[óo]digo/i.test(c || ""))) { h = i; break; }
+  }
+  if (h < 0) {
+    let best = 0;
+    rows.slice(0, 8).forEach((r, i) => {
+      const filled = r.filter(c => c && c.trim()).length;
+      if (filled > best) { best = filled; h = i; }
+    });
+    if (best < 2) return null;
+  }
+  const cols = rows[h].map((c, i) => ({ name: (c || "").trim(), i })).filter(c => c.name);
+  if (!cols.length) return null;
+  const iCod = cols.find(c => /c[óo]digo/i.test(c.name))?.i ?? cols[0].i;
+  const trips = [];
+  for (let i = h + 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (isRowEmpty(r)) continue;
+    const cod = (r[iCod] || "").trim();
+    if (/^TOTAL/i.test(cod)) continue;
+    if (!cod && r.filter(c => c && c.trim()).length < 2) continue;
+    trips.push({ cod, row: r });
+  }
+  return { cols, iCod, trips };
+}
+
+/* campos preferidos na lista (por ordem) */
+const VG_PRIOR = [/data/i, /matr[íi]cula/i, /motorista/i, /rota|origem|destino|percurso/i, /cliente/i, /estado|situa/i];
+
+/* célula numérica = valor; datas (com / ou -) e texto ficam como estão */
+function isNumericCell(raw) {
+  const n = parseNum(raw);
+  return n != null && /\d/.test(raw) && !/[a-zA-ZÀ-ú]{3,}/.test(raw) && !/[\/:]|\d-\d/.test(raw);
+}
+function fmtCell(raw) {
+  return isNumericCell(raw) ? fmtMZN(parseNum(raw)) : esc(raw);
+}
+
+function renderViagens(rows) {
+  const vg = extractViagens(rows);
+  if (!vg || !vg.trips.length) {
+    viagemNav.mode = "lista";
+    return emptyState("Ainda não há viagens registadas.",
+      "As viagens que registares na folha 'Viagens' do Excel aparecem aqui automaticamente.");
+  }
+  if ((viagemNav.mode === "detalhe" || viagemNav.mode === "abast") && !vg.trips[viagemNav.sel]) {
+    viagemNav.mode = "lista";
+  }
+  if (viagemNav.mode === "detalhe") return viagemDetalheHTML(vg);
+  if (viagemNav.mode === "abast") return abastHTML(vg);
+
+  const keyCols = [];
+  for (const re of VG_PRIOR) {
+    const c = vg.cols.find(c => c.i !== vg.iCod && re.test(c.name) && !keyCols.includes(c));
+    if (c) keyCols.push(c);
+    if (keyCols.length >= 4) break;
+  }
+  if (!keyCols.length) keyCols.push(...vg.cols.filter(c => c.i !== vg.iCod).slice(0, 4));
+
+  const list = vg.trips.map((t, idx) => `
+    <div class="mov" data-viagem-idx="${idx}" style="cursor:pointer;align-items:center">
+      <div class="m-main">
+        ${t.cod ? `<span class="chip" style="background:var(--accent);color:#fff;border-color:transparent;font-size:12px;padding:5px 10px;font-weight:700">${esc(t.cod.toUpperCase())}</span>` : ""}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;margin-top:8px">
+          ${keyCols.map(c => { const v = (t.row[c.i] || "").trim(); return v ? `
+            <div style="font-size:12px;min-width:0"><span style="color:var(--ink-muted)">${esc(c.name)}</span><br><b>${fmtCell(v)}</b></div>` : ""; }).join("")}
+        </div>
+      </div>
+      <div style="color:var(--ink-muted);font-size:20px;flex:none">›</div>
+    </div>`).join("");
+
+  return `<div class="card" style="font-size:12px;color:var(--ink-2)">${vg.trips.length} viage${vg.trips.length === 1 ? "m" : "ns"} · toca numa viagem para ver o detalhe</div>
+    <div class="card">${list}</div>`;
+}
+
+function backBtn(attr, label) {
+  return `<button ${attr} class="chip" style="cursor:pointer;font-size:13px;padding:8px 14px;margin-bottom:12px;background:var(--surface)">‹ ${label}</button>`;
+}
+
+function viagemDetalheHTML(vg) {
+  const t = vg.trips[viagemNav.sel];
+  const linhas = vg.cols
+    .map(c => ({ name: c.name, v: (t.row[c.i] || "").trim() }))
+    .filter(x => x.v);
+  return `${backBtn("data-viagens-back", "Voltar às viagens")}
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px">
+        ${t.cod ? `<span class="chip" style="background:var(--accent);color:#fff;border-color:transparent;font-size:14px;padding:7px 13px;font-weight:750">${esc(t.cod.toUpperCase())}</span>` : "<span></span>"}
+        <button data-abast class="chip" style="cursor:pointer;font-size:13px;font-weight:650;padding:8px 14px;border-color:var(--accent);color:var(--accent)">⛽ Abastecimentos</button>
+      </div>
+      ${linhas.map((x, i) => `
+        <div style="display:flex;justify-content:space-between;gap:14px;padding:9px 0;${i < linhas.length - 1 ? "border-bottom:1px solid var(--hairline)" : ""}">
+          <span style="font-size:12.5px;color:var(--ink-2);flex:none">${esc(x.name)}</span>
+          <b style="font-size:13px;text-align:right;font-variant-numeric:tabular-nums">${fmtCell(x.v)}</b>
+        </div>`).join("")}
+    </div>`;
+}
+
+function abastHTML(vg) {
+  const t = vg.trips[viagemNav.sel];
+  const code = (t.cod || "").trim();
+  const head = `${backBtn("data-abast-back", "Voltar à viagem")}
+    <div class="section-title">Abastecimentos · ${esc(code.toUpperCase())}</div>`;
+  if (!code) return head + emptyState("Viagem sem código", "Sem código não é possível encontrar a folha de abastecimentos.");
+
+  const entry = abastCache[code.toLowerCase()];
+  if (!entry || entry.loading) {
+    if (!entry) loadAbastecimentos(code);
+    return head + `<div class="card"><div class="skel" style="height:120px"></div></div>`;
+  }
+  if (entry.err === "config") {
+    return head + `<div class="state"><div class="icon">🔗</div><h3>Ficheiro por ligar</h3>
+      <p>A "planilha de abastecimentos" ainda não está ligada à app. É preciso partilhar esse ficheiro no Drive («Qualquer pessoa com o link — Leitor») e configurar o ID no site.</p></div>`;
+  }
+  if (entry.err) {
+    return head + emptyState("Sem folha para esta viagem",
+      `Não foi encontrada nenhuma folha chamada «${code}» na planilha de abastecimentos.`);
+  }
+
+  const clean = entry.rows.filter(r => !isRowEmpty(r));
+  let hi = 0, best = 0;
+  clean.slice(0, 6).forEach((r, i) => {
+    const filled = r.filter(c => c && c.trim()).length;
+    if (filled > best) { best = filled; hi = i; }
+  });
+  const header = clean[hi], dataRows = clean.slice(hi + 1);
+  if (!dataRows.length) return head + emptyState("Sem abastecimentos registados nesta viagem.");
+
+  /* totais das colunas de litros/valores */
+  const totais = header.map((c, i) => ({ name: (c || "").trim(), i }))
+    .filter(c => /litro|valor|custo|montante|total/i.test(c.name) &&
+                 !/pre[çc]o|\/|m[ée]di|km/i.test(c.name)) // não somar preços/médias
+    .map(c => ({ name: c.name, sum: dataRows.reduce((a, r) => a + (parseNum(r[c.i]) || 0), 0) }))
+    .filter(c => c.sum > 0);
+
+  return head + tableHTML(header, dataRows) +
+    (totais.length ? `<div class="card" style="display:flex;flex-wrap:wrap;gap:6px 18px">
+      ${totais.map(c => `<div style="font-size:12px;color:var(--ink-2)">${esc(c.name)}: <b style="color:var(--ink);font-variant-numeric:tabular-nums">${fmtMZN(c.sum)}</b></div>`).join("")}
+    </div>` : "");
+}
+
+async function loadAbastecimentos(code) {
+  const key = code.toLowerCase();
+  if (abastCache[key] && !abastCache[key].loading) return;
+  if (!ABASTECIMENTOS_ID && !SRC_OVERRIDE) {
+    abastCache[key] = { err: "config" }; repaintViagens(); return;
+  }
+  abastCache[key] = { loading: true };
+  const variants = [...new Set([code, code.toUpperCase(), code.toLowerCase()])];
+  for (const name of variants) {
+    try {
+      const url = SRC_OVERRIDE
+        ? SRC_OVERRIDE.replace(/\/$/, "") + "/abast-" + encodeURIComponent(name) + ".csv"
+        : "https://docs.google.com/spreadsheets/d/" + ABASTECIMENTOS_ID +
+          "/gviz/tq?tqx=out:csv&sheet=" + encodeURIComponent(name) + "&t=" + Date.now();
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) continue;
+      const text = await res.text();
+      if (/<html/i.test(text.slice(0, 300))) continue;
+      abastCache[key] = { rows: parseCSV(text) };
+      repaintViagens();
+      return;
+    } catch (e) { /* tenta a variante seguinte */ }
+  }
+  abastCache[key] = { err: "notfound" };
+  repaintViagens();
+}
+
+function repaintViagens() {
+  const view = ALL_VIEWS.find(v => v.id === "viagens");
+  if (view && state.data[view.sheet]) paint(view);
+}
+
 /* --- Render automático (folhas futuras): tabela genérica --- */
 function renderAuto(rows) {
   const clean = rows.filter(r => !isRowEmpty(r));
@@ -883,9 +1074,8 @@ function tableHTML(header, dataRows) {
   const head = cols.map(c => `<th>${esc(c.name)}</th>`).join("");
   const body = dataRows.map(r => "<tr>" + cols.map(c => {
     const raw = (r[c.i] || "").trim();
-    const n = parseNum(raw);
-    const numeric = n != null && /[\d]/.test(raw) && !/[a-zA-ZÀ-ú]{3,}/.test(raw);
-    return `<td class="${numeric ? "num" : ""}">${numeric ? fmtMZN(n) : esc(raw) || "—"}</td>`;
+    const numeric = isNumericCell(raw);
+    return `<td class="${numeric ? "num" : ""}">${numeric ? fmtMZN(parseNum(raw)) : esc(raw) || "—"}</td>`;
   }).join("") + "</tr>").join("");
   return `<div class="card tablewrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
@@ -912,7 +1102,7 @@ function errorState(tabId) {
    ===================================================================== */
 const RENDERERS = {
   resumo: renderResumo, movimentos: renderMovimentos, plano: renderPlano,
-  socios: renderSocios, acertos: renderAcertos, auto: renderAuto
+  socios: renderSocios, acertos: renderAcertos, viagens: renderViagens, auto: renderAuto
 };
 const state = {
   activeGroup: NAV[0].id,
@@ -986,6 +1176,24 @@ mainEl.addEventListener("click", e => {
   if (jump) {
     const [g, v] = jump.dataset.goto.split(":");
     gotoView(g, v);
+    return;
+  }
+  const vRow = e.target.closest("[data-viagem-idx]");
+  if (vRow) {
+    viagemNav.mode = "detalhe"; viagemNav.sel = +vRow.dataset.viagemIdx;
+    repaintViagens(); window.scrollTo({ top: 0 });
+    return;
+  }
+  if (e.target.closest("[data-viagens-back]")) {
+    viagemNav.mode = "lista"; repaintViagens(); window.scrollTo({ top: 0 });
+    return;
+  }
+  if (e.target.closest("[data-abast-back]")) {
+    viagemNav.mode = "detalhe"; repaintViagens(); window.scrollTo({ top: 0 });
+    return;
+  }
+  if (e.target.closest("[data-abast]")) {
+    viagemNav.mode = "abast"; repaintViagens(); window.scrollTo({ top: 0 });
     return;
   }
   const chip = e.target.closest("#movFilters button");
