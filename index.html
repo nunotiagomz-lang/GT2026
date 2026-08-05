@@ -1008,7 +1008,7 @@ function abastHTML(vg) {
   }
   if (entry.err) {
     return head + emptyState("Sem folha para esta viagem",
-      `Não foi encontrada nenhuma folha chamada «${code}» na planilha de abastecimentos.`);
+      `Não foi encontrada nenhuma folha chamada «${code}» na planilha de abastecimentos. O nome do separador (em baixo, no Google Sheets) tem de ser exatamente o código da viagem — ex.: «${code.toUpperCase()}».`);
   }
 
   const clean = entry.rows.filter(r => !isRowEmpty(r));
@@ -1027,10 +1027,43 @@ function abastHTML(vg) {
     .map(c => ({ name: c.name, sum: dataRows.reduce((a, r) => a + (parseNum(r[c.i]) || 0), 0) }))
     .filter(c => c.sum > 0);
 
-  return head + tableHTML(header, dataRows) +
+  return head +
+    `<div style="font-size:11px;color:var(--ink-muted);margin:-4px 2px 8px">Folha «${esc(entry.sheetName || code)}» da planilha de abastecimentos</div>` +
+    tableHTML(header, dataRows) +
     (totais.length ? `<div class="card" style="display:flex;flex-wrap:wrap;gap:6px 18px">
       ${totais.map(c => `<div style="font-size:12px;color:var(--ink-2)">${esc(c.name)}: <b style="color:var(--ink);font-variant-numeric:tabular-nums">${fmtMZN(c.sum)}</b></div>`).join("")}
     </div>` : "");
+}
+
+function abastUrl(name) {
+  return SRC_OVERRIDE
+    ? SRC_OVERRIDE.replace(/\/$/, "") + "/abast-" + encodeURIComponent(name) + ".csv"
+    : "https://docs.google.com/spreadsheets/d/" + ABASTECIMENTOS_ID +
+      "/gviz/tq?tqx=out:csv&sheet=" + encodeURIComponent(name) + "&t=" + Date.now();
+}
+async function fetchCsvText(url) {
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) return null;
+    const text = await res.text();
+    if (/<html/i.test(text.slice(0, 300))) return null;
+    return text;
+  } catch (e) { return null; }
+}
+
+/* nomes de folha a experimentar para um código VF+número, dos mais
+   prováveis para os menos: VF15, vf15, Vf15, VF 15, VF-15, VF015 */
+function codeVariants(code) {
+  const c = code.trim();
+  const compact = c.replace(/[\s\-_]/g, "");
+  const out = [c, compact.toUpperCase(), compact.toLowerCase(), compact];
+  const m = compact.match(/^([A-Za-z]+)0*(\d+)$/);
+  if (m) {
+    const pre = m[1].toUpperCase(), num = m[2];
+    out.push(pre + " " + num, pre + "-" + num, pre + num.padStart(3, "0"),
+             pre[0] + pre.slice(1).toLowerCase() + num);
+  }
+  return [...new Set(out.filter(Boolean))];
 }
 
 async function loadAbastecimentos(code) {
@@ -1040,24 +1073,23 @@ async function loadAbastecimentos(code) {
     abastCache[key] = { err: "config" }; repaintViagens(); return;
   }
   abastCache[key] = { loading: true };
-  /* tenta o código tal como está e sem espaços, em minúsculas/maiúsculas */
-  const compact = code.replace(/[\s-]/g, "");
-  const variants = [...new Set([code, code.toUpperCase(), code.toLowerCase(),
-    compact, compact.toUpperCase(), compact.toLowerCase()])];
-  for (const name of variants) {
-    try {
-      const url = SRC_OVERRIDE
-        ? SRC_OVERRIDE.replace(/\/$/, "") + "/abast-" + encodeURIComponent(name) + ".csv"
-        : "https://docs.google.com/spreadsheets/d/" + ABASTECIMENTOS_ID +
-          "/gviz/tq?tqx=out:csv&sheet=" + encodeURIComponent(name) + "&t=" + Date.now();
-      const res = await fetch(url, { cache: "no-store" });
-      if (!res.ok) continue;
-      const text = await res.text();
-      if (/<html/i.test(text.slice(0, 300))) continue;
-      abastCache[key] = { rows: parseCSV(text) };
-      repaintViagens();
-      return;
-    } catch (e) { /* tenta a variante seguinte */ }
+
+  /* O gviz devolve a PRIMEIRA folha quando o nome pedido não existe, em vez
+     de dar erro. Pedimos primeiro um nome impossível: se vier resposta, é o
+     conteúdo da primeira folha ("canário") — e qualquer variante que devolva
+     exatamente isso só é aceite se o conteúdo mencionar o código da viagem. */
+  const canary = await fetchCsvText(abastUrl("nl_folha_inexistente_9x7z"));
+
+  const norm = s => s.toLowerCase().replace(/[\s\-_]/g, "");
+  for (const name of codeVariants(code)) {
+    const text = await fetchCsvText(abastUrl(name));
+    if (text == null) continue;
+    if (canary != null && text === canary && !norm(text).includes(norm(code))) {
+      continue; // é a primeira folha devolvida por engano — não é esta viagem
+    }
+    abastCache[key] = { rows: parseCSV(text), sheetName: name };
+    repaintViagens();
+    return;
   }
   abastCache[key] = { err: "notfound" };
   repaintViagens();
