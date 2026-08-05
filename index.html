@@ -884,7 +884,7 @@ const abastCache = {};
 function extractViagens(rows) {
   let h = -1;
   for (let i = 0; i < Math.min(rows.length, 8); i++) {
-    if (rows[i].some(c => /c[óo]digo/i.test(c || ""))) { h = i; break; }
+    if (rows[i].some(c => /c[óo]digo|^\s*vf\s*$/i.test(c || ""))) { h = i; break; }
   }
   if (h < 0) {
     let best = 0;
@@ -896,7 +896,16 @@ function extractViagens(rows) {
   }
   const cols = rows[h].map((c, i) => ({ name: (c || "").trim(), i })).filter(c => c.name);
   if (!cols.length) return null;
-  const iCod = cols.find(c => /c[óo]digo/i.test(c.name))?.i ?? cols[0].i;
+  /* coluna do código: cabeçalho "VF" ou "Código"; senão, a coluna cujos
+     valores têm o formato VF+número (os códigos são sempre VF##) */
+  let iCod = cols.find(c => /^vf$/i.test(c.name) || /c[óo]digo/i.test(c.name))?.i;
+  if (iCod == null) {
+    for (const c of cols) {
+      const vals = rows.slice(h + 1, h + 6).map(r => (r[c.i] || "").trim()).filter(Boolean);
+      if (vals.length && vals.every(v => /^vf[-\s]?\d+/i.test(v))) { iCod = c.i; break; }
+    }
+  }
+  if (iCod == null) iCod = cols[0].i;
   const trips = [];
   for (let i = h + 1; i < rows.length; i++) {
     const r = rows[i];
@@ -1031,7 +1040,10 @@ async function loadAbastecimentos(code) {
     abastCache[key] = { err: "config" }; repaintViagens(); return;
   }
   abastCache[key] = { loading: true };
-  const variants = [...new Set([code, code.toUpperCase(), code.toLowerCase()])];
+  /* tenta o código tal como está e sem espaços, em minúsculas/maiúsculas */
+  const compact = code.replace(/[\s-]/g, "");
+  const variants = [...new Set([code, code.toUpperCase(), code.toLowerCase(),
+    compact, compact.toUpperCase(), compact.toLowerCase()])];
   for (const name of variants) {
     try {
       const url = SRC_OVERRIDE
