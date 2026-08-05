@@ -7,8 +7,9 @@
 <meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<title>Nova Logistics · Plano de Investimento</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232a78d6'/%3E%3Ctext x='32' y='42' font-family='system-ui,sans-serif' font-size='26' font-weight='800' fill='white' text-anchor='middle'%3ENL%3C/text%3E%3C/svg%3E">
+<title>Nova Logística, Lda · Plano de Investimento</title>
+<link rel="icon" type="image/png" href="assets/logo-mark.png">
+<link rel="apple-touch-icon" href="assets/logo-mark.png">
 <style>
   :root {
     color-scheme: light;
@@ -69,10 +70,9 @@
     display: flex; align-items: center; gap: 12px;
   }
   .logo {
-    width: 38px; height: 38px; border-radius: 10px; flex: none;
-    background: var(--accent); color: #fff;
-    display: grid; place-items: center;
-    font-weight: 800; font-size: 15px; letter-spacing: .5px;
+    width: 40px; height: 40px; border-radius: 10px; flex: none;
+    background: #fff; border: 1px solid var(--border);
+    object-fit: contain; display: block;
   }
   .brand { flex: 1; min-width: 0; }
   .brand h1 { font-size: 16px; font-weight: 700; line-height: 1.15; }
@@ -272,9 +272,9 @@
 <body>
 
 <header>
-  <div class="logo">NL</div>
+  <img class="logo" src="assets/logo-mark.png" alt="Nova Logística">
   <div class="brand">
-    <h1>Nova Logistics</h1>
+    <h1>Nova Logística, Lda</h1>
     <p>Plano de Investimento · Transportes</p>
   </div>
   <button class="refresh-btn" id="refreshBtn" aria-label="Atualizar dados" title="Atualizar">
@@ -1051,7 +1051,7 @@ document.addEventListener("visibilitychange", () => {
 refreshAll(false);
 </script>
 
-<footer>Nova Logistics · Consulta apenas — os dados são geridos no Excel do Google Drive.</footer>
+<footer>Nova Logística, Lda · Consulta apenas — os dados são geridos no Excel do Google Drive.</footer>
 
 </body>
 </html>

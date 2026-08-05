@@ -1,6 +1,6 @@
-# Nova Logistics · Plano de Investimento
+# Nova Logística, Lda · Plano de Investimento
 
-App web (só de consulta) para os sócios da Nova Logistics acompanharem o plano de
+App web (só de consulta) para os sócios da Nova Logística, Lda acompanharem o plano de
 investimento. Os dados vêm **sempre** do ficheiro Google Sheets
 **`Plano_Investimento_Transportes`** no Google Drive — a app não edita nada, apenas
 apresenta. Cada vez que alguém abre (ou volta a abrir) a página, os dados são lidos
