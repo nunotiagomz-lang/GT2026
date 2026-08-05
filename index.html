@@ -881,6 +881,16 @@ function renderAcertos(rows) {
 const viagemNav = { mode: "lista", sel: null };
 const abastCache = {};
 
+/* Código canónico da viagem. A coluna "VF" pode conter só o número (50)
+   ou já o código completo (VF50); em ambos os casos fica "VF50", que é
+   como as folhas da planilha de abastecimentos estão nomeadas. */
+function tripCode(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return "";
+  const m = s.match(/^(?:vf[\s\-_]*)?0*(\d+)$/i);
+  return m ? "VF" + m[1] : s;
+}
+
 function extractViagens(rows) {
   let h = -1;
   for (let i = 0; i < Math.min(rows.length, 8); i++) {
@@ -910,10 +920,10 @@ function extractViagens(rows) {
   for (let i = h + 1; i < rows.length; i++) {
     const r = rows[i];
     if (isRowEmpty(r)) continue;
-    const cod = (r[iCod] || "").trim();
-    if (/^TOTAL/i.test(cod)) continue;
-    if (!cod && r.filter(c => c && c.trim()).length < 2) continue;
-    trips.push({ cod, row: r });
+    const raw = (r[iCod] || "").trim();
+    if (/^TOTAL/i.test(raw)) continue;
+    if (!raw && r.filter(c => c && c.trim()).length < 2) continue;
+    trips.push({ cod: tripCode(raw), row: r });
   }
   return { cols, iCod, trips };
 }
@@ -926,8 +936,19 @@ function isNumericCell(raw) {
   const n = parseNum(raw);
   return n != null && /\d/.test(raw) && !/[a-zA-ZÀ-ú]{3,}/.test(raw) && !/[\/:]|\d-\d/.test(raw);
 }
+/* como fmtMZN, mas preserva as casas decimais quando o original as tem
+   (ex.: preço/litro 78,5 não pode virar 79) */
+function fmtNumRaw(raw) {
+  const n = parseNum(raw);
+  if (n == null) return esc(raw);
+  if (!/[.,]\d/.test(String(raw).replace(/[\s ]/g, ""))) return fmtMZN(n);
+  const [int, dec] = Math.abs(n).toFixed(2).split(".");
+  const decTrim = dec.replace(/0+$/, "");
+  return (n < 0 ? "−" : "") + int.replace(/\B(?=(\d{3})+(?!\d))/g, " ") +
+         (decTrim ? "," + decTrim : "");
+}
 function fmtCell(raw) {
-  return isNumericCell(raw) ? fmtMZN(parseNum(raw)) : esc(raw);
+  return isNumericCell(raw) ? fmtNumRaw(raw) : esc(raw);
 }
 
 function renderViagens(rows) {
@@ -1061,7 +1082,7 @@ function codeVariants(code) {
   if (m) {
     const pre = m[1].toUpperCase(), num = m[2];
     out.push(pre + " " + num, pre + "-" + num, pre + num.padStart(3, "0"),
-             pre[0] + pre.slice(1).toLowerCase() + num);
+             pre[0] + pre.slice(1).toLowerCase() + num, num);
   }
   return [...new Set(out.filter(Boolean))];
 }
@@ -1081,10 +1102,13 @@ async function loadAbastecimentos(code) {
   const canary = await fetchCsvText(abastUrl("nl_folha_inexistente_9x7z"));
 
   const norm = s => s.toLowerCase().replace(/[\s\-_]/g, "");
+  /* só aceitamos uma resposta igual à sonda se o conteúdo mencionar mesmo
+     o código (ex.: "vf50" — e não "bt50" nem "vf500") */
+  const codeRe = new RegExp(norm(code).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?!\\d)");
   for (const name of codeVariants(code)) {
     const text = await fetchCsvText(abastUrl(name));
     if (text == null) continue;
-    if (canary != null && text === canary && !norm(text).includes(norm(code))) {
+    if (canary != null && text === canary && !codeRe.test(norm(text))) {
       continue; // é a primeira folha devolvida por engano — não é esta viagem
     }
     abastCache[key] = { rows: parseCSV(text), sheetName: name };
@@ -1119,7 +1143,7 @@ function tableHTML(header, dataRows) {
   const body = dataRows.map(r => "<tr>" + cols.map(c => {
     const raw = (r[c.i] || "").trim();
     const numeric = isNumericCell(raw);
-    return `<td class="${numeric ? "num" : ""}">${numeric ? fmtMZN(parseNum(raw)) : esc(raw) || "—"}</td>`;
+    return `<td class="${numeric ? "num" : ""}">${numeric ? fmtNumRaw(raw) : esc(raw) || "—"}</td>`;
   }).join("") + "</tr>").join("");
   return `<div class="card tablewrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
