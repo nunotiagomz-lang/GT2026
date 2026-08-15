@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<base target="_top">
+<style>
+  :root {
+    color-scheme: light;
+    --page:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink-2:#52514e; --ink-muted:#898781;
+    --hairline:#e1e0d9; --border:rgba(11,11,11,0.10); --accent:#2a78d6; --good:#0ca30c; --bad:#d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { color-scheme: dark;
+      --page:#0d0d0d; --surface:#1a1a19; --ink:#fff; --ink-2:#c3c2b7; --ink-muted:#898781;
+      --hairline:#2c2c2a; --border:rgba(255,255,255,0.10); --accent:#3987e5; --good:#0ca30c; }
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+         background: var(--page); color: var(--ink); padding: 16px; max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 18px; margin-bottom: 2px; }
+  .sub { font-size: 12.5px; color: var(--ink-2); margin-bottom: 16px; }
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--hairline); margin-bottom: 16px; }
+  .tabs button { border: none; background: none; font-family: inherit; font-size: 14px; font-weight: 650;
+    color: var(--ink-muted); padding: 10px 14px; cursor: pointer;
+    border-bottom: 2.5px solid transparent; margin-bottom: -1px; }
+  .tabs button.on { color: var(--ink); border-bottom-color: var(--accent); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+          padding: 14px 16px; margin-bottom: 12px; }
+  label { display: block; font-size: 12px; color: var(--ink-2); margin: 12px 0 5px; font-weight: 600; }
+  label:first-child { margin-top: 0; }
+  input, select, textarea {
+    width: 100%; font-family: inherit; font-size: 16px; color: var(--ink);
+    padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--page);
+  }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button.primary {
+    width: 100%; margin-top: 18px; font-family: inherit; font-size: 15px; font-weight: 700;
+    padding: 13px; border-radius: 999px; border: none; background: var(--accent); color: #fff; cursor: pointer;
+  }
+  button.primary:disabled { opacity: .55; cursor: default; }
+  .msg { margin-top: 12px; font-size: 13.5px; font-weight: 600; padding: 11px 13px; border-radius: 10px; display: none; }
+  .msg.ok  { display: block; background: rgba(12,163,12,.12); color: var(--good); }
+  .msg.err { display: block; background: rgba(208,59,59,.12); color: var(--bad); }
+  .hint { font-size: 11.5px; color: var(--ink-muted); margin-top: 6px; }
+  .loading { text-align: center; color: var(--ink-2); padding: 30px 0; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<h1>Nova Logística, Lda</h1>
+<div class="sub">Lançamento de dados — grava direto no Excel do Drive</div>
+
+<div class="tabs">
+  <button id="tabViagem" class="on" onclick="mostrar('viagem')">Nova viagem</button>
+  <button id="tabAbast" onclick="mostrar('abast')">Abastecimento</button>
+</div>
+
+<div id="painelViagem">
+  <div class="card" id="camposViagem"><div class="loading">A carregar as colunas da folha…</div></div>
+  <button class="primary" id="btnViagem" onclick="gravarViagem()" disabled>Guardar viagem</button>
+  <div class="msg" id="msgViagem"></div>
+</div>
+
+<div id="painelAbast" style="display:none">
+  <div class="card">
+    <label for="abCodigo">Viagem</label>
+    <select id="abCodigo"><option>A carregar…</option></select>
+    <label for="abData">Data</label>
+    <input id="abData" type="date">
+    <label for="abLocal">Local</label>
+    <input id="abLocal" type="text" placeholder="Ex.: Chimoio">
+    <label for="abLitros">Litros</label>
+    <input id="abLitros" type="number" inputmode="decimal" step="any" placeholder="0">
+    <label for="abPreco">Preço por litro (MZN)</label>
+    <input id="abPreco" type="number" inputmode="decimal" step="any" placeholder="0">
+    <label for="abKm">Km no conta-quilómetros</label>
+    <input id="abKm" type="number" inputmode="numeric" step="any" placeholder="0">
+    <div class="hint">O valor total é calculado automaticamente (litros × preço).</div>
+  </div>
+  <button class="primary" onclick="gravarAbastecimento()">Guardar abastecimento</button>
+  <div class="msg" id="msgAbast"></div>
+</div>
+
+<script>
+var CONFIG = null;
+
+function mostrar(qual) {
+  document.getElementById('painelViagem').style.display = qual === 'viagem' ? '' : 'none';
+  document.getElementById('painelAbast').style.display  = qual === 'abast'  ? '' : 'none';
+  document.getElementById('tabViagem').classList.toggle('on', qual === 'viagem');
+  document.getElementById('tabAbast').classList.toggle('on', qual === 'abast');
+}
+
+function idDoCampo(nome) { return 'c_' + nome.replace(/[^a-zA-Z0-9]/g, '_'); }
+
+/* Constrói o formulário a partir das colunas reais da folha Viagens:
+   acrescentas uma coluna no Excel e ela aparece aqui sozinha. */
+function construirViagem(cfg) {
+  CONFIG = cfg;
+  var listas = cfg.listas || {};
+  var html = cfg.colunas.map(function (nome) {
+    var id = idDoCampo(nome);
+    var n = nome.toLowerCase();
+    var lista = /viatura|matr/.test(n) ? listas.viatura
+              : /motorista|condutor/.test(n) ? listas.motorista
+              : /cliente/.test(n) ? listas.cliente : null;
+
+    if (/^vf$|c.digo/.test(n)) {
+      return '<label for="' + id + '">' + nome + '</label>' +
+        '<input id="' + id + '" type="text" value="' + cfg.proximoVF + '">' +
+        '<div class="hint">Sugerido automaticamente: a viagem fica VF' + cfg.proximoVF + '.</div>';
+    }
+    if (lista && lista.length) {
+      return '<label for="' + id + '">' + nome + '</label>' +
+        '<input id="' + id + '" type="text" list="l_' + id + '" placeholder="Escolhe ou escreve">' +
+        '<datalist id="l_' + id + '">' +
+          lista.map(function (v) { return '<option value="' + v.replace(/"/g, '&quot;') + '">'; }).join('') +
+        '</datalist>';
+    }
+    if (/data|partida|chegada/.test(n)) {
+      return '<label for="' + id + '">' + nome + '</label><input id="' + id + '" type="date">';
+    }
+    if (/km|litros|valor|receita|despesa|saldo|pre.o|quantidade|req/.test(n)) {
+      return '<label for="' + id + '">' + nome + '</label>' +
+             '<input id="' + id + '" type="number" inputmode="decimal" step="any">';
+    }
+    return '<label for="' + id + '">' + nome + '</label><input id="' + id + '" type="text">';
+  }).join('');
+
+  document.getElementById('camposViagem').innerHTML = html;
+  document.getElementById('btnViagem').disabled = false;
+}
+
+/* datas para o Sheets em dd/mm/aaaa (é assim que a app de consulta as lê) */
+function formatarData(valor) {
+  if (!valor) return '';
+  var p = valor.split('-');
+  return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : valor;
+}
+
+function mensagem(id, texto, erro) {
+  var el = document.getElementById(id);
+  el.textContent = texto;
+  el.className = 'msg ' + (erro ? 'err' : 'ok');
+}
+
+function gravarViagem() {
+  if (!CONFIG) return;
+  var btn = document.getElementById('btnViagem');
+  btn.disabled = true; btn.textContent = 'A guardar…';
+
+  var valores = {};
+  CONFIG.colunas.forEach(function (nome) {
+    var el = document.getElementById(idDoCampo(nome));
+    if (!el) return;
+    valores[nome] = el.type === 'date' ? formatarData(el.value) : el.value;
+  });
+
+  google.script.run
+    .withSuccessHandler(function (res) {
+      btn.disabled = false; btn.textContent = 'Guardar viagem';
+      mensagem('msgViagem', '✓ Viagem ' + res.codigo + ' guardada. A folha de abastecimentos foi criada.', false);
+      recarregar();
+    })
+    .withFailureHandler(function (err) {
+      btn.disabled = false; btn.textContent = 'Guardar viagem';
+      mensagem('msgViagem', 'Não foi possível guardar: ' + err.message, true);
+    })
+    .guardarViagem(valores);
+}
+
+function gravarAbastecimento() {
+  var codigo = document.getElementById('abCodigo').value;
+  if (!codigo) { mensagem('msgAbast', 'Escolhe a viagem.', true); return; }
+  var dados = {
+    data: formatarData(document.getElementById('abData').value),
+    local: document.getElementById('abLocal').value,
+    litros: document.getElementById('abLitros').value,
+    preco: document.getElementById('abPreco').value,
+    km: document.getElementById('abKm').value
+  };
+  if (!dados.litros) { mensagem('msgAbast', 'Indica os litros.', true); return; }
+
+  google.script.run
+    .withSuccessHandler(function (res) {
+      mensagem('msgAbast', '✓ Abastecimento guardado na folha ' + res.folha + '.', false);
+      ['abLocal', 'abLitros', 'abPreco', 'abKm'].forEach(function (id) {
+        document.getElementById(id).value = '';
+      });
+    })
+    .withFailureHandler(function (err) {
+      mensagem('msgAbast', 'Não foi possível guardar: ' + err.message, true);
+    })
+    .guardarAbastecimento(codigo, dados);
+}
+
+function recarregar() {
+  google.script.run
+    .withSuccessHandler(construirViagem)
+    .withFailureHandler(function (err) {
+      document.getElementById('camposViagem').innerHTML =
+        '<div class="loading">Erro ao ler a folha: ' + err.message + '</div>';
+    })
+    .obterConfiguracao();
+
+  google.script.run
+    .withSuccessHandler(function (lista) {
+      var sel = document.getElementById('abCodigo');
+      sel.innerHTML = lista.map(function (c) {
+        var vf = 'VF' + String(c).replace(/\D/g, '');
+        return '<option value="' + c + '">' + vf + '</option>';
+      }).join('') || '<option value="">(sem viagens)</option>';
+    })
+    .listarViagens();
+}
+
+/* data de hoje por defeito */
+var hoje = new Date().toISOString().slice(0, 10);
+document.getElementById('abData').value = hoje;
+recarregar();
+</script>
+</body>
+</html>

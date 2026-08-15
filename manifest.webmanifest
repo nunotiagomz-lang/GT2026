@@ -1,0 +1,16 @@
+{
+  "name": "Nova Logística, Lda",
+  "short_name": "Nova Logística",
+  "description": "Gestão da Nova Logística — investimentos, viagens e viaturas.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f9f9f7",
+  "theme_color": "#f9f9f7",
+  "lang": "pt",
+  "icons": [
+    { "src": "assets/logo-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/logo-mark.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
