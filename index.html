@@ -9,7 +9,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <title>Nova Logística, Lda · Plano de Investimento</title>
 <link rel="icon" type="image/png" href="assets/logo-mark.png">
-<link rel="apple-touch-icon" href="assets/logo-mark.png">
+<link rel="apple-touch-icon" href="assets/logo-192.png">
+<link rel="manifest" href="manifest.webmanifest">
 <style>
   :root {
     color-scheme: light;
@@ -161,6 +162,43 @@
   }
   .subtabs button.on { color: var(--ink); border-bottom-color: var(--accent); }
 
+  /* ---------- Pesquisa global ---------- */
+  .search-overlay {
+    position: fixed; inset: 0; z-index: 60; background: var(--page);
+    display: flex; flex-direction: column;
+  }
+  .search-overlay[hidden] { display: none; }
+  .search-head {
+    display: flex; gap: 8px; align-items: center;
+    padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .search-head input {
+    flex: 1; min-width: 0; font-family: inherit; font-size: 16px; /* 16px evita zoom no iOS */
+    padding: 10px 14px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--ink);
+  }
+  .search-head input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .search-head button {
+    flex: none; border: none; background: none; cursor: pointer;
+    font-family: inherit; font-size: 14px; font-weight: 650; color: var(--accent);
+    padding: 8px 4px; touch-action: manipulation;
+  }
+  .search-body { flex: 1; overflow-y: auto; padding: 10px 14px calc(20px + env(safe-area-inset-bottom)); }
+  .sr-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 2px; border-bottom: 1px solid var(--hairline); cursor: pointer;
+  }
+  .sr-item:last-child { border-bottom: none; }
+  .sr-kind {
+    flex: none; font-size: 10px; font-weight: 700; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--ink-muted);
+    border: 1px solid var(--border); border-radius: 5px; padding: 3px 6px;
+  }
+  .sr-main { flex: 1; min-width: 0; }
+  .sr-title { font-size: 14px; font-weight: 650; }
+  .sr-sub { font-size: 12px; color: var(--ink-2); margin-top: 2px; }
+
   /* ---------- Filter row ---------- */
   .filters {
     display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 10px;
@@ -275,14 +313,28 @@
   <img class="logo" src="assets/logo-mark.png" alt="Nova Logística">
   <div class="brand">
     <h1>Nova Logística, Lda</h1>
-    <p>Plano de Investimento · Transportes</p>
+    <p>Gestão · Transportes e Logística</p>
   </div>
+  <button class="refresh-btn" id="searchBtn" aria-label="Procurar" title="Procurar">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
+    </svg>
+  </button>
   <button class="refresh-btn" id="refreshBtn" aria-label="Atualizar dados" title="Atualizar">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/>
     </svg>
   </button>
 </header>
+
+<div class="search-overlay" id="searchOverlay" hidden>
+  <div class="search-head">
+    <input id="searchInput" type="search" autocomplete="off" autocapitalize="off" spellcheck="false"
+           placeholder="Viagem, motorista, viatura, cliente…" aria-label="Procurar">
+    <button id="searchClose">Fechar</button>
+  </div>
+  <div class="search-body" id="searchResults"></div>
+</div>
 
 <div class="updated-bar" id="updatedBar"></div>
 
@@ -315,7 +367,21 @@ const NAV = [
     views: [
       { id: "resumo", sheet: "Resumo", label: "Resumo", render: "resumo" },
     ] },
-  { id: "investimentos", label: "Investimentos",
+  { id: "viagens", label: "Viagens",
+    icon: '<circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/><path d="M6 17V7a2 2 0 0 1 2-2h5v12"/><path d="M13 9h4l3 4v4h-2"/><path d="M8 19h8"/>',
+    needs: ["Viaturas"],   // consumo esperado por matrícula
+    views: [
+      { id: "viagens",    sheet: "Viagens", label: "Viagens",    render: "viagens" },
+      { id: "motoristas", sheet: "Viagens", label: "Motoristas", render: "motoristas" },
+      { id: "clientes",   sheet: "Viagens", label: "Clientes",   render: "clientes" },
+    ] },
+  { id: "viaturas", label: "Viaturas",
+    icon: '<rect x="3" y="8" width="12" height="8" rx="1.5"/><path d="M15 11h3.5l2.5 3v2h-2"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/>',
+    needs: ["Viagens"],    // viagens de cada viatura
+    views: [
+      { id: "viaturas", sheet: "Viaturas", label: "Viaturas", render: "viaturas" },
+    ] },
+  { id: "investimentos", label: "Investim.",
     icon: '<path d="M7 17l10-10"/><polyline points="17 15 17 7 9 7"/><rect x="3" y="3" width="18" height="18" rx="3"/>',
     views: [
       { id: "movimentos", sheet: "Movimentos Investimentos",  label: "Movimentos", render: "movimentos" },
@@ -325,18 +391,18 @@ const NAV = [
     ] },
   /* Áreas futuras: soon:true mostra "Em breve" e não carrega dados.
      Para ativar, remover soon e preencher views com as folhas do Excel:
-     views: [{ id: "vendas", sheet: "Vendas", label: "Vendas", render: "auto" }] */
+     views: [{ id: "faturas", sheet: "Faturas", label: "Faturas", render: "auto" }] */
   { id: "faturacao", label: "Faturação", soon: true, views: [],
     icon: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>' },
-  { id: "viagens", label: "Viagens",
-    icon: '<circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/><path d="M6 17V7a2 2 0 0 1 2-2h5v12"/><path d="M13 9h4l3 4v4h-2"/><path d="M8 19h8"/>',
-    views: [
-      { id: "viagens", sheet: "Viagens", label: "Viagens", render: "viagens" },
-    ] },
-  { id: "viaturas", label: "Viaturas", soon: true, views: [],
-    icon: '<rect x="3" y="8" width="12" height="8" rx="1.5"/><path d="M15 11h3.5l2.5 3v2h-2"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/>' },
 ];
 const ALL_VIEWS = NAV.flatMap(g => g.views);
+/* folhas de que cada área precisa: as das suas vistas + as que cruza (needs) */
+function groupSheets(g) {
+  return [...new Set([...g.views.map(v => v.sheet), ...(g.needs || [])].filter(Boolean))];
+}
+/* o Resumo cruza dados de várias áreas */
+const RESUMO_SHEETS = ["Resumo", "Movimentos Investimentos", "Sócios - Contas Correntes",
+                       "Investimentos Iniciais", "Viagens"];
 
 /* Cores fixas por sócio (ordem fixa — nunca reciclar) */
 const SOCIO_COLORS = ["var(--s1)", "var(--s2)", "var(--s3)", "var(--s4)",
@@ -605,7 +671,13 @@ function renderResumo(rows) {
   const totalEmFalta = emFalta.reduce((a, s) => a - s.saldo, 0);
   const porConfirmar = plano ? plano.items.filter(it => /confirmar/i.test(it.sit) && (it.falta || 0) > 0) : [];
   const valorPorConfirmar = porConfirmar.reduce((a, it) => a + (it.falta || 0), 0);
+  const td = tripsData();
+  const opTrips = td ? tripsInPeriod(td) : [];
+  const negativas = opTrips.filter(t => { const m = tripMargin(t); return m != null && m < 0; });
+
   const alertas = [];
+  if (negativas.length) alertas.push({ goto: "viagens:viagens",
+    txt: `<b>${negativas.length} viage${negativas.length > 1 ? "ns" : "m"}</b> com margem negativa — <b>${fmtMZN(negativas.reduce((a, t) => a - tripMargin(t), 0))} MZN</b> de prejuízo` });
   if (emFalta.length) alertas.push({ goto: "investimentos:socios",
     txt: `<b>${emFalta.length} sócio${emFalta.length > 1 ? "s" : ""}</b> com contribuição em falta — total <b>${fmtMZN(totalEmFalta)} MZN</b>` });
   if (porConfirmar.length) alertas.push({ goto: "investimentos:plano",
@@ -622,6 +694,25 @@ function renderResumo(rows) {
       <span class="status good" style="font-size:13px">✓ Tudo em dia</span>
       <span style="font-size:12px;color:var(--ink-muted)">— sem contribuições em falta</span>
     </div>`;
+  }
+
+  /* --- Operação (viagens) --- */
+  if (opTrips.length) {
+    const rec = opTrips.reduce((a, t) => a + (t.receita || 0), 0);
+    const des = opTrips.reduce((a, t) => a + (t.despesa || 0), 0);
+    const km  = opTrips.reduce((a, t) => a + (t.km || 0), 0);
+    const marg = td.hasReceita ? rec - des : null;
+    html += `<div class="section-title">Operação</div>
+      <div class="card goto" data-goto="viagens:viagens" style="cursor:pointer">
+        <div style="display:flex;gap:18px;flex-wrap:wrap">
+          <div><div style="font-size:11px;color:var(--ink-muted)">Viagens</div><b style="font-size:19px">${opTrips.length}</b></div>
+          ${km ? `<div><div style="font-size:11px;color:var(--ink-muted)">Km</div><b style="font-size:19px">${fmtMZN(km)}</b></div>` : ""}
+          ${marg != null ? `<div><div style="font-size:11px;color:var(--ink-muted)">Margem</div>
+            <b style="font-size:19px;color:${marg >= 0 ? "var(--good-text)" : "var(--serious)"}">${fmtMZN(marg)}</b></div>` : ""}
+          ${marg != null && km ? `<div><div style="font-size:11px;color:var(--ink-muted)">Margem/km</div><b style="font-size:19px">${fmtNumRaw((marg / km).toFixed(2))}</b></div>` : ""}
+        </div>
+        <div style="font-size:11.5px;color:var(--accent);font-weight:650;margin-top:10px">Ver viagens ›</div>
+      </div>`;
   }
 
   /* --- Execução do investimento --- */
@@ -929,7 +1020,144 @@ function extractViagens(rows) {
 }
 
 /* campos preferidos na lista (por ordem) */
-const VG_PRIOR = [/data/i, /matr[íi]cula/i, /motorista/i, /rota|origem|destino|percurso/i, /cliente/i, /estado|situa/i];
+const VG_PRIOR = [/data|partida/i, /matr[íi]cula|viatura/i, /motorista/i, /rota|origem|destino|percurso|prov[íi]ncia/i, /cliente/i, /estado|situa/i];
+
+/* ---------- utilitários de colunas e datas ---------- */
+function findCol(cols, ...patterns) {
+  for (const p of patterns) {
+    const c = cols.find(c => p.test(c.name));
+    if (c) return c.i;
+  }
+  return -1;
+}
+function parseDate(s) {
+  const m = String(s || "").trim().match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);
+  if (!m) return null;
+  let y = +m[3]; if (y < 100) y += 2000;
+  const d = new Date(y, +m[2] - 1, +m[1]);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+const PERIODS = [
+  { id: "all", label: "Tudo" },
+  { id: "m",   label: "Este mês" },
+  { id: "3m",  label: "3 meses" },
+  { id: "y",   label: "Este ano" },
+];
+function inPeriod(d, period) {
+  if (period === "all" || !d) return true;
+  const now = new Date();
+  if (period === "m")  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  if (period === "y")  return d.getFullYear() === now.getFullYear();
+  if (period === "3m") { const lim = new Date(now); lim.setMonth(lim.getMonth() - 3); return d >= lim; }
+  return true;
+}
+
+/* ---------- viagens enriquecidas (base de toda a área operacional) ---------- */
+function tripsData() {
+  const rows = state.data["Viagens"];
+  if (!rows) return null;
+  const vg = extractViagens(rows);
+  if (!vg) return null;
+  const C = vg.cols;
+  const ix = {
+    data:      findCol(C, /^partida$/i, /data.*partida/i, /^data$/i, /data/i),
+    motorista: findCol(C, /motorista|condutor/i),
+    viatura:   findCol(C, /viatura|matr[íi]cula|ve[íi]culo|camia/i),
+    cliente:   findCol(C, /cliente/i),
+    rota:      findCol(C, /prov[íi]ncia|rota|percurso|destino/i),
+    km:        findCol(C, /^km$/i, /km\s*(percorrid|total|viagem)/i, /quil[óo]metr/i),
+    receita:   findCol(C, /receita|frete|faturad/i, /valor\s*(da\s*)?(viagem|servi|frete)/i),
+    despesa:   findCol(C, /despesas?\s*total/i, /^despesas?/i),
+    saldoMot:  findCol(C, /saldo\s*final\s*motorista/i, /saldo\s*motorista/i),
+    estado:    findCol(C, /estado|situa/i),
+  };
+  const get = (r, i) => i >= 0 ? (r[i] || "").trim() : "";
+  const num = (r, i) => i >= 0 ? parseNum(r[i]) : null;
+  const trips = vg.trips.map((t, idx) => ({
+    idx, cod: t.cod, row: t.row,
+    dataTxt:   get(t.row, ix.data),
+    date:      parseDate(get(t.row, ix.data)),
+    motorista: get(t.row, ix.motorista),
+    viatura:   get(t.row, ix.viatura),
+    cliente:   get(t.row, ix.cliente),
+    rota:      get(t.row, ix.rota),
+    estado:    get(t.row, ix.estado),
+    km:        num(t.row, ix.km),
+    receita:   num(t.row, ix.receita),
+    despesa:   num(t.row, ix.despesa),
+    saldoMot:  num(t.row, ix.saldoMot),
+  }));
+  return { cols: C, ix, trips, hasReceita: ix.receita >= 0, hasKm: ix.km >= 0 };
+}
+/* viagens dentro do período escolhido */
+function tripsInPeriod(td) {
+  return td.trips.filter(t => inPeriod(t.date, state.period));
+}
+function tripMargin(t) {
+  if (t.receita == null) return null;
+  return t.receita - (t.despesa || 0);
+}
+
+/* agrupa viagens por motorista / cliente / viatura */
+function entityStats(trips, key) {
+  const map = new Map();
+  for (const t of trips) {
+    const v = (t[key] || "").trim();
+    if (!v) continue;
+    if (!map.has(v)) map.set(v, { nome: v, trips: [], receita: 0, despesa: 0, km: 0 });
+    const e = map.get(v);
+    e.trips.push(t);
+    e.receita += t.receita || 0;
+    e.despesa += t.despesa || 0;
+    e.km += t.km || 0;
+  }
+  return [...map.values()].sort((a, b) => b.trips.length - a.trips.length);
+}
+
+/* ---------- viaturas (folha própria) ---------- */
+function extractViaturas(rows) {
+  if (!rows) return null;
+  let h = -1;
+  for (let i = 0; i < Math.min(rows.length, 8); i++) {
+    if (rows[i].some(c => /matr[íi]cula|viatura/i.test(c || ""))) { h = i; break; }
+  }
+  if (h < 0) {
+    let best = 0;
+    rows.slice(0, 8).forEach((r, i) => {
+      const filled = r.filter(c => c && c.trim()).length;
+      if (filled > best) { best = filled; h = i; }
+    });
+    if (best < 2) return null;
+  }
+  const cols = rows[h].map((c, i) => ({ name: (c || "").trim(), i })).filter(c => c.name);
+  if (!cols.length) return null;
+  const iMat = findCol(cols, /matr[íi]cula/i, /viatura/i) >= 0
+    ? findCol(cols, /matr[íi]cula/i, /viatura/i) : cols[0].i;
+  const iSeco = findCol(cols, /consumo.*seco/i);
+  const iCarr = findCol(cols, /consumo.*carreg/i);
+  const iCons = iSeco >= 0 ? iSeco : findCol(cols, /consumo/i);
+  const items = [];
+  for (let i = h + 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (isRowEmpty(r)) continue;
+    const mat = (r[iMat] || "").trim();
+    if (!mat || /^TOTAL/i.test(mat)) continue;
+    items.push({
+      mat, row: r,
+      consumoSeco: iCons >= 0 ? parseNum(r[iCons]) : null,
+      consumoCarr: iCarr >= 0 ? parseNum(r[iCarr]) : null,
+    });
+  }
+  return { cols, iMat, items };
+}
+/* consumo esperado de uma matrícula (l/100km), se a folha Viaturas o tiver */
+function viaturaInfo(mat) {
+  const vt = extractViaturas(state.data["Viaturas"]);
+  if (!vt) return null;
+  const norm = s => String(s || "").toLowerCase().replace(/[\s\-_]/g, "");
+  return vt.items.find(v => norm(v.mat) === norm(mat)) || null;
+}
 
 /* célula numérica = valor; datas (com / ou -) e texto ficam como estão */
 function isNumericCell(raw) {
@@ -951,68 +1179,276 @@ function fmtCell(raw) {
   return isNumericCell(raw) ? fmtNumRaw(raw) : esc(raw);
 }
 
-function renderViagens(rows) {
-  const vg = extractViagens(rows);
-  if (!vg || !vg.trips.length) {
-    viagemNav.mode = "lista";
-    return emptyState("Ainda não há viagens registadas.",
-      "As viagens que registares na folha 'Viagens' do Excel aparecem aqui automaticamente.");
-  }
-  if ((viagemNav.mode === "detalhe" || viagemNav.mode === "abast") && !vg.trips[viagemNav.sel]) {
-    viagemNav.mode = "lista";
-  }
-  if (viagemNav.mode === "detalhe") return viagemDetalheHTML(vg);
-  if (viagemNav.mode === "abast") return abastHTML(vg);
+/* barra de período, partilhada pelas vistas operacionais */
+function periodBar() {
+  return `<div class="filters" data-periods>
+    ${PERIODS.map(p => `<button class="${state.period === p.id ? "on" : ""}" data-period="${p.id}">${esc(p.label)}</button>`).join("")}
+  </div>`;
+}
 
-  const keyCols = [];
-  for (const re of VG_PRIOR) {
-    const c = vg.cols.find(c => c.i !== vg.iCod && re.test(c.name) && !keyCols.includes(c));
-    if (c) keyCols.push(c);
-    if (keyCols.length >= 4) break;
-  }
-  if (!keyCols.length) keyCols.push(...vg.cols.filter(c => c.i !== vg.iCod).slice(0, 4));
-
-  const list = vg.trips.map((t, idx) => `
-    <div class="mov" data-viagem-idx="${idx}" style="cursor:pointer;align-items:center">
+/* cartão de uma viagem na lista */
+function tripRowHTML(t, keyCols) {
+  const margem = tripMargin(t);
+  return `<div class="mov" data-viagem-cod="${esc(t.cod)}" style="cursor:pointer;align-items:center">
       <div class="m-main">
-        ${t.cod ? `<span class="chip" style="background:var(--accent);color:#fff;border-color:transparent;font-size:12px;padding:5px 10px;font-weight:700">${esc(t.cod.toUpperCase())}</span>` : ""}
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          ${t.cod ? `<span class="chip" style="background:var(--accent);color:#fff;border-color:transparent;font-size:12px;padding:5px 10px;font-weight:700">${esc(t.cod)}</span>` : ""}
+          ${t.dataTxt ? `<span style="font-size:11.5px;color:var(--ink-muted)">${esc(t.dataTxt)}</span>` : ""}
+          ${margem != null ? `<span class="status ${margem >= 0 ? "good" : "warn"}" style="font-size:11.5px;margin-left:auto">${margem >= 0 ? "+" : ""}${fmtMZN(margem)} MZN</span>` : ""}
+        </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;margin-top:8px">
           ${keyCols.map(c => { const v = (t.row[c.i] || "").trim(); return v ? `
             <div style="font-size:12px;min-width:0"><span style="color:var(--ink-muted)">${esc(c.name)}</span><br><b>${fmtCell(v)}</b></div>` : ""; }).join("")}
         </div>
       </div>
       <div style="color:var(--ink-muted);font-size:20px;flex:none">›</div>
-    </div>`).join("");
+    </div>`;
+}
 
-  return `<div class="card" style="font-size:12px;color:var(--ink-2)">${vg.trips.length} viage${vg.trips.length === 1 ? "m" : "ns"} · toca numa viagem para ver o detalhe</div>
-    <div class="card">${list}</div>`;
+function renderViagens() {
+  const td = tripsData();
+  if (!td || !td.trips.length) {
+    viagemNav.mode = "lista";
+    return emptyState("Ainda não há viagens registadas.",
+      "As viagens que registares na folha 'Viagens' do Excel aparecem aqui automaticamente.");
+  }
+  if (viagemNav.mode !== "lista" && !td.trips.find(t => t.cod === viagemNav.sel)) {
+    viagemNav.mode = "lista";
+  }
+  if (viagemNav.mode === "detalhe") return viagemDetalheHTML(td);
+  if (viagemNav.mode === "abast") return abastHTML(td);
+
+  const keyCols = [];
+  for (const re of VG_PRIOR) {
+    if (/data|partida/i.test(re.source)) continue; // a data já vai no topo do cartão
+    const c = td.cols.find(c => re.test(c.name) && !keyCols.includes(c));
+    if (c) keyCols.push(c);
+    if (keyCols.length >= 4) break;
+  }
+
+  const shown = tripsInPeriod(td);
+  if (!shown.length) {
+    return periodBar() + emptyState("Sem viagens neste período.",
+      "Escolhe outro período em cima para veres mais viagens.");
+  }
+  const receita = shown.reduce((a, t) => a + (t.receita || 0), 0);
+  const despesa = shown.reduce((a, t) => a + (t.despesa || 0), 0);
+  const margem = td.hasReceita ? receita - despesa : null;
+
+  return periodBar() +
+    `<div class="card" style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
+      <span style="font-size:12px;color:var(--ink-2)">${shown.length} viage${shown.length === 1 ? "m" : "ns"}</span>
+      ${margem != null
+        ? `<b style="font-size:15px;font-variant-numeric:tabular-nums;color:${margem >= 0 ? "var(--good-text)" : "var(--serious)"}">${fmtMZN(margem)} <small style="font-size:11px;color:var(--ink-muted)">MZN margem</small></b>`
+        : (despesa ? `<b style="font-size:15px;font-variant-numeric:tabular-nums">${fmtMZN(despesa)} <small style="font-size:11px;color:var(--ink-muted)">MZN despesas</small></b>` : "")}
+    </div>
+    <div class="card">${shown.map(t => tripRowHTML(t, keyCols)).join("")}</div>`;
+}
+
+/* ---------- fichas: motoristas, clientes, viaturas ---------- */
+const entityNav = { motorista: null, cliente: null, viatura: null };
+
+function entityListHTML(key, titleSing, emptyMsg) {
+  const td = tripsData();
+  if (!td || !td.trips.length) return emptyState(emptyMsg);
+  const shown = tripsInPeriod(td);
+  const ents = entityStats(shown, key);
+  if (!ents.length) return periodBar() + emptyState(`Sem ${titleSing}s neste período.`);
+  return periodBar() + `<div class="card">` + ents.map(e => {
+    const margem = td.hasReceita ? e.receita - e.despesa : null;
+    return `<div class="mov" data-entity="${esc(key)}" data-entity-name="${esc(e.nome)}" style="cursor:pointer;align-items:center">
+      <div class="m-main">
+        <div style="font-size:14px;font-weight:650">${esc(e.nome)}</div>
+        <div style="font-size:12px;color:var(--ink-2);margin-top:3px">
+          ${e.trips.length} viage${e.trips.length === 1 ? "m" : "ns"}${e.km ? ` · ${fmtMZN(e.km)} km` : ""}
+        </div>
+      </div>
+      <div class="m-side">
+        ${margem != null ? `<div class="m-val" style="font-size:13px;color:${margem >= 0 ? "var(--good-text)" : "var(--serious)"}">${fmtMZN(margem)}</div>`
+                         : (e.despesa ? `<div class="m-val" style="font-size:13px">${fmtMZN(e.despesa)}</div>` : "")}
+        <div style="color:var(--ink-muted);font-size:18px">›</div>
+      </div>
+    </div>`;
+  }).join("") + `</div>`;
+}
+
+function entityDetailHTML(key, nome, backAttr) {
+  const td = tripsData();
+  const all = td ? td.trips.filter(t => (t[key] || "").trim() === nome) : [];
+  const shown = all.filter(t => inPeriod(t.date, state.period));
+  const receita = shown.reduce((a, t) => a + (t.receita || 0), 0);
+  const despesa = shown.reduce((a, t) => a + (t.despesa || 0), 0);
+  const km = shown.reduce((a, t) => a + (t.km || 0), 0);
+  const margem = td && td.hasReceita ? receita - despesa : null;
+  /* saldo do motorista: último valor conhecido nas viagens dele */
+  const saldos = shown.map(t => t.saldoMot).filter(v => v != null);
+  const saldo = key === "motorista" && saldos.length ? saldos[saldos.length - 1] : null;
+
+  const vinfo = key === "viatura" ? viaturaInfo(nome) : null;
+
+  return backBtn(backAttr, "Voltar") + periodBar() +
+    `<div class="card">
+      <div style="font-size:18px;font-weight:750;letter-spacing:-0.01em">${esc(nome)}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;margin-top:12px">
+        <div><div style="font-size:11.5px;color:var(--ink-muted)">Viagens</div><b style="font-size:15px">${shown.length}</b></div>
+        ${km ? `<div><div style="font-size:11.5px;color:var(--ink-muted)">Km</div><b style="font-size:15px">${fmtMZN(km)}</b></div>` : ""}
+        ${despesa ? `<div><div style="font-size:11.5px;color:var(--ink-muted)">Despesas</div><b style="font-size:15px">${fmtMZN(despesa)}</b></div>` : ""}
+        ${margem != null ? `<div><div style="font-size:11.5px;color:var(--ink-muted)">Margem</div><b style="font-size:15px;color:${margem >= 0 ? "var(--good-text)" : "var(--serious)"}">${fmtMZN(margem)}</b></div>` : ""}
+        ${saldo != null ? `<div><div style="font-size:11.5px;color:var(--ink-muted)">Saldo do motorista</div><b style="font-size:15px;color:${saldo >= 0 ? "var(--ink)" : "var(--serious)"}">${fmtMZN(saldo)} MZN</b></div>` : ""}
+        ${vinfo && vinfo.consumoSeco != null ? `<div><div style="font-size:11.5px;color:var(--ink-muted)">Consumo esperado</div><b style="font-size:15px">${fmtNumRaw(String(vinfo.consumoSeco))} l/100km</b></div>` : ""}
+      </div>
+    </div>
+    ${vinfo ? viaturaFichaHTML(vinfo) : ""}
+    <div class="section-title">Viagens</div>
+    ${shown.length ? `<div class="card">${shown.map(t => tripRowHTML(t, [])).join("")}</div>`
+                   : emptyState("Sem viagens neste período.")}`;
+}
+
+function renderMotoristas() {
+  return entityNav.motorista
+    ? entityDetailHTML("motorista", entityNav.motorista, 'data-entity-back="motorista"')
+    : entityListHTML("motorista", "motorista", "Ainda não há viagens com motorista registado.");
+}
+function renderClientes() {
+  return entityNav.cliente
+    ? entityDetailHTML("cliente", entityNav.cliente, 'data-entity-back="cliente"')
+    : entityListHTML("cliente", "cliente", "Ainda não há viagens com cliente registado.");
+}
+
+/* --- Viaturas: folha própria, cruzada com as viagens --- */
+function viaturaFichaHTML(v) {
+  const linhas = (extractViaturas(state.data["Viaturas"])?.cols || [])
+    .map(c => ({ name: c.name, val: (v.row[c.i] || "").trim() }))
+    .filter(x => x.val);
+  if (!linhas.length) return "";
+  return `<div class="section-title">Ficha da viatura</div><div class="card">
+    ${linhas.map((x, i) => `<div style="display:flex;justify-content:space-between;gap:14px;padding:8px 0;${i < linhas.length - 1 ? "border-bottom:1px solid var(--hairline)" : ""}">
+      <span style="font-size:12.5px;color:var(--ink-2)">${esc(x.name)}</span>
+      <b style="font-size:13px;text-align:right">${fmtCell(x.val)}</b>
+    </div>`).join("")}
+  </div>`;
+}
+
+function renderViaturas() {
+  const vt = extractViaturas(state.data["Viaturas"]);
+  if (!vt || !vt.items.length) {
+    return emptyState("Sem viaturas registadas.",
+      "As viaturas da folha 'Viaturas' do Excel aparecem aqui automaticamente.");
+  }
+  if (entityNav.viatura) {
+    return entityDetailHTML("viatura", entityNav.viatura, 'data-entity-back="viatura"');
+  }
+  const td = tripsData();
+  const shown = td ? tripsInPeriod(td) : [];
+  const porViatura = new Map(entityStats(shown, "viatura").map(e => [
+    String(e.nome).toLowerCase().replace(/[\s\-_]/g, ""), e]));
+
+  return periodBar() + `<div class="card">` + vt.items.map(v => {
+    const e = porViatura.get(String(v.mat).toLowerCase().replace(/[\s\-_]/g, ""));
+    return `<div class="mov" data-entity="viatura" data-entity-name="${esc(v.mat)}" style="cursor:pointer;align-items:center">
+      <div class="m-main">
+        <div style="font-size:14px;font-weight:650">${esc(v.mat)}</div>
+        <div style="font-size:12px;color:var(--ink-2);margin-top:3px">
+          ${e ? `${e.trips.length} viage${e.trips.length === 1 ? "m" : "ns"}` : "Sem viagens no período"}
+          ${v.consumoSeco != null ? ` · esperado ${fmtNumRaw(String(v.consumoSeco))} l/100km` : ""}
+        </div>
+      </div>
+      <div style="color:var(--ink-muted);font-size:18px;flex:none">›</div>
+    </div>`;
+  }).join("") + `</div>`;
 }
 
 function backBtn(attr, label) {
   return `<button ${attr} class="chip" style="cursor:pointer;font-size:13px;padding:8px 14px;margin-bottom:12px;background:var(--surface)">‹ ${label}</button>`;
 }
 
-function viagemDetalheHTML(vg) {
-  const t = vg.trips[viagemNav.sel];
-  const linhas = vg.cols
+function viagemDetalheHTML(td) {
+  const t = td.trips.find(x => x.cod === viagemNav.sel);
+  const linhas = td.cols
     .map(c => ({ name: c.name, v: (t.row[c.i] || "").trim() }))
     .filter(x => x.v);
+  const margem = tripMargin(t);
+
+  /* atalhos para as fichas ligadas a esta viagem */
+  const links = [
+    t.motorista && { key: "motorista", label: "Motorista", val: t.motorista },
+    t.viatura   && { key: "viatura",   label: "Viatura",   val: t.viatura },
+    t.cliente   && { key: "cliente",   label: "Cliente",   val: t.cliente },
+  ].filter(Boolean);
+
   return `${backBtn("data-viagens-back", "Voltar às viagens")}
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px">
-        ${t.cod ? `<span class="chip" style="background:var(--accent);color:#fff;border-color:transparent;font-size:14px;padding:7px 13px;font-weight:750">${esc(t.cod.toUpperCase())}</span>` : "<span></span>"}
+        ${t.cod ? `<span class="chip" style="background:var(--accent);color:#fff;border-color:transparent;font-size:14px;padding:7px 13px;font-weight:750">${esc(t.cod)}</span>` : "<span></span>"}
         <button data-abast class="chip" style="cursor:pointer;font-size:13px;font-weight:650;padding:8px 14px;border-color:var(--accent);color:var(--accent)">⛽ Abastecimentos</button>
       </div>
+      ${margem != null || t.despesa ? `<div style="display:flex;gap:16px;flex-wrap:wrap;padding:10px 0 4px;border-bottom:1px solid var(--hairline)">
+        ${t.receita != null ? `<div><div style="font-size:11px;color:var(--ink-muted)">Receita</div><b style="font-size:15px">${fmtMZN(t.receita)}</b></div>` : ""}
+        ${t.despesa != null ? `<div><div style="font-size:11px;color:var(--ink-muted)">Despesas</div><b style="font-size:15px">${fmtMZN(t.despesa)}</b></div>` : ""}
+        ${margem != null ? `<div><div style="font-size:11px;color:var(--ink-muted)">Margem</div><b style="font-size:15px;color:${margem >= 0 ? "var(--good-text)" : "var(--serious)"}">${fmtMZN(margem)}</b></div>` : ""}
+        ${margem != null && t.km ? `<div><div style="font-size:11px;color:var(--ink-muted)">Margem/km</div><b style="font-size:15px">${fmtNumRaw((margem / t.km).toFixed(2))}</b></div>` : ""}
+      </div>` : ""}
       ${linhas.map((x, i) => `
         <div style="display:flex;justify-content:space-between;gap:14px;padding:9px 0;${i < linhas.length - 1 ? "border-bottom:1px solid var(--hairline)" : ""}">
           <span style="font-size:12.5px;color:var(--ink-2);flex:none">${esc(x.name)}</span>
           <b style="font-size:13px;text-align:right;font-variant-numeric:tabular-nums">${fmtCell(x.v)}</b>
         </div>`).join("")}
-    </div>`;
+    </div>
+    ${links.length ? `<div class="section-title">Ver também</div>
+      <div class="card" style="display:flex;flex-wrap:wrap;gap:8px">
+        ${links.map(l => `<button class="chip" data-entity="${l.key}" data-entity-name="${esc(l.val)}" style="cursor:pointer;font-size:12.5px;padding:8px 13px">
+          ${esc(l.label)}: <b style="margin-left:3px">${esc(l.val)}</b> ›</button>`).join("")}
+      </div>` : ""}`;
 }
 
-function abastHTML(vg) {
-  const t = vg.trips[viagemNav.sel];
+/* consumo real da viagem vs o esperado para a viatura */
+function consumoHTML(t, header, dataRows) {
+  const cols = header.map((c, i) => ({ name: (c || "").trim(), i })).filter(c => c.name);
+  const iLitros = findCol(cols, /litros?/i);
+  if (iLitros < 0) return "";
+  const litros = dataRows.reduce((a, r) => a + (parseNum(r[iLitros]) || 0), 0);
+  if (!litros) return "";
+
+  /* km: da folha de viagens, ou pela diferença de leituras do conta-km */
+  let km = t.km;
+  if (km == null) {
+    const iKm = findCol(cols, /^km$/i, /conta[\s-]?km|od[óo]metro|quil[óo]metr/i);
+    if (iKm >= 0) {
+      const leituras = dataRows.map(r => parseNum(r[iKm])).filter(v => v != null && v > 0);
+      if (leituras.length >= 2) km = Math.max(...leituras) - Math.min(...leituras);
+    }
+  }
+  if (!km) {
+    return `<div class="card" style="font-size:12px;color:var(--ink-2)">
+      Total de <b style="color:var(--ink)">${fmtNumRaw(String(litros))} litros</b> nesta viagem.
+      Para calcular o consumo, acrescenta os <b style="color:var(--ink)">km</b> à folha de viagens
+      (ou as leituras do conta-quilómetros aos abastecimentos).</div>`;
+  }
+
+  const real = litros / km * 100;               // l/100km
+  const v = viaturaInfo(t.viatura);
+  const esperado = v ? (v.consumoSeco ?? v.consumoCarr) : null;
+  const desvio = esperado ? (real - esperado) / esperado * 100 : null;
+  const mau = desvio != null && desvio > 10;
+
+  return `<div class="card">
+    <div style="display:flex;gap:18px;flex-wrap:wrap">
+      <div><div style="font-size:11px;color:var(--ink-muted)">Consumo real</div>
+        <b style="font-size:17px">${fmtNumRaw(real.toFixed(1))} <small style="font-size:11px;color:var(--ink-muted)">l/100km</small></b></div>
+      ${esperado ? `<div><div style="font-size:11px;color:var(--ink-muted)">Esperado</div>
+        <b style="font-size:17px">${fmtNumRaw(String(esperado))} <small style="font-size:11px;color:var(--ink-muted)">l/100km</small></b></div>` : ""}
+      <div><div style="font-size:11px;color:var(--ink-muted)">Litros · Km</div>
+        <b style="font-size:17px">${fmtNumRaw(String(litros))} · ${fmtMZN(km)}</b></div>
+    </div>
+    ${desvio != null ? `<div class="status ${mau ? "warn" : "good"}" style="margin-top:10px;font-size:12.5px">
+      ${mau ? "!" : "✓"} ${desvio >= 0 ? "+" : ""}${fmtNumRaw(desvio.toFixed(1))}% face ao esperado${mau ? " — vale a pena verificar" : ""}
+    </div>` : `<div style="font-size:11.5px;color:var(--ink-muted);margin-top:8px">
+      Acrescenta o consumo esperado desta viatura à folha «Viaturas» para veres o desvio.</div>`}
+  </div>`;
+}
+
+function abastHTML(td) {
+  const t = td.trips.find(x => x.cod === viagemNav.sel);
   const code = (t.cod || "").trim();
   const head = `${backBtn("data-abast-back", "Voltar à viagem")}
     <div class="section-title">Abastecimentos · ${esc(code.toUpperCase())}</div>`;
@@ -1050,6 +1486,7 @@ function abastHTML(vg) {
 
   return head +
     `<div style="font-size:11px;color:var(--ink-muted);margin:-4px 2px 8px">Folha «${esc(entry.sheetName || code)}» da planilha de abastecimentos</div>` +
+    consumoHTML(t, header, dataRows) +
     tableHTML(header, dataRows) +
     (totais.length ? `<div class="card" style="display:flex;flex-wrap:wrap;gap:6px 18px">
       ${totais.map(c => `<div style="font-size:12px;color:var(--ink-2)">${esc(c.name)}: <b style="color:var(--ink);font-variant-numeric:tabular-nums">${fmtMZN(c.sum)}</b></div>`).join("")}
@@ -1119,9 +1556,15 @@ async function loadAbastecimentos(code) {
   repaintViagens();
 }
 
-function repaintViagens() {
-  const view = ALL_VIEWS.find(v => v.id === "viagens");
+function repaintViagens() { repaintView("viagens"); }
+function repaintView(id) {
+  const view = ALL_VIEWS.find(v => v.id === id);
   if (view && state.data[view.sheet]) paint(view);
+}
+/* repinta a vista visível da área ativa */
+function repaintActive() {
+  const g = NAV.find(x => x.id === state.activeGroup);
+  if (g) repaintView(state.activeView[g.id]);
 }
 
 /* --- Render automático (folhas futuras): tabela genérica --- */
@@ -1170,12 +1613,15 @@ function errorState(tabId) {
    ===================================================================== */
 const RENDERERS = {
   resumo: renderResumo, movimentos: renderMovimentos, plano: renderPlano,
-  socios: renderSocios, acertos: renderAcertos, viagens: renderViagens, auto: renderAuto
+  socios: renderSocios, acertos: renderAcertos, viagens: renderViagens,
+  motoristas: renderMotoristas, clientes: renderClientes, viaturas: renderViaturas,
+  auto: renderAuto
 };
 const state = {
   activeGroup: NAV[0].id,
   activeView: Object.fromEntries(NAV.map(g => [g.id, g.views[0]?.id])),
-  data: {}, meta: {}
+  period: "all",
+  data: {}, meta: {}, errors: {}
 };
 
 const mainEl = document.getElementById("main");
@@ -1231,7 +1677,7 @@ function gotoView(groupId, viewId) {
 
 navEl.addEventListener("click", e => {
   const btn = e.target.closest("button[data-group]");
-  if (btn) gotoView(btn.dataset.group);
+  if (btn) { gotoView(btn.dataset.group); ensureGroupLoaded(btn.dataset.group); }
 });
 
 mainEl.addEventListener("click", e => {
@@ -1246,9 +1692,24 @@ mainEl.addEventListener("click", e => {
     gotoView(g, v);
     return;
   }
-  const vRow = e.target.closest("[data-viagem-idx]");
+  const per = e.target.closest("[data-periods] button[data-period]");
+  if (per) {
+    state.period = per.dataset.period;
+    repaintActive(); return;
+  }
+  const ent = e.target.closest("[data-entity][data-entity-name]");
+  if (ent) {
+    openEntity(ent.dataset.entity, ent.dataset.entityName); return;
+  }
+  const entBack = e.target.closest("[data-entity-back]");
+  if (entBack) {
+    entityNav[entBack.dataset.entityBack] = null;
+    repaintActive(); window.scrollTo({ top: 0 }); return;
+  }
+  const vRow = e.target.closest("[data-viagem-cod]");
   if (vRow) {
-    viagemNav.mode = "detalhe"; viagemNav.sel = +vRow.dataset.viagemIdx;
+    viagemNav.mode = "detalhe"; viagemNav.sel = vRow.dataset.viagemCod;
+    gotoView("viagens", "viagens");
     repaintViagens(); window.scrollTo({ top: 0 });
     return;
   }
@@ -1272,14 +1733,125 @@ mainEl.addEventListener("click", e => {
   }
 });
 
+/* ---------------- Pesquisa global ---------------- */
+const searchOverlay = document.getElementById("searchOverlay");
+const searchInput = document.getElementById("searchInput");
+const searchResults = document.getElementById("searchResults");
+
+function openSearch() {
+  searchOverlay.hidden = false;
+  searchInput.value = "";
+  renderSearch("");
+  searchInput.focus();
+  ensureGroupLoaded("viaturas").then(() => { if (!searchOverlay.hidden) renderSearch(searchInput.value); });
+}
+function closeSearch() { searchOverlay.hidden = true; }
+
+/* comparação sem acentos: "claudio" encontra "Claúdio".
+   NFD separa a letra do acento; descartam-se as marcas combinatórias
+   (U+0300–U+036F) sem escrever caracteres invisíveis no código. */
+function deaccent(s) {
+  let out = "";
+  for (const ch of String(s || "").normalize("NFD")) {
+    const c = ch.codePointAt(0);
+    if (c < 0x300 || c > 0x36f) out += ch;
+  }
+  return out.toLowerCase();
+}
+
+function renderSearch(q) {
+  const term = deaccent(q.trim());
+  if (!term) {
+    searchResults.innerHTML = `<div class="state"><div class="icon">🔎</div>
+      <h3>Procurar</h3><p>Escreve um código de viagem (VF50), uma matrícula, um motorista ou um cliente.</p></div>`;
+    return;
+  }
+  const has = s => deaccent(s).includes(term);
+  const out = [];
+
+  const td = tripsData();
+  if (td) {
+    for (const t of td.trips) {
+      if (has(t.cod) || has(t.cliente) || has(t.motorista) || has(t.viatura) || has(t.rota)) {
+        out.push({ kind: "Viagem", title: t.cod || "(sem código)",
+          sub: [t.dataTxt, t.cliente, t.motorista, t.viatura].filter(Boolean).join(" · "),
+          act: () => { viagemNav.mode = "detalhe"; viagemNav.sel = t.cod;
+                       gotoView("viagens", "viagens"); repaintViagens(); } });
+      }
+      if (out.length > 40) break;
+    }
+    for (const key of ["motorista", "cliente"]) {
+      for (const e of entityStats(td.trips, key)) {
+        if (!has(e.nome)) continue;
+        out.push({ kind: key === "motorista" ? "Motorista" : "Cliente", title: e.nome,
+          sub: `${e.trips.length} viage${e.trips.length === 1 ? "m" : "ns"}`,
+          act: () => openEntity(key, e.nome) });
+      }
+    }
+  }
+  const vt = extractViaturas(state.data["Viaturas"]);
+  if (vt) {
+    for (const v of vt.items) {
+      if (!has(v.mat)) continue;
+      out.push({ kind: "Viatura", title: v.mat,
+        sub: v.consumoSeco != null ? `Consumo esperado ${fmtNumRaw(String(v.consumoSeco))} l/100km` : "",
+        act: () => openEntity("viatura", v.mat) });
+    }
+  }
+
+  if (!out.length) {
+    searchResults.innerHTML = `<div class="state"><div class="icon">🤔</div>
+      <h3>Nada encontrado</h3><p>Não há resultados para «${esc(q)}».</p></div>`;
+    return;
+  }
+  searchActions = out.slice(0, 40);
+  searchResults.innerHTML = `<div class="card">` + searchActions.map((r, i) => `
+    <div class="sr-item" data-sr="${i}">
+      <span class="sr-kind">${esc(r.kind)}</span>
+      <div class="sr-main">
+        <div class="sr-title">${esc(r.title)}</div>
+        ${r.sub ? `<div class="sr-sub">${esc(r.sub)}</div>` : ""}
+      </div>
+      <span style="color:var(--ink-muted)">›</span>
+    </div>`).join("") + `</div>`;
+}
+let searchActions = [];
+
+document.getElementById("searchBtn").addEventListener("click", openSearch);
+document.getElementById("searchClose").addEventListener("click", closeSearch);
+searchInput.addEventListener("input", () => renderSearch(searchInput.value));
+searchResults.addEventListener("click", e => {
+  const item = e.target.closest("[data-sr]");
+  if (!item) return;
+  const r = searchActions[+item.dataset.sr];
+  closeSearch();
+  if (r) { r.act(); window.scrollTo({ top: 0 }); }
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && !searchOverlay.hidden) closeSearch();
+});
+
+/* abre a ficha de um motorista / cliente / viatura */
+function openEntity(key, nome) {
+  entityNav[key] = nome;
+  const target = key === "viatura" ? ["viaturas", "viaturas"]
+    : key === "cliente" ? ["viagens", "clientes"] : ["viagens", "motoristas"];
+  ensureGroupLoaded(target[0]);
+  gotoView(target[0], target[1]);
+  repaintView(target[1]);
+  window.scrollTo({ top: 0 });
+}
+
 function paint(view) {
   const panel = document.getElementById("view-" + view.id);
+  if (!panel) return;
   const rows = state.data[view.sheet];
   try {
     panel.innerHTML = (RENDERERS[view.render] || renderAuto)(rows);
   } catch (err) {
     console.error("render", view.id, err);
-    panel.innerHTML = renderAuto(rows); // nunca deixar um separador em branco
+    // nunca deixar um separador em branco
+    panel.innerHTML = rows ? renderAuto(rows) : emptyState("Sem dados para mostrar.");
   }
 }
 
@@ -1295,26 +1867,57 @@ function setUpdated() {
     : `Atualizado em ${stamp}`;
 }
 
-async function refreshAll(force) {
-  refreshBtn.classList.add("spinning");
-  const results = await Promise.all(ALL_VIEWS.map(view =>
-    loadSheet(view.sheet, force).then(r => ({ view, ...r })).catch(err => ({ view, err }))));
-  // 1.ª passagem: guardar todos os dados (o dashboard do Resumo usa várias folhas)
-  for (const r of results) {
-    if (r.err) continue;
-    state.data[r.view.sheet] = r.rows;
-    state.meta[r.view.sheet] = { fromCache: r.fromCache, time: r.time };
-  }
-  // 2.ª passagem: pintar pela ordem de ALL_VIEWS → cores dos sócios estáveis
+/* Carrega um conjunto de folhas (uma vez cada) e guarda-as no estado.
+   Só se carrega o que a área aberta precisa — a app arranca mais depressa. */
+async function loadSheets(sheetNames, force) {
+  const todo = [...new Set(sheetNames)].filter(s => s && (force || !state.data[s]));
+  if (!todo.length) return;
+  const results = await Promise.all(todo.map(sheet =>
+    loadSheet(sheet, force).then(r => ({ sheet, ...r })).catch(err => ({ sheet, err }))));
   for (const r of results) {
     if (r.err) {
-      console.error("load", r.view.sheet, r.err);
-      delete state.meta[r.view.sheet];
-      document.getElementById("view-" + r.view.id).innerHTML = errorState(r.view.id);
+      console.error("load", r.sheet, r.err);
+      delete state.meta[r.sheet];
+      state.errors[r.sheet] = true;
     } else {
-      paint(r.view);
+      state.data[r.sheet] = r.rows;
+      state.meta[r.sheet] = { fromCache: r.fromCache, time: r.time };
+      delete state.errors[r.sheet];
     }
   }
+}
+/* pinta pela ordem de ALL_VIEWS → cores dos sócios estáveis entre visitas */
+function paintViewsFor(sheetNames) {
+  const set = new Set(sheetNames);
+  for (const view of ALL_VIEWS) {
+    if (!set.has(view.sheet)) continue;
+    const el = document.getElementById("view-" + view.id);
+    if (!el) continue;
+    if (state.errors[view.sheet]) el.innerHTML = errorState(view.id);
+    else if (state.data[view.sheet]) paint(view);
+  }
+}
+
+async function ensureGroupLoaded(groupId, force) {
+  const g = NAV.find(x => x.id === groupId);
+  if (!g || g.soon) return;
+  const sheets = groupSheets(g);
+  if (!sheets.some(s => force || !state.data[s])) return;
+  await loadSheets(sheets, force);
+  paintViewsFor(sheets);
+  setUpdated();
+}
+
+async function refreshAll(force) {
+  refreshBtn.classList.add("spinning");
+  const g = NAV.find(x => x.id === state.activeGroup);
+  const sheets = [...new Set([
+    ...RESUMO_SHEETS,                 // o dashboard cruza várias folhas
+    ...(g ? groupSheets(g) : []),     // a área aberta
+    ...Object.keys(state.data),       // e tudo o que já tinha sido carregado
+  ])];
+  await loadSheets(sheets, force);
+  paintViewsFor(sheets);
   setUpdated();
   refreshBtn.classList.remove("spinning");
 }
@@ -1323,6 +1926,11 @@ refreshBtn.addEventListener("click", () => refreshAll(true));
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) refreshAll(false); // reabrir a app → dados frescos
 });
+
+/* app instalável e a abrir offline */
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+}
 
 refreshAll(false);
 </script>

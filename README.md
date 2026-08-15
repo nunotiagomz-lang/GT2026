@@ -16,14 +16,35 @@ sub-separadores no topo mostram as folhas do Excel dessa área.
 
 | Área (em baixo) | Sub-separador (em cima) | Folha do Excel | Apresentação |
 |---|---|---|---|
-| Resumo | — | `Resumo` + cálculos das outras folhas | Dashboard: alertas, execução, sócios, últimos movimentos, próximos pagamentos |
-| Investimentos | Movimentos | `Movimentos Investimentos` | Lista de movimentos (colunas por sócio), filtrável por sócio |
-| Investimentos | Plano | `Investimentos Iniciais` | Itens do plano com progresso pago/estimado e totais |
-| Investimentos | Sócios | `Sócios - Contas Correntes` | Cartão por sócio: pago, quota e saldo (credor / falta contribuir) |
-| Investimentos | Acertos | `Acertos entre Sócios` | Tabela de reembolsos entre sócios |
-| Viagens | — | `Viagens` | Lista de viagens → detalhe da viagem → abastecimentos |
+| Resumo | — | `Resumo` + cálculos das outras folhas | Dashboard: alertas, operação, execução, sócios, últimos movimentos, próximos pagamentos |
+| Viagens | Viagens | `Viagens` | Lista com margem por viagem → detalhe → abastecimentos e consumo |
+| Viagens | Motoristas | `Viagens` (derivado) | Ficha por motorista: viagens, km, margem, saldo |
+| Viagens | Clientes | `Viagens` (derivado) | Ficha por cliente: viagens, faturado, margem |
+| Viaturas | — | `Viaturas` (+ `Viagens`) | Frota com consumo esperado → ficha da viatura e as suas viagens |
+| Investim. | Movimentos | `Movimentos Investimentos` | Lista de movimentos (colunas por sócio), filtrável por sócio |
+| Investim. | Plano | `Investimentos Iniciais` | Itens do plano com progresso pago/estimado e totais |
+| Investim. | Sócios | `Sócios - Contas Correntes` | Cartão por sócio: pago, quota e saldo (credor / falta contribuir) |
+| Investim. | Acertos | `Acertos entre Sócios` | Tabela de reembolsos entre sócios |
 | Faturação | — | *(em breve)* | — |
-| Viaturas | — | *(em breve)* | — |
+
+**Pesquisa global** (lupa no topo) encontra viagens, motoristas, viaturas e
+clientes — ignora acentos. O **filtro de período** (Tudo / Este mês / 3 meses /
+Este ano) aplica-se às vistas operacionais e usa a coluna de data das viagens.
+
+### Cálculos automáticos
+
+A app não se limita a mostrar as folhas — cruza-as:
+
+- **Margem por viagem** = receita − despesas, com margem/km. Viagens com margem
+  negativa geram alerta no Resumo.
+- **Consumo real vs esperado** — litros dos abastecimentos ÷ km da viagem,
+  comparado com o consumo da folha `Viaturas`. Acima de 10% de desvio, avisa.
+- **Fichas ligadas** — motorista, viatura e cliente agregam as respetivas
+  viagens, km e margens.
+
+Todas as colunas são detetadas pelo nome (ex.: `Km`, `Receita`, `Despesas
+Total`, `Motorista`, `Viatura`, `Cliente`, `Partida`). Se uma coluna não
+existir, a app simplesmente não mostra esse cálculo — nada rebenta.
 
 ### Abastecimentos (ficheiro separado)
 
@@ -35,6 +56,19 @@ código da viagem (ex.: `vf15`). No detalhe de uma viagem, o botão
 Para ligar: partilhar esse ficheiro como «Qualquer pessoa com o link — Leitor»
 e colocar o ID do ficheiro na constante `ABASTECIMENTOS_ID` no topo do
 `<script>` de `index.html` (o ID é a parte do link entre `/d/` e `/edit`).
+
+## Lançamento de dados (back office)
+
+O site é só de consulta. Para **lançar** viagens e abastecimentos há um
+formulário próprio em Google Apps Script, que grava direto nas folhas — ver
+[`backoffice/README.md`](backoffice/README.md). Grátis, sem servidor, e o Excel
+continua a ser a base de dados.
+
+## App instalável e offline
+
+`manifest.webmanifest` + `sw.js` fazem da página uma app instalável: no
+telemóvel, "Adicionar ao ecrã principal" dá-lhe ícone próprio e ela abre sem
+rede, mostrando os últimos dados guardados (com aviso da data).
 
 ## Roadmap (ideias já acordadas para o futuro)
 
