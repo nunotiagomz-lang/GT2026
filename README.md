@@ -65,10 +65,10 @@ geral da empresa não entra nesta conta:
 Basta, por isso, ter na folha `Sócios - Contas Correntes` os **nomes** e as
 **participações** — os valores são recalculados pela app a cada abertura.
 
-Um lançamento pago por um sócio entra nos **dois** livros: no geral para o
-controlo da empresa, e no dos investidores na coluna desse sócio. Pago pela
-empresa (caixa ou banco), entra só no geral. É o formulário que trata disto —
-ver [`backoffice/README.md`](backoffice/README.md).
+Cada livro tem o seu formulário no back office: **Contas** escreve só no livro
+geral, e **Investimentos** escreve nos dois — o valor de cada sócio na coluna
+dele, e o **somatório** como valor da linha no livro geral. Ver
+[`backoffice/README.md`](backoffice/README.md).
 
 ### Sub-separadores que se adaptam ao Excel
 
