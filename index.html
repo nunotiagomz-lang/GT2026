@@ -713,7 +713,7 @@ function renderResumo(rows) {
         socRows = state.data["Sócios - Contas Correntes"] || null,
         plRows = state.data["Investimentos Iniciais"] || null;
   const movs   = movRows ? (extractMovs(movRows) || []) : [];
-  const socios = socRows ? (extractSocios(socRows) || []) : [];
+  const socios = sociosContas() || (socRows ? (extractSocios(socRows) || []) : []);
   const plano  = plRows ? extractPlano(plRows) : null;
   socios.forEach(s => socioColor(s.nome));
 
@@ -1211,15 +1211,22 @@ function renderPlano(rows) {
 
 /* --- Sócios (Contas Correntes) --- */
 function renderSocios(rows) {
-  const socios = extractSocios(rows);
+  const socios = sociosContas() || extractSocios(rows);
   if (socios == null) return renderAuto(rows);
   if (!socios.length) return emptyState("Sem dados de sócios.");
   socios.forEach(s => socioColor(s.nome));
+  const calculado = socios[0].calculado;
+  const total = calculado ? socios[0].total : null;
 
-  return socios.map(s => {
+  const cabeca = calculado ? `<div class="card" style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
+      <span style="font-size:12px;color:var(--ink-2)">Total investido pelos sócios</span>
+      <b style="font-size:17px;font-variant-numeric:tabular-nums">${fmtMZN(total)} <small style="font-size:11px;color:var(--ink-muted)">MZN</small></b>
+    </div>` : "";
+
+  return cabeca + socios.map(s => {
     const pct = (s.quota && s.pago != null) ? Math.max(0, Math.min(100, s.pago / s.quota * 100)) : null;
-    const credor = s.saldo != null && s.saldo > 0;
-    const emDia  = s.saldo != null && s.saldo === 0;
+    const credor = s.saldo != null && s.saldo > 0.5;
+    const emDia  = s.saldo != null && Math.abs(s.saldo) <= 0.5;
     return `<div class="card socio">
       <div class="socio-head">
         <div class="avatar" style="background:${socioColor(s.nome)}">${esc(s.nome.slice(0, 2).toUpperCase())}</div>
@@ -1236,13 +1243,16 @@ function renderSocios(rows) {
       ${pct != null ? `<div class="bar"><i style="width:${pct}%;background:${socioColor(s.nome)}"></i></div>` : ""}
       <div class="socio-nums">
         <span>Pago: <b>${fmtMZN(s.pago)}</b></span>
+        ${s.ajuste ? `<span>Acertos: <b>${s.ajuste > 0 ? "+" : ""}${fmtMZN(s.ajuste)}</b></span>` : ""}
         <span>Quota: <b>${fmtMZN(s.quota)}</b></span>
       </div>
-      ${s.sit ? `<div style="font-size:12px;color:var(--ink-2);margin-top:7px">${esc(s.sit)}</div>` : ""}
+      ${!calculado && s.sit ? `<div style="font-size:12px;color:var(--ink-2);margin-top:7px">${esc(s.sit)}</div>` : ""}
     </div>`;
   }).join("") +
-  `<p style="font-size:11px;color:var(--ink-muted);text-align:center;margin:2px 0 8px">
-     Saldo positivo = crédito a receber · Saldo negativo = valor por contribuir</p>`;
+  `<p style="font-size:11px;color:var(--ink-muted);text-align:center;margin:2px 8px 8px;line-height:1.5">
+     Saldo positivo = crédito a receber · negativo = valor por contribuir.<br>
+     ${calculado ? "Calculado a partir da soma da folha «Movimentos dos Investidores» e dos acertos entre sócios."
+                 : "Valores lidos da folha «Sócios - Contas Correntes»."}</p>`;
 }
 
 /* --- Acertos entre Sócios --- */
@@ -1406,6 +1416,81 @@ function entityStats(trips, key) {
     e.km += t.km || 0;
   }
   return [...map.values()].sort((a, b) => b.trips.length - a.trips.length);
+}
+
+/* ---------- acertos entre sócios ---------- */
+function extractAcertos(rows) {
+  if (!rows) return [];
+  const h = findHeaderRow(rows, "Data");
+  if (h < 0) return [];
+  const cols = rows[h].map((c, i) => ({ name: (c || "").trim(), i })).filter(c => c.name);
+  const iDe = findCol(cols, /^de\b|quem\s*pagou/i);
+  const iPara = findCol(cols, /^para\b|quem\s*recebeu/i);
+  const iVal = findCol(cols, /^valor/i, /montante/i);
+  if (iDe < 0 || iPara < 0 || iVal < 0) return [];
+  const out = [];
+  for (let i = h + 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (isRowEmpty(r)) continue;
+    const val = parseNum(r[iVal]);
+    const de = (r[iDe] || "").trim(), para = (r[iPara] || "").trim();
+    if (val == null || val === 0 || !de || !para) continue;
+    out.push({ de, para, val });
+  }
+  return out;
+}
+
+/* devoluções de capital e dividendos saem do sócio: contam ao contrário */
+function saidaParaSocio(tipo) {
+  return /devolu|dividend|reembols|levantament|retirad/.test(deaccent(tipo));
+}
+
+/* ---------- contas correntes dos sócios ----------
+   Calculadas a partir da soma do livro «Movimentos dos Investidores»
+   (o livro geral da empresa não entra aqui):
+     pago  = soma da coluna do sócio
+     quota = total investido × participação do sócio
+     saldo = pago + acertos − quota
+   Saldo positivo = pôs mais do que lhe cabia e é credor. */
+function sociosContas() {
+  const base = extractSocios(state.data["Sócios - Contas Correntes"]);
+  if (!base || !base.length) return null;
+  const movs = extractMovs(investorRows());
+  if (!movs || !movs.length) return base;   // sem movimentos, fica o que a folha diz
+
+  /* participação: da folha; se faltar a algum, divide-se por igual */
+  const fracoes = base.map(s => {
+    const p = parseNum(s.part);
+    return p != null && p > 0 ? p / 100 : null;
+  });
+  const porIgual = fracoes.some(f => f == null);
+
+  const pago = new Map(base.map(s => [s.nome, 0]));
+  let total = 0;
+  for (const m of movs) {
+    const sinal = saidaParaSocio(m.tipo) ? -1 : 1;
+    for (const p of m.pagadores) {
+      if (!pago.has(p.por)) continue;       // pagador que não é sócio
+      pago.set(p.por, pago.get(p.por) + sinal * p.val);
+      total += sinal * p.val;
+    }
+  }
+
+  /* acertos: quem pagou fica com mais crédito, quem recebeu com menos */
+  const ajuste = new Map(base.map(s => [s.nome, 0]));
+  for (const a of extractAcertos(state.data["Acertos entre Sócios"])) {
+    if (ajuste.has(a.de)) ajuste.set(a.de, ajuste.get(a.de) + a.val);
+    if (ajuste.has(a.para)) ajuste.set(a.para, ajuste.get(a.para) - a.val);
+  }
+
+  return base.map((s, i) => {
+    const fr = porIgual ? 1 / base.length : fracoes[i];
+    const quota = total * fr;
+    const pg = pago.get(s.nome) || 0;
+    const aj = ajuste.get(s.nome) || 0;
+    return { ...s, pago: pg, quota, ajuste: aj, saldo: pg + aj - quota,
+             total, calculado: true };
+  });
 }
 
 /* ---------- livro geral (contabilidade e tesouraria) ----------
