@@ -47,6 +47,19 @@ uma linha por lançamento com um valor único.
 futuros dividendos e devoluções de capital. Mantém **uma coluna por sócio**, e é
 dele que sai a conta corrente de cada um.
 
+A app **calcula** as contas correntes a partir da soma desse livro — o livro
+geral da empresa não entra nesta conta:
+
+- **Pago** = soma da coluna do sócio (movimentos de tipo `Devolução` ou
+  `Dividendo` contam ao contrário, porque é dinheiro que sai para o sócio);
+- **Quota** = total investido × participação do sócio (divisão igual se a
+  participação não estiver preenchida);
+- **Saldo** = pago + acertos − quota. Positivo = credor; negativo = falta
+  contribuir. A soma dos saldos dá sempre zero.
+
+Basta, por isso, ter na folha `Sócios - Contas Correntes` os **nomes** e as
+**participações** — os valores são recalculados pela app a cada abertura.
+
 Um lançamento pago por um sócio entra nos **dois** livros: no geral para o
 controlo da empresa, e no dos investidores na coluna desse sócio. Pago pela
 empresa (caixa ou banco), entra só no geral. É o formulário que trata disto —
