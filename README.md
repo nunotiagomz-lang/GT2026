@@ -21,11 +21,35 @@ sub-separadores no topo mostram as folhas do Excel dessa área.
 | Viagens | Motoristas | `Viagens` (derivado) | Ficha por motorista: viagens, km, margem, saldo |
 | Viagens | Clientes | `Viagens` (derivado) | Ficha por cliente: viagens, faturado, margem |
 | Viaturas | — | `Viaturas` (+ `Viagens`) | Frota com consumo esperado → ficha da viatura e as suas viagens |
-| Investim. | Movimentos | `Movimentos Investimentos` | Lista de movimentos (colunas por sócio), filtrável por sócio |
-| Investim. | Plano | `Investimentos Iniciais` | Itens do plano com progresso pago/estimado e totais |
-| Investim. | Sócios | `Sócios - Contas Correntes` | Cartão por sócio: pago, quota e saldo (credor / falta contribuir) |
-| Investim. | Acertos | `Acertos entre Sócios` | Tabela de reembolsos entre sócios |
+| Contas | Movimentos | `Movimentos Investimentos` | Livro de movimentos, filtrável por sócio, tipo e categoria |
+| Contas | Categorias | `Movimentos Investimentos` | Para onde foi o dinheiro: totais por tipo e por categoria |
+| Contas | Sócios | `Sócios - Contas Correntes` | Cartão por sócio: pago, quota e saldo (credor / falta contribuir) |
+| Contas | Plano | `Investimentos Iniciais` | Itens do plano com progresso pago/estimado e totais |
+| Contas | Acertos | `Acertos entre Sócios` | Tabela de reembolsos entre sócios |
 | Faturação | — | *(em breve)* | — |
+
+### O livro de contas
+
+A folha `Movimentos Investimentos` é o **livro de todo o dinheiro que se move** —
+uma só tabela, várias vistas. Além das colunas por sócio, reconhece:
+
+| Coluna | Para que serve |
+|---|---|
+| `Tipo` | `Investimento` (dura anos), `Despesa` (consome-se agora), `Suprimento` (entrada dos sócios), `Recebimento` |
+| `Categoria` | Camião, Combustível, Portagens, Motorista, Manutenção, Seguros… |
+| `VF` ou `Viagem` | liga o movimento à viagem respetiva (toca no código para a abrir) |
+
+Sem essas colunas a app funciona na mesma; assim que aparecerem, ganham-se os
+filtros por tipo e a vista **Categorias** — que permite tocar numa categoria
+para ver os movimentos dela.
+
+### Sub-separadores que se adaptam ao Excel
+
+Cada vista sabe qual o cabeçalho que espera na sua folha. Se apagares ou
+reestruturares uma folha (por exemplo, deixares de usar o Plano), o
+sub-separador **desaparece sozinho** em vez de mostrar os dados de outra folha —
+o Google devolve a primeira folha do ficheiro quando o nome pedido não existe, e
+a app deteta esse caso.
 
 **Pesquisa global** (lupa no topo) encontra viagens, motoristas, viaturas e
 clientes — ignora acentos. O **filtro de período** (Tudo / Este mês / 3 meses /

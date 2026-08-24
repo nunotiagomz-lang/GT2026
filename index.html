@@ -161,6 +161,7 @@
     touch-action: manipulation; white-space: nowrap;
   }
   .subtabs button.on { color: var(--ink); border-bottom-color: var(--accent); }
+  .subtabs[hidden], .subtabs button[hidden] { display: none; }
 
   /* ---------- Pesquisa global ---------- */
   .search-overlay {
@@ -371,23 +372,28 @@ const NAV = [
     icon: '<circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/><path d="M6 17V7a2 2 0 0 1 2-2h5v12"/><path d="M13 9h4l3 4v4h-2"/><path d="M8 19h8"/>',
     needs: ["Viaturas"],   // consumo esperado por matrícula
     views: [
-      { id: "viagens",    sheet: "Viagens", label: "Viagens",    render: "viagens" },
-      { id: "motoristas", sheet: "Viagens", label: "Motoristas", render: "motoristas" },
-      { id: "clientes",   sheet: "Viagens", label: "Clientes",   render: "clientes" },
+      { id: "viagens",    sheet: "Viagens", label: "Viagens",    render: "viagens",    expect: /^vf$|c[óo]digo/i },
+      { id: "motoristas", sheet: "Viagens", label: "Motoristas", render: "motoristas", expect: /^vf$|c[óo]digo/i },
+      { id: "clientes",   sheet: "Viagens", label: "Clientes",   render: "clientes",   expect: /^vf$|c[óo]digo/i },
     ] },
   { id: "viaturas", label: "Viaturas",
     icon: '<rect x="3" y="8" width="12" height="8" rx="1.5"/><path d="M15 11h3.5l2.5 3v2h-2"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/>',
     needs: ["Viagens"],    // viagens de cada viatura
     views: [
-      { id: "viaturas", sheet: "Viaturas", label: "Viaturas", render: "viaturas" },
+      { id: "viaturas", sheet: "Viaturas", label: "Viaturas", render: "viaturas", expect: /matr[íi]cula|viatura/i },
     ] },
-  { id: "investimentos", label: "Investim.",
-    icon: '<path d="M7 17l10-10"/><polyline points="17 15 17 7 9 7"/><rect x="3" y="3" width="18" height="18" rx="3"/>',
+  /* Contas: o livro de movimentos de dinheiro, visto de várias maneiras.
+     `expect` é a assinatura do cabeçalho da folha — se deixar de bater
+     certo (folha apagada ou reestruturada), o sub-separador desaparece
+     em vez de mostrar os dados de outra folha. */
+  { id: "contas", label: "Contas",
+    icon: '<path d="M4 6h16v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M4 6V5a1 1 0 0 1 1-1h11"/><path d="M8 11h8M8 15h5"/>',
     views: [
-      { id: "movimentos", sheet: "Movimentos Investimentos",  label: "Movimentos", render: "movimentos" },
-      { id: "plano",      sheet: "Investimentos Iniciais",    label: "Plano",      render: "plano" },
-      { id: "socios",     sheet: "Sócios - Contas Correntes", label: "Sócios",     render: "socios" },
-      { id: "acertos",    sheet: "Acertos entre Sócios",      label: "Acertos",    render: "acertos" },
+      { id: "movimentos", sheet: "Movimentos Investimentos",  label: "Movimentos", render: "movimentos",  expect: /^data$/i },
+      { id: "categorias", sheet: "Movimentos Investimentos",  label: "Categorias", render: "categorias",  expect: /^data$/i },
+      { id: "socios",     sheet: "Sócios - Contas Correntes", label: "Sócios",     render: "socios",      expect: /^s[óo]cio$/i },
+      { id: "plano",      sheet: "Investimentos Iniciais",    label: "Plano",      render: "plano",       expect: /^item$/i },
+      { id: "acertos",    sheet: "Acertos entre Sócios",      label: "Acertos",    render: "acertos",     expect: /^data$/i },
     ] },
   /* Áreas futuras: soon:true mostra "Em breve" e não carrega dados.
      Para ativar, remover soon e preencher views com as folhas do Excel:
@@ -532,7 +538,10 @@ function extractMovs(rows) {
   const header = rows[h];
   const iData = colIndex(header, "data"), iItem = colIndex(header, "item"),
         iDesc = colIndex(header, "descrição") >= 0 ? colIndex(header, "descrição") : colIndex(header, "descricao"),
-        iVal = colIndex(header, "valor"), iPor = colIndex(header, "pago por");
+        iVal = colIndex(header, "valor"), iPor = colIndex(header, "pago por"),
+        iTipo = colIndex(header, "tipo"),
+        iCat = colIndex(header, "categoria"),
+        iVF = header.findIndex(h => /^\s*(vf|viagem)\s*$/i.test((h || "").trim()));
 
   /* Formato novo: uma coluna por sócio com o valor pago por esse sócio
      nessa linha (permite vários pagadores num movimento). As colunas são
@@ -555,7 +564,10 @@ function extractMovs(rows) {
     const base = {
       data: (r[iData] || "").trim(),
       item,
-      desc: iDesc >= 0 ? (r[iDesc] || "").trim() : ""
+      desc: iDesc >= 0 ? (r[iDesc] || "").trim() : "",
+      tipo: iTipo >= 0 ? (r[iTipo] || "").trim() : "",
+      categoria: iCat >= 0 ? (r[iCat] || "").trim() : "",
+      viagem: iVF >= 0 ? tripCode((r[iVF] || "").trim()) : "",
     };
     if (socioCols.length) {
       if (!item || /^TOTAL/.test(item)) continue; // ignora vazias e linhas de totais
@@ -574,8 +586,24 @@ function extractMovs(rows) {
       movs.push({ ...base, total: val, pagadores: [{ por, val }] });
     }
   }
+  /* as colunas Tipo/Categoria são opcionais: só existem se estiverem preenchidas */
+  movs.hasTipo = iTipo >= 0 && movs.some(m => m.tipo);
+  movs.hasCat = iCat >= 0 && movs.some(m => m.categoria);
   return movs;
 }
+/* normaliza o tipo para uma das quatro famílias conhecidas */
+function tipoNorm(t) {
+  const s = deaccent(t);
+  if (/investiment|capex|imobiliz/.test(s)) return "Investimento";
+  if (/despesa|custo|opex|gasto/.test(s)) return "Despesa";
+  if (/supriment|entrada|aporte|capital/.test(s)) return "Suprimento";
+  if (/recebiment|receita|faturad/.test(s)) return "Recebimento";
+  return t.trim() || "";
+}
+const TIPO_COR = {
+  "Investimento": "var(--s1)", "Despesa": "var(--s2)",
+  "Suprimento": "var(--s3)", "Recebimento": "var(--s6)",
+};
 
 function extractPlano(rows) {
   const h = findHeaderRow(rows, "Item");
@@ -678,9 +706,9 @@ function renderResumo(rows) {
   const alertas = [];
   if (negativas.length) alertas.push({ goto: "viagens:viagens",
     txt: `<b>${negativas.length} viage${negativas.length > 1 ? "ns" : "m"}</b> com margem negativa — <b>${fmtMZN(negativas.reduce((a, t) => a - tripMargin(t), 0))} MZN</b> de prejuízo` });
-  if (emFalta.length) alertas.push({ goto: "investimentos:socios",
+  if (emFalta.length) alertas.push({ goto: "contas:socios",
     txt: `<b>${emFalta.length} sócio${emFalta.length > 1 ? "s" : ""}</b> com contribuição em falta — total <b>${fmtMZN(totalEmFalta)} MZN</b>` });
-  if (porConfirmar.length) alertas.push({ goto: "investimentos:plano",
+  if (porConfirmar.length) alertas.push({ goto: "contas:plano",
     txt: `<b>${porConfirmar.length} ${porConfirmar.length > 1 ? "itens" : "item"}</b> do plano por confirmar — <b>${fmtMZN(valorPorConfirmar)} MZN</b> por pagar` });
   if (alertas.length) {
     html += `<div class="card" style="border-left:4px solid var(--serious);padding-left:13px">` +
@@ -751,7 +779,7 @@ function renderResumo(rows) {
         const credor = s.saldo != null && s.saldo > 0;
         const emDia = s.saldo != null && s.saldo === 0;
         const cor = credor ? "var(--good-text)" : emDia ? "var(--ink)" : "var(--serious)";
-        return `<div class="goto glance-item" data-goto="investimentos:socios">
+        return `<div class="goto glance-item" data-goto="contas:socios">
           <div class="avatar" style="background:${socioColor(s.nome)};width:38px;height:38px;font-size:13px">${esc(s.nome.slice(0, 2).toUpperCase())}</div>
           <div class="g-name">${esc(s.nome)}</div>
           <div class="g-saldo" style="color:${cor}">${fmtMZN(s.saldo)}</div>
@@ -776,7 +804,7 @@ function renderResumo(rows) {
             ${m.pagadores.map(p => `<span class="dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${socioColor(p.por)};margin-right:3px"></span>${esc(p.por)}`).join(" ")}</div>
         </div>
       </div>`).join("") +
-      `<div class="goto" data-goto="investimentos:movimentos" style="text-align:center;padding:10px 0 2px;font-size:13px;font-weight:650;color:var(--accent);cursor:pointer">Ver todos os movimentos ›</div>
+      `<div class="goto" data-goto="contas:movimentos" style="text-align:center;padding:10px 0 2px;font-size:13px;font-weight:650;color:var(--accent);cursor:pointer">Ver todos os movimentos ›</div>
     </div>`;
   }
 
@@ -787,7 +815,7 @@ function renderResumo(rows) {
     if (pendentes.length) {
       const maxFalta = pendentes[0].falta;
       html += `<div class="section-title">Próximos pagamentos</div>
-      <div class="card goto" data-goto="investimentos:plano" style="cursor:pointer">` +
+      <div class="card goto" data-goto="contas:plano" style="cursor:pointer">` +
         pendentes.map((it, i) => `<div style="padding:8px 0;${i < pendentes.length - 1 ? "border-bottom:1px solid var(--hairline)" : ""}">
           <div style="display:flex;justify-content:space-between;gap:10px;font-size:13px">
             <span style="flex:1;min-width:0">${esc(it.name)}</span>
@@ -817,8 +845,11 @@ function tile(label, value, sub, unit) {
   </div>`;
 }
 
-/* --- Movimentos: lista filtrável por sócio --- */
-let movFilter = "Todos";
+/* --- Movimentos: o livro de contas, filtrável por sócio, tipo e categoria --- */
+let movFilter = "Todos";   // sócio
+let movTipo = "Todos";     // Investimento / Despesa / Suprimento / Recebimento
+let movCat = null;         // categoria escolhida na vista Categorias
+
 function renderMovimentos(rows) {
   const movs = extractMovs(rows);
   if (movs == null) return renderAuto(rows);
@@ -831,9 +862,11 @@ function renderMovimentos(rows) {
                   ...presentes.filter(n => !ordem.includes(n))];
   socios.forEach(socioColor); // fixa a ordem das cores
 
-  const shown = movFilter === "Todos" ? movs
-    : movs.filter(m => m.pagadores.some(p => p.por === movFilter));
-  /* com filtro ativo, conta apenas a parte desse sócio */
+  const shown = movs.filter(m =>
+    (movFilter === "Todos" || m.pagadores.some(p => p.por === movFilter)) &&
+    (movTipo === "Todos" || tipoNorm(m.tipo) === movTipo) &&
+    (!movCat || m.categoria === movCat));
+  /* com filtro de sócio ativo, conta apenas a parte desse sócio */
   const valorDe = m => movFilter === "Todos" ? m.total
     : (m.pagadores.find(p => p.por === movFilter)?.val ?? 0);
   const total = shown.reduce((s, m) => s + valorDe(m), 0);
@@ -843,12 +876,31 @@ function renderMovimentos(rows) {
        ${s !== "Todos" ? `<span class="dot" style="background:${socioColor(s)}"></span>` : ""}${esc(s)}
      </button>`).join("");
 
+  const tipos = movs.hasTipo
+    ? [...new Set(movs.map(m => tipoNorm(m.tipo)).filter(Boolean))] : [];
+  const tipoChips = tipos.length ? `<div class="filters" id="movTipos">
+    ${["Todos", ...tipos].map(t => `<button class="${movTipo === t ? "on" : ""}" data-tipo="${esc(t)}">
+      ${t !== "Todos" && TIPO_COR[t] ? `<span class="dot" style="background:${TIPO_COR[t]}"></span>` : ""}${esc(t)}
+    </button>`).join("")}</div>` : "";
+
+  const catAtiva = movCat ? `<div class="card" style="display:flex;align-items:center;gap:8px;padding:10px 14px">
+      <span style="font-size:12px;color:var(--ink-2)">Categoria:</span>
+      <b style="font-size:13px;flex:1">${esc(movCat)}</b>
+      <button data-cat-clear class="chip" style="cursor:pointer;font-size:12px;padding:6px 11px">Limpar ✕</button>
+    </div>` : "";
+
   const list = shown.map(m => {
     const v = valorDe(m);
+    const tn = tipoNorm(m.tipo);
     const payers = m.pagadores.map(p =>
       `<span class="chip" style="${movFilter === p.por ? "border-color:" + socioColor(p.por) : ""}">
         <span class="dot" style="background:${socioColor(p.por)}"></span>${esc(p.por)}${m.pagadores.length > 1 ? ` · ${fmtMZN(p.val)}` : ""}
       </span>`).join("");
+    const marcas = [
+      tn ? `<span class="chip" style="font-size:10.5px;padding:3px 7px;${TIPO_COR[tn] ? `border-color:${TIPO_COR[tn]};color:${TIPO_COR[tn]};background:transparent` : ""}">${esc(tn)}</span>` : "",
+      m.categoria ? `<span class="chip" style="font-size:10.5px;padding:3px 7px">${esc(m.categoria)}</span>` : "",
+      m.viagem ? `<span class="chip" data-viagem-cod="${esc(m.viagem)}" style="font-size:10.5px;padding:3px 7px;cursor:pointer;border-color:var(--accent);color:var(--accent)">${esc(m.viagem)} ›</span>` : "",
+    ].filter(Boolean).join("");
     return `<div class="mov" style="flex-wrap:wrap">
       <div class="m-main">
         <div class="m-item">${esc(m.item)}</div>
@@ -859,16 +911,88 @@ function renderMovimentos(rows) {
         <div class="m-val">${fmtMZN(v)} <small style="font-weight:600;color:var(--ink-muted)">MZN</small></div>
         ${v !== m.total ? `<div style="font-size:11px;color:var(--ink-muted);margin-top:2px">de ${fmtMZN(m.total)} no total</div>` : ""}
       </div>
-      <div style="flex-basis:100%;display:flex;flex-wrap:wrap;gap:5px;margin-top:7px">${payers}</div>
+      <div style="flex-basis:100%;display:flex;flex-wrap:wrap;gap:5px;margin-top:7px">${marcas}${payers}</div>
     </div>`;
   }).join("");
 
-  return `<div class="filters" id="movFilters">${chips}</div>
-    <div class="card" style="display:flex;justify-content:space-between;align-items:baseline">
-      <span style="font-size:12px;color:var(--ink-2)">${shown.length} movimento${shown.length === 1 ? "" : "s"}${movFilter !== "Todos" ? " · " + esc(movFilter) : ""}</span>
+  const rotulo = [movFilter !== "Todos" && movFilter, movTipo !== "Todos" && movTipo]
+    .filter(Boolean).join(" · ");
+
+  return `<div class="filters" id="movFilters">${chips}</div>${tipoChips}${catAtiva}
+    <div class="card" style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
+      <span style="font-size:12px;color:var(--ink-2)">${shown.length} movimento${shown.length === 1 ? "" : "s"}${rotulo ? " · " + esc(rotulo) : ""}</span>
       <b style="font-size:16px;font-variant-numeric:tabular-nums">${fmtMZN(total)} <small style="font-size:11px;color:var(--ink-muted)">MZN</small></b>
     </div>
-    <div class="card">${list}</div>`;
+    ${shown.length ? `<div class="card">${list}</div>` : emptyState("Sem movimentos com estes filtros.")}
+    ${!movs.hasTipo ? `<p style="font-size:11px;color:var(--ink-muted);text-align:center;margin:4px 8px 8px;line-height:1.5">
+      Acrescenta as colunas <b>Tipo</b> (Investimento / Despesa / Suprimento) e <b>Categoria</b>
+      a esta folha para separares o que é investimento do que é despesa.</p>` : ""}`;
+}
+
+/* --- Categorias: para onde foi o dinheiro --- */
+function renderCategorias(rows) {
+  const movs = extractMovs(rows);
+  if (movs == null) return renderAuto(rows);
+  if (!movs.length) return emptyState("Ainda não há movimentos registados.");
+
+  if (!movs.hasCat && !movs.hasTipo) {
+    return `<div class="state">
+      <div class="icon">🏷️</div>
+      <h3>Falta classificar os movimentos</h3>
+      <p>Acrescenta à folha <b>Movimentos Investimentos</b> as colunas <b>Tipo</b>
+         (Investimento, Despesa, Suprimento, Recebimento) e <b>Categoria</b>
+         (Camião, Combustível, Portagens, Motorista, Manutenção…).</p>
+      <p class="hint">Assim que as preencheres, esta vista mostra para onde foi o dinheiro,
+         e podes tocar numa categoria para ver os movimentos dela.</p>
+    </div>`;
+  }
+
+  let html = "";
+
+  /* por tipo */
+  if (movs.hasTipo) {
+    const porTipo = new Map();
+    for (const m of movs) {
+      const t = tipoNorm(m.tipo) || "Sem tipo";
+      porTipo.set(t, (porTipo.get(t) || 0) + m.total);
+    }
+    const lista = [...porTipo.entries()].sort((a, b) => b[1] - a[1]);
+    const soma = lista.reduce((a, [, v]) => a + v, 0) || 1;
+    html += `<div class="section-title">Por tipo</div><div class="card">` +
+      lista.map(([t, v], i) => `<div data-tipo-goto="${esc(t)}" style="cursor:pointer;padding:9px 0;${i < lista.length - 1 ? "border-bottom:1px solid var(--hairline)" : ""}">
+        <div style="display:flex;justify-content:space-between;gap:10px;font-size:13.5px">
+          <span style="display:flex;align-items:center;gap:7px;min-width:0">
+            <span class="dot" style="width:9px;height:9px;border-radius:50%;background:${TIPO_COR[t] || "var(--ink-muted)"};flex:none"></span>
+            <b style="font-weight:650">${esc(t)}</b></span>
+          <b style="font-variant-numeric:tabular-nums;white-space:nowrap">${fmtMZN(v)} <small style="font-weight:600;color:var(--ink-muted)">MZN</small></b>
+        </div>
+        <div class="bar" style="height:6px;margin-top:6px"><i style="width:${v / soma * 100}%;background:${TIPO_COR[t] || "var(--accent)"}"></i></div>
+      </div>`).join("") + `</div>`;
+  }
+
+  /* por categoria */
+  if (movs.hasCat) {
+    const porCat = new Map();
+    for (const m of movs) {
+      const c = m.categoria || "Sem categoria";
+      if (!porCat.has(c)) porCat.set(c, { total: 0, n: 0 });
+      const e = porCat.get(c);
+      e.total += m.total; e.n++;
+    }
+    const lista = [...porCat.entries()].sort((a, b) => b[1].total - a[1].total);
+    const maior = lista[0][1].total || 1;
+    html += `<div class="section-title">Por categoria</div><div class="card">` +
+      lista.map(([c, e], i) => `<div data-cat="${esc(c)}" style="cursor:pointer;padding:9px 0;${i < lista.length - 1 ? "border-bottom:1px solid var(--hairline)" : ""}">
+        <div style="display:flex;justify-content:space-between;gap:10px;font-size:13.5px">
+          <span style="min-width:0"><b style="font-weight:650">${esc(c)}</b>
+            <span style="color:var(--ink-muted);font-size:11.5px"> · ${e.n} movimento${e.n === 1 ? "" : "s"}</span></span>
+          <b style="font-variant-numeric:tabular-nums;white-space:nowrap">${fmtMZN(e.total)}</b>
+        </div>
+        <div class="bar" style="height:6px;margin-top:6px"><i style="width:${e.total / maior * 100}%"></i></div>
+      </div>`).join("") + `</div>
+      <p style="font-size:11px;color:var(--ink-muted);text-align:center;margin:2px 8px 8px">Toca numa categoria para ver os movimentos dela.</p>`;
+  }
+  return html;
 }
 
 /* --- Plano (Investimentos Iniciais) --- */
@@ -1615,7 +1739,7 @@ const RENDERERS = {
   resumo: renderResumo, movimentos: renderMovimentos, plano: renderPlano,
   socios: renderSocios, acertos: renderAcertos, viagens: renderViagens,
   motoristas: renderMotoristas, clientes: renderClientes, viaturas: renderViaturas,
-  auto: renderAuto
+  categorias: renderCategorias, auto: renderAuto
 };
 const state = {
   activeGroup: NAV[0].id,
@@ -1663,14 +1787,13 @@ function gotoView(groupId, viewId) {
   state.activeGroup = groupId;
   navEl.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.group === groupId));
   document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === "panel-" + groupId));
-  if (viewId && group.views.some(v => v.id === viewId)) {
+  if (viewId && group.views.some(v => v.id === viewId && viewAvailable(v))) {
     state.activeView[groupId] = viewId;
-    const subtabs = document.querySelector(`.subtabs[data-group="${groupId}"]`);
-    if (subtabs) subtabs.querySelectorAll("button").forEach(b =>
-      b.classList.toggle("on", b.dataset.view === viewId));
-    group.views.forEach(v => {
-      document.getElementById("view-" + v.id).style.display = v.id === viewId ? "" : "none";
-    });
+  }
+  refreshSubtabs(groupId);
+  if (group.views.length === 1) {
+    const el = document.getElementById("view-" + group.views[0].id);
+    if (el) el.style.display = "";
   }
   window.scrollTo({ top: 0 });
 }
@@ -1726,10 +1849,25 @@ mainEl.addEventListener("click", e => {
     return;
   }
   const chip = e.target.closest("#movFilters button");
-  if (chip) {
-    movFilter = chip.dataset.socio;
-    const view = ALL_VIEWS.find(v => v.id === "movimentos");
-    if (state.data[view.sheet]) paint(view);
+  if (chip) { movFilter = chip.dataset.socio; repaintView("movimentos"); return; }
+
+  const tchip = e.target.closest("#movTipos button");
+  if (tchip) { movTipo = tchip.dataset.tipo; repaintView("movimentos"); return; }
+
+  if (e.target.closest("[data-cat-clear]")) { movCat = null; repaintView("movimentos"); return; }
+
+  const cat = e.target.closest("[data-cat]");
+  if (cat) {
+    movCat = cat.dataset.cat === "Sem categoria" ? null : cat.dataset.cat;
+    movTipo = "Todos";
+    gotoView("contas", "movimentos"); repaintView("movimentos");
+    window.scrollTo({ top: 0 }); return;
+  }
+  const tgo = e.target.closest("[data-tipo-goto]");
+  if (tgo) {
+    movTipo = tgo.dataset.tipoGoto; movCat = null;
+    gotoView("contas", "movimentos"); repaintView("movimentos");
+    window.scrollTo({ top: 0 }); return;
   }
 });
 
@@ -1886,6 +2024,40 @@ async function loadSheets(sheetNames, force) {
     }
   }
 }
+/* Uma vista só está disponível se a folha carregada tiver a assinatura
+   esperada no cabeçalho. Assim, uma folha apagada ou reestruturada faz
+   desaparecer o sub-separador em vez de mostrar os dados de outra folha
+   (o Google devolve a 1.ª folha do ficheiro quando o nome não existe). */
+function viewAvailable(v) {
+  const rows = state.data[v.sheet];
+  if (!rows || !v.expect) return true;   // ainda não carregou, ou sem assinatura
+  return rows.slice(0, 12).some(r => r.some(c => v.expect.test(String(c || "").trim())));
+}
+
+/* mostra/esconde os sub-separadores conforme as folhas existentes */
+function refreshSubtabs(groupId) {
+  const g = NAV.find(x => x.id === groupId);
+  if (!g || g.views.length < 2) return;
+  const bar = document.querySelector(`.subtabs[data-group="${groupId}"]`);
+  const disponiveis = g.views.filter(viewAvailable);
+  if (bar) {
+    bar.querySelectorAll("button[data-view]").forEach(b => {
+      b.hidden = !disponiveis.some(v => v.id === b.dataset.view);
+    });
+    bar.hidden = disponiveis.length < 2;
+  }
+  /* se a vista aberta deixou de existir, abre a primeira disponível */
+  if (disponiveis.length && !disponiveis.some(v => v.id === state.activeView[groupId])) {
+    state.activeView[groupId] = disponiveis[0].id;
+  }
+  g.views.forEach(v => {
+    const el = document.getElementById("view-" + v.id);
+    if (el) el.style.display = v.id === state.activeView[groupId] ? "" : "none";
+  });
+  if (bar) bar.querySelectorAll("button[data-view]").forEach(b =>
+    b.classList.toggle("on", b.dataset.view === state.activeView[groupId]));
+}
+
 /* pinta pela ordem de ALL_VIEWS → cores dos sócios estáveis entre visitas */
 function paintViewsFor(sheetNames) {
   const set = new Set(sheetNames);
@@ -1894,8 +2066,9 @@ function paintViewsFor(sheetNames) {
     const el = document.getElementById("view-" + view.id);
     if (!el) continue;
     if (state.errors[view.sheet]) el.innerHTML = errorState(view.id);
-    else if (state.data[view.sheet]) paint(view);
+    else if (state.data[view.sheet] && viewAvailable(view)) paint(view);
   }
+  NAV.forEach(g => refreshSubtabs(g.id));
 }
 
 async function ensureGroupLoaded(groupId, force) {

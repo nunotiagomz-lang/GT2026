@@ -18,6 +18,10 @@ Corre no Google Apps Script, dentro da conta Google da empresa.
 - **Abastecimento** — escolhes a viagem e lanças data, local, litros, preço e
   km. O valor total é calculado (litros × preço) e a linha vai para a folha
   dessa viagem.
+- **Movimento** — lança no livro de contas: data, **tipo** (Investimento /
+  Despesa / Suprimento / Recebimento), **categoria**, item, descrição, viagem
+  (opcional) e quem pagou. O valor vai para a coluna desse sócio, por isso a
+  conta corrente continua certa.
 
 ## Instalação (uma vez, ~5 minutos)
 

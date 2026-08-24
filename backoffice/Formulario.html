@@ -51,8 +51,9 @@
 <div class="sub">Lançamento de dados — grava direto no Excel do Drive</div>
 
 <div class="tabs">
-  <button id="tabViagem" class="on" onclick="mostrar('viagem')">Nova viagem</button>
+  <button id="tabViagem" class="on" onclick="mostrar('viagem')">Viagem</button>
   <button id="tabAbast" onclick="mostrar('abast')">Abastecimento</button>
+  <button id="tabMov" onclick="mostrar('mov')">Movimento</button>
 </div>
 
 <div id="painelViagem">
@@ -81,14 +82,41 @@
   <div class="msg" id="msgAbast"></div>
 </div>
 
+<div id="painelMov" style="display:none">
+  <div class="card">
+    <label for="mvData">Data</label>
+    <input id="mvData" type="date">
+    <label for="mvTipo">Tipo</label>
+    <select id="mvTipo"></select>
+    <div class="hint" id="mvTipoHint"></div>
+    <label for="mvCategoria">Categoria</label>
+    <input id="mvCategoria" type="text" list="lCategorias" placeholder="Ex.: Combustível">
+    <datalist id="lCategorias"></datalist>
+    <label for="mvItem">Item</label>
+    <input id="mvItem" type="text" placeholder="Ex.: Despesas Extras">
+    <label for="mvDescricao">Descrição / nota</label>
+    <input id="mvDescricao" type="text" placeholder="Ex.: Portagem Maputo - Tete">
+    <label for="mvViagem">Viagem (opcional)</label>
+    <select id="mvViagem"><option value="">— sem viagem —</option></select>
+    <label for="mvSocio">Pago por</label>
+    <select id="mvSocio"></select>
+    <label for="mvValor">Valor (MZN)</label>
+    <input id="mvValor" type="number" inputmode="decimal" step="any" placeholder="0">
+  </div>
+  <button class="primary" onclick="gravarMovimento()">Guardar movimento</button>
+  <div class="msg" id="msgMov"></div>
+</div>
+
 <script>
 var CONFIG = null;
 
 function mostrar(qual) {
-  document.getElementById('painelViagem').style.display = qual === 'viagem' ? '' : 'none';
-  document.getElementById('painelAbast').style.display  = qual === 'abast'  ? '' : 'none';
-  document.getElementById('tabViagem').classList.toggle('on', qual === 'viagem');
-  document.getElementById('tabAbast').classList.toggle('on', qual === 'abast');
+  ['viagem', 'abast', 'mov'].forEach(function (q) {
+    var painel = { viagem: 'painelViagem', abast: 'painelAbast', mov: 'painelMov' }[q];
+    var aba = { viagem: 'tabViagem', abast: 'tabAbast', mov: 'tabMov' }[q];
+    document.getElementById(painel).style.display = q === qual ? '' : 'none';
+    document.getElementById(aba).classList.toggle('on', q === qual);
+  });
 }
 
 function idDoCampo(nome) { return 'c_' + nome.replace(/[^a-zA-Z0-9]/g, '_'); }
@@ -194,7 +222,61 @@ function gravarAbastecimento() {
     .guardarAbastecimento(codigo, dados);
 }
 
+function construirMovimento(cfg) {
+  var opcoes = function (lista) {
+    return lista.map(function (v) {
+      return '<option value="' + v.replace(/"/g, '&quot;') + '">' + v + '</option>';
+    }).join('');
+  };
+  document.getElementById('mvTipo').innerHTML = opcoes(cfg.tipos);
+  document.getElementById('mvSocio').innerHTML = opcoes(cfg.socios);
+  document.getElementById('lCategorias').innerHTML = cfg.categorias.map(function (v) {
+    return '<option value="' + v.replace(/"/g, '&quot;') + '">';
+  }).join('');
+
+  var avisos = [];
+  if (!cfg.temTipo) avisos.push('coluna «Tipo»');
+  if (!cfg.temCategoria) avisos.push('coluna «Categoria»');
+  document.getElementById('mvTipoHint').textContent = avisos.length
+    ? 'Falta a ' + avisos.join(' e a ') + ' na folha de movimentos — o que escreveres aqui não será guardado até a criares.'
+    : 'Investimento dura anos (camião, licenças). Despesa consome-se agora (combustível, portagens, diárias).';
+}
+
+function gravarMovimento() {
+  var dados = {
+    data: formatarData(document.getElementById('mvData').value),
+    tipo: document.getElementById('mvTipo').value,
+    categoria: document.getElementById('mvCategoria').value,
+    item: document.getElementById('mvItem').value,
+    descricao: document.getElementById('mvDescricao').value,
+    viagem: document.getElementById('mvViagem').value,
+    socio: document.getElementById('mvSocio').value,
+    valor: document.getElementById('mvValor').value
+  };
+  if (!dados.valor) { mensagem('msgMov', 'Indica o valor.', true); return; }
+
+  google.script.run
+    .withSuccessHandler(function () {
+      mensagem('msgMov', '✓ Movimento guardado no livro de contas.', false);
+      ['mvItem', 'mvDescricao', 'mvValor'].forEach(function (id) {
+        document.getElementById(id).value = '';
+      });
+      recarregar();
+    })
+    .withFailureHandler(function (err) {
+      mensagem('msgMov', 'Não foi possível guardar: ' + err.message, true);
+    })
+    .guardarMovimento(dados);
+}
+
 function recarregar() {
+  google.script.run
+    .withSuccessHandler(construirMovimento)
+    .withFailureHandler(function (err) {
+      document.getElementById('mvTipoHint').textContent = 'Erro ao ler o livro de movimentos: ' + err.message;
+    })
+    .obterConfiguracaoMovimentos();
+
   google.script.run
     .withSuccessHandler(construirViagem)
     .withFailureHandler(function (err) {
@@ -205,11 +287,11 @@ function recarregar() {
 
   google.script.run
     .withSuccessHandler(function (lista) {
-      var sel = document.getElementById('abCodigo');
-      sel.innerHTML = lista.map(function (c) {
-        var vf = 'VF' + String(c).replace(/\D/g, '');
-        return '<option value="' + c + '">' + vf + '</option>';
-      }).join('') || '<option value="">(sem viagens)</option>';
+      var opcoes = lista.map(function (c) {
+        return '<option value="' + c + '">VF' + String(c).replace(/\D/g, '') + '</option>';
+      }).join('');
+      document.getElementById('abCodigo').innerHTML = opcoes || '<option value="">(sem viagens)</option>';
+      document.getElementById('mvViagem').innerHTML = '<option value="">— sem viagem —</option>' + opcoes;
     })
     .listarViagens();
 }
@@ -217,6 +299,7 @@ function recarregar() {
 /* data de hoje por defeito */
 var hoje = new Date().toISOString().slice(0, 10);
 document.getElementById('abData').value = hoje;
+document.getElementById('mvData').value = hoje;
 recarregar();
 </script>
 </body>
