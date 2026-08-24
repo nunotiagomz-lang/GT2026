@@ -13,8 +13,13 @@ var ABAST_ID = '1bpq6tAXb40dbZ0G945FxKanbIipnRDStO_nhYuuaxKo';   // planilha de 
 
 var FOLHA_VIAGENS  = 'Viagens';
 var FOLHA_VIATURAS = 'Viaturas';
-var FOLHA_MOVS     = 'Movimentos Investimentos';   // o livro de contas
+var FOLHA_GERAL    = 'Movimentos Geral';               // todos os movimentos da empresa
+var FOLHA_MOVS     = 'Movimentos dos Investidores';    // só o que passa pelos sócios
+var FOLHA_MOVS_ALT = 'Movimentos Investimentos';       // nome antigo, se ainda não renomeaste
 var FOLHA_SOCIOS   = 'Sócios - Contas Correntes';
+
+/* Quem pagou, quando não foi um sócio (sai da conta da empresa). */
+var PAGADOR_EMPRESA = 'Empresa';
 
 /* Tipos possíveis de um movimento (o que o formulário oferece). */
 var TIPOS = ['Investimento', 'Despesa', 'Suprimento', 'Recebimento'];
@@ -46,6 +51,16 @@ function folha_(fileId, nome) {
   var sh = SpreadsheetApp.openById(fileId).getSheetByName(nome);
   if (!sh) throw new Error('Folha «' + nome + '» não encontrada.');
   return sh;
+}
+
+/** A primeira das folhas indicadas que exista (para nomes antigos). */
+function folhaEntre_(fileId, nomes) {
+  var ss = SpreadsheetApp.openById(fileId);
+  for (var i = 0; i < nomes.length; i++) {
+    var sh = ss.getSheetByName(nomes[i]);
+    if (sh) return sh;
+  }
+  throw new Error('Nenhuma destas folhas existe: ' + nomes.join(', ') + '.');
 }
 
 /** Cabeçalhos de uma folha (1.ª linha preenchida, até 10 linhas). */
@@ -203,19 +218,13 @@ function guardarAbastecimento(codigo, dados) {
 }
 
 /**
- * Dados para o formulário de movimentos: colunas do livro, nomes dos sócios
- * (que são colunas próprias) e as categorias já usadas.
+ * Dados para o formulário de Lançamento de Contas: sócios, categorias já
+ * usadas (nos dois livros) e o que cada folha tem.
  */
 function obterConfiguracaoMovimentos() {
   verificarAcesso_();
-  var sh = folha_(PLANO_ID, FOLHA_MOVS);
-  var cab = cabecalho_(sh);
-  var ultima = sh.getLastRow();
-  var dados = ultima > cab.linha
-    ? sh.getRange(cab.linha + 1, 1, ultima - cab.linha, cab.cols.length).getValues()
-    : [];
 
-  /* sócios: cabeçalhos do livro que batem com a folha de contas correntes */
+  /* nomes dos sócios, a partir da folha de contas correntes */
   var socios = [];
   try {
     var shS = folha_(PLANO_ID, FOLHA_SOCIOS);
@@ -231,73 +240,132 @@ function obterConfiguracaoMovimentos() {
     }
   } catch (e) { /* folha de sócios ainda não existe */ }
 
-  var socioCols = socios.filter(function (nome) {
-    return cab.cols.some(function (c) { return c.toLowerCase() === nome.toLowerCase(); });
-  });
-
-  var iCat = indiceDe_(cab.cols, [/categoria/i]);
   var categorias = [];
-  if (iCat >= 0) {
-    dados.forEach(function (r) {
-      var v = String(r[iCat]).trim();
-      if (v && categorias.indexOf(v) === -1) categorias.push(v);
-    });
-    categorias.sort();
+  function juntarCategorias(sh) {
+    var cab = cabecalho_(sh);
+    var iCat = indiceDe_(cab.cols, [/categoria/i]);
+    if (iCat < 0 || sh.getLastRow() <= cab.linha) return;
+    sh.getRange(cab.linha + 1, iCat + 1, sh.getLastRow() - cab.linha, 1)
+      .getValues().forEach(function (r) {
+        var v = String(r[0]).trim();
+        if (v && categorias.indexOf(v) === -1) categorias.push(v);
+      });
   }
 
+  var temGeral = true, colunasGeral = [];
+  try {
+    var shG = folha_(PLANO_ID, FOLHA_GERAL);
+    colunasGeral = cabecalho_(shG).cols.filter(function (c) { return c; });
+    juntarCategorias(shG);
+  } catch (e) { temGeral = false; }
+
+  var socioCols = [];
+  try {
+    var shI = folhaEntre_(PLANO_ID, [FOLHA_MOVS, FOLHA_MOVS_ALT]);
+    var cabI = cabecalho_(shI);
+    socioCols = socios.filter(function (nome) {
+      return cabI.cols.some(function (c) { return c.toLowerCase() === nome.toLowerCase(); });
+    });
+    juntarCategorias(shI);
+  } catch (e) { /* livro dos investidores ainda não existe */ }
+
+  categorias.sort();
   return {
-    colunas: cab.cols.filter(function (c) { return c; }),
-    socios: socioCols.length ? socioCols : socios,
+    socios: socios,
+    socioCols: socioCols,
     categorias: categorias,
     tipos: TIPOS,
-    temTipo: indiceDe_(cab.cols, [/^tipo$/i]) >= 0,
-    temCategoria: iCat >= 0
+    pagadorEmpresa: PAGADOR_EMPRESA,
+    temGeral: temGeral,
+    colunasGeral: colunasGeral
   };
 }
 
 /**
- * Grava um movimento no livro de contas.
- * `dados`: { data, item, descricao, tipo, categoria, viagem, socio, valor }
- * O valor vai para a coluna do sócio que pagou.
+ * Lançamento de contas.
+ * Escreve SEMPRE no livro geral (`Movimentos Geral`). Quando quem pagou foi
+ * um sócio, escreve TAMBÉM no livro dos investidores, na coluna desse sócio —
+ * é isso que mantém a conta corrente dos sócios correta, tanto para
+ * investimentos como para despesas adiantadas por eles.
+ *
+ * `dados`: { data, tipo, categoria, descricao, valor, meio, quem, viagem, nota }
  */
 function guardarMovimento(dados) {
   verificarAcesso_();
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    var sh = folha_(PLANO_ID, FOLHA_MOVS);
-    var cab = cabecalho_(sh);
-
     var valor = Number(dados.valor);
     if (!valor) throw new Error('Indica um valor.');
-    var socio = String(dados.socio || '').trim();
-    if (!socio) throw new Error('Indica quem pagou.');
+    var quem = String(dados.quem || '').trim();
+    if (!quem) throw new Error('Indica quem pagou ou recebeu.');
 
-    var iSocio = -1;
-    for (var i = 0; i < cab.cols.length; i++) {
-      if (cab.cols[i].toLowerCase() === socio.toLowerCase()) { iSocio = i; break; }
+    var cfg = obterConfiguracaoMovimentos();
+    var eSocio = cfg.socios.some(function (s) { return s.toLowerCase() === quem.toLowerCase(); });
+    var escritas = [];
+
+    /* 1) livro geral — sempre */
+    var shG = folha_(PLANO_ID, FOLHA_GERAL);
+    var cabG = cabecalho_(shG);
+    var linhaG = [];
+    for (var i = 0; i < cabG.cols.length; i++) linhaG.push('');
+    function porG(padroes, v) {
+      var k = indiceDe_(cabG.cols, padroes);
+      if (k >= 0 && v !== '' && v != null) linhaG[k] = v;
     }
-    if (iSocio < 0) throw new Error('Não existe uma coluna para «' + socio + '» no livro de movimentos.');
+    porG([/^data$/i], dados.data || '');
+    porG([/^tipo$/i], dados.tipo || '');
+    porG([/categoria/i], dados.categoria || '');
+    porG([/descri/i, /^item$/i], dados.descricao || '');
+    porG([/^valor/i, /montante/i], valor);
+    porG([/sentido|natureza|entrada/i], sentidoDe_(dados.tipo));
+    porG([/^meio/i, /forma\s*de\s*pagamento/i, /^conta$/i],
+         dados.meio || (eSocio ? 'Sócio' : ''));
+    porG([/pago\s*por|respons|contraparte|fornecedor/i], quem);
+    porG([/^(vf|viagem)$/i], dados.viagem ? String(dados.viagem).replace(/\D/g, '') : '');
+    porG([/nota|observ/i], dados.nota || '');
+    shG.appendRow(linhaG);
+    escritas.push(FOLHA_GERAL);
 
-    var linha = [];
-    for (var j = 0; j < cab.cols.length; j++) linha.push('');
-    function por(padroes, valorCelula) {
-      var k = indiceDe_(cab.cols, padroes);
-      if (k >= 0 && valorCelula !== '' && valorCelula != null) linha[k] = valorCelula;
+    /* 2) livro dos investidores — só quando quem pagou foi um sócio */
+    if (eSocio) {
+      var shI = folhaEntre_(PLANO_ID, [FOLHA_MOVS, FOLHA_MOVS_ALT]);
+      var cabI = cabecalho_(shI);
+      var iSocio = -1;
+      for (var j = 0; j < cabI.cols.length; j++) {
+        if (cabI.cols[j].toLowerCase() === quem.toLowerCase()) { iSocio = j; break; }
+      }
+      if (iSocio < 0) {
+        throw new Error('Movimento gravado no livro geral, mas «' + quem +
+          '» não tem coluna no livro dos investidores — acrescenta-a para a conta corrente ficar certa.');
+      }
+      var linhaI = [];
+      for (var k2 = 0; k2 < cabI.cols.length; k2++) linhaI.push('');
+      function porI(padroes, v) {
+        var k = indiceDe_(cabI.cols, padroes);
+        if (k >= 0 && v !== '' && v != null) linhaI[k] = v;
+      }
+      porI([/^data$/i], dados.data || '');
+      porI([/^item$/i], dados.descricao || dados.categoria || '');
+      porI([/descri/i, /nota/i], dados.descricao || '');
+      porI([/^tipo$/i], dados.tipo || '');
+      porI([/categoria/i], dados.categoria || '');
+      porI([/^(vf|viagem)$/i], dados.viagem ? String(dados.viagem).replace(/\D/g, '') : '');
+      linhaI[iSocio] = valor;
+      shI.appendRow(linhaI);
+      escritas.push(shI.getName());
     }
-    por([/^data$/i], dados.data || '');
-    por([/^item$/i], dados.item || '');
-    por([/descri/i, /nota/i], dados.descricao || '');
-    por([/^tipo$/i], dados.tipo || '');
-    por([/categoria/i], dados.categoria || '');
-    por([/^(vf|viagem)$/i], dados.viagem ? String(dados.viagem).replace(/\D/g, '') : '');
-    linha[iSocio] = valor;
 
-    sh.appendRow(linha);
-    return { ok: true };
+    return { ok: true, folhas: escritas };
   } finally {
     lock.releaseLock();
   }
+}
+
+/** Entrada (dinheiro que chega) ou saída, a partir do tipo. */
+function sentidoDe_(tipo) {
+  var t = String(tipo || '').toLowerCase();
+  return (t.indexOf('supriment') === 0 || t.indexOf('recebiment') === 0) ? 'Entrada' : 'Saída';
 }
 
 /** Códigos de viagem existentes, para o formulário de abastecimentos. */

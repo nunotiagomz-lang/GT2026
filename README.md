@@ -22,27 +22,35 @@ sub-separadores no topo mostram as folhas do Excel dessa área.
 | Viagens | Motoristas | `Viagens` (derivado) | Ficha por motorista: viagens, km, margem, saldo |
 | Viagens | Clientes | `Viagens` (derivado) | Ficha por cliente: viagens, faturado, margem |
 | Viaturas | — | `Viaturas` (+ `Viagens`) | Frota com consumo esperado → ficha da viatura e as suas viagens |
-| Contas | Movimentos | `Movimentos Investimentos` | Livro de movimentos, filtrável por sócio, tipo e categoria |
-| Contas | Categorias | `Movimentos Investimentos` | Para onde foi o dinheiro: totais por tipo e por categoria |
-| Contas | Sócios | `Sócios - Contas Correntes` | Cartão por sócio: pago, quota e saldo (credor / falta contribuir) |
-| Contas | Plano | `Investimentos Iniciais` | Itens do plano com progresso pago/estimado e totais |
-| Contas | Acertos | `Acertos entre Sócios` | Tabela de reembolsos entre sócios |
+| Contas | Investimentos | `Movimentos dos Investidores` (+ sócios, acertos) | Tudo o que passa pelos sócios: contas correntes, movimentos e acertos |
+| Contas | Movimentos Correntes | `Movimentos Geral` | Contabilidade e tesouraria de toda a empresa |
 | Faturação | — | *(em breve)* | — |
 
-### O livro de contas
+### Os dois livros de contas
 
-A folha `Movimentos Investimentos` é o **livro de todo o dinheiro que se move** —
-uma só tabela, várias vistas. Além das colunas por sócio, reconhece:
+**`Movimentos Geral`** é o livro principal: **todos** os movimentos da empresa,
+uma linha por lançamento com um valor único.
 
 | Coluna | Para que serve |
 |---|---|
-| `Tipo` | `Investimento` (dura anos), `Despesa` (consome-se agora), `Suprimento` (entrada dos sócios), `Recebimento` |
+| `Data` | data do movimento |
+| `Tipo` | `Investimento` (dura anos), `Despesa` (consome-se agora), `Suprimento` (entrada de um sócio), `Recebimento` |
 | `Categoria` | Camião, Combustível, Portagens, Motorista, Manutenção, Seguros… |
-| `VF` ou `Viagem` | liga o movimento à viagem respetiva (toca no código para a abrir) |
+| `Descrição` | o que foi |
+| `Valor (MZN)` | sempre positivo — o sentido vem do tipo |
+| `Sentido` | opcional (`Entrada` / `Saída`); sem ela, deduz-se do tipo |
+| `Meio` | `Caixa`, `Banco` ou `Sócio` — é o que dá a tesouraria |
+| `Pago por` | sócio, fornecedor ou cliente |
+| `VF` | liga o movimento à viagem (toca no código para a abrir) |
 
-Sem essas colunas a app funciona na mesma; assim que aparecerem, ganham-se os
-filtros por tipo e a vista **Categorias** — que permite tocar numa categoria
-para ver os movimentos dela.
+**`Movimentos dos Investidores`** continua a ser o livro dos sócios — investimento,
+futuros dividendos e devoluções de capital. Mantém **uma coluna por sócio**, e é
+dele que sai a conta corrente de cada um.
+
+Um lançamento pago por um sócio entra nos **dois** livros: no geral para o
+controlo da empresa, e no dos investidores na coluna desse sócio. Pago pela
+empresa (caixa ou banco), entra só no geral. É o formulário que trata disto —
+ver [`backoffice/README.md`](backoffice/README.md).
 
 ### Sub-separadores que se adaptam ao Excel
 

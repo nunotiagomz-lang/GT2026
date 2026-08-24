@@ -53,7 +53,7 @@
 <div class="tabs">
   <button id="tabViagem" class="on" onclick="mostrar('viagem')">Viagem</button>
   <button id="tabAbast" onclick="mostrar('abast')">Abastecimento</button>
-  <button id="tabMov" onclick="mostrar('mov')">Movimento</button>
+  <button id="tabMov" onclick="mostrar('mov')">Contas</button>
 </div>
 
 <div id="painelViagem">
@@ -87,23 +87,31 @@
     <label for="mvData">Data</label>
     <input id="mvData" type="date">
     <label for="mvTipo">Tipo</label>
-    <select id="mvTipo"></select>
+    <select id="mvTipo" onchange="atualizarDica()"></select>
     <div class="hint" id="mvTipoHint"></div>
     <label for="mvCategoria">Categoria</label>
     <input id="mvCategoria" type="text" list="lCategorias" placeholder="Ex.: Combustível">
     <datalist id="lCategorias"></datalist>
-    <label for="mvItem">Item</label>
-    <input id="mvItem" type="text" placeholder="Ex.: Despesas Extras">
-    <label for="mvDescricao">Descrição / nota</label>
+    <label for="mvDescricao">Descrição</label>
     <input id="mvDescricao" type="text" placeholder="Ex.: Portagem Maputo - Tete">
-    <label for="mvViagem">Viagem (opcional)</label>
-    <select id="mvViagem"><option value="">— sem viagem —</option></select>
-    <label for="mvSocio">Pago por</label>
-    <select id="mvSocio"></select>
     <label for="mvValor">Valor (MZN)</label>
     <input id="mvValor" type="number" inputmode="decimal" step="any" placeholder="0">
+    <label for="mvQuem">Pago por / recebido de</label>
+    <select id="mvQuem" onchange="atualizarDica()"></select>
+    <div class="hint" id="mvQuemHint"></div>
+    <label for="mvMeio">Meio</label>
+    <select id="mvMeio">
+      <option value="">— automático —</option>
+      <option value="Caixa">Caixa</option>
+      <option value="Banco">Banco</option>
+      <option value="Sócio">Sócio</option>
+    </select>
+    <label for="mvViagem">Viagem (opcional)</label>
+    <select id="mvViagem"><option value="">— sem viagem —</option></select>
+    <label for="mvNota">Nota (opcional)</label>
+    <input id="mvNota" type="text" placeholder="Ex.: nº do documento">
   </div>
-  <button class="primary" onclick="gravarMovimento()">Guardar movimento</button>
+  <button class="primary" onclick="gravarMovimento()">Guardar lançamento</button>
   <div class="msg" id="msgMov"></div>
 </div>
 
@@ -222,24 +230,45 @@ function gravarAbastecimento() {
     .guardarAbastecimento(codigo, dados);
 }
 
+var CFG_MOV = null;
+
 function construirMovimento(cfg) {
+  CFG_MOV = cfg;
   var opcoes = function (lista) {
     return lista.map(function (v) {
       return '<option value="' + v.replace(/"/g, '&quot;') + '">' + v + '</option>';
     }).join('');
   };
   document.getElementById('mvTipo').innerHTML = opcoes(cfg.tipos);
-  document.getElementById('mvSocio').innerHTML = opcoes(cfg.socios);
+  /* quem pagou: os sócios (vão também para o livro dos investidores) ou a empresa */
+  document.getElementById('mvQuem').innerHTML =
+    opcoes(cfg.socios) + '<option value="' + cfg.pagadorEmpresa + '">' + cfg.pagadorEmpresa + ' (caixa / banco)</option>';
   document.getElementById('lCategorias').innerHTML = cfg.categorias.map(function (v) {
     return '<option value="' + v.replace(/"/g, '&quot;') + '">';
   }).join('');
+  atualizarDica();
+}
 
-  var avisos = [];
-  if (!cfg.temTipo) avisos.push('coluna «Tipo»');
-  if (!cfg.temCategoria) avisos.push('coluna «Categoria»');
-  document.getElementById('mvTipoHint').textContent = avisos.length
-    ? 'Falta a ' + avisos.join(' e a ') + ' na folha de movimentos — o que escreveres aqui não será guardado até a criares.'
-    : 'Investimento dura anos (camião, licenças). Despesa consome-se agora (combustível, portagens, diárias).';
+/* explica, antes de gravar, o que vai acontecer e onde */
+function atualizarDica() {
+  if (!CFG_MOV) return;
+  var tipo = document.getElementById('mvTipo').value;
+  document.getElementById('mvTipoHint').textContent = tipo === 'Investimento'
+    ? 'Investimento dura anos (camião, licenças) — não é despesa do mês.'
+    : tipo === 'Despesa'
+      ? 'Despesa consome-se agora (combustível, portagens, diárias).'
+      : tipo === 'Suprimento'
+        ? 'Entrada de dinheiro de um sócio na empresa.'
+        : 'Entrada de dinheiro de um cliente ou terceiro.';
+
+  var quem = document.getElementById('mvQuem').value;
+  var eSocio = CFG_MOV.socios.some(function (s) { return s === quem; });
+  var semColuna = eSocio && CFG_MOV.socioCols.length && CFG_MOV.socioCols.indexOf(quem) === -1;
+  document.getElementById('mvQuemHint').textContent = eSocio
+    ? (semColuna
+        ? 'Atenção: «' + quem + '» não tem coluna no livro dos investidores — acrescenta-a antes de gravar.'
+        : 'Vai para os dois livros: Movimentos Geral e Movimentos dos Investidores (conta corrente de ' + quem + ').')
+    : 'Vai só para o livro Movimentos Geral.';
 }
 
 function gravarMovimento() {
@@ -247,18 +276,19 @@ function gravarMovimento() {
     data: formatarData(document.getElementById('mvData').value),
     tipo: document.getElementById('mvTipo').value,
     categoria: document.getElementById('mvCategoria').value,
-    item: document.getElementById('mvItem').value,
     descricao: document.getElementById('mvDescricao').value,
+    valor: document.getElementById('mvValor').value,
+    quem: document.getElementById('mvQuem').value,
+    meio: document.getElementById('mvMeio').value,
     viagem: document.getElementById('mvViagem').value,
-    socio: document.getElementById('mvSocio').value,
-    valor: document.getElementById('mvValor').value
+    nota: document.getElementById('mvNota').value
   };
   if (!dados.valor) { mensagem('msgMov', 'Indica o valor.', true); return; }
 
   google.script.run
-    .withSuccessHandler(function () {
-      mensagem('msgMov', '✓ Movimento guardado no livro de contas.', false);
-      ['mvItem', 'mvDescricao', 'mvValor'].forEach(function (id) {
+    .withSuccessHandler(function (res) {
+      mensagem('msgMov', '✓ Lançamento guardado em: ' + res.folhas.join(' e ') + '.', false);
+      ['mvDescricao', 'mvValor', 'mvNota'].forEach(function (id) {
         document.getElementById(id).value = '';
       });
       recarregar();
