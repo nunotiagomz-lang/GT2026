@@ -26,7 +26,7 @@ Corre no Google Apps Script, dentro da conta Google da empresa.
 ## Instalação (uma vez, ~5 minutos)
 
 1. Vai a [script.google.com](https://script.google.com) → **Novo projeto**.
-2. Renomeia o projeto para `Nova Logística — Back office`.
+2. Renomeia o projeto para `CNET Logistics — Back office`.
 3. Cola o conteúdo de `Codigo.gs` no ficheiro `Código.gs` que já existe.
 4. **+ (Ficheiros) → HTML**, dá-lhe o nome **`Formulario`** (sem acento, tal
    como está no código) e cola o conteúdo de `Formulario.html`.
