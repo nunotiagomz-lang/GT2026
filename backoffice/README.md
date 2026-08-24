@@ -18,10 +18,16 @@ Corre no Google Apps Script, dentro da conta Google da empresa.
 - **Abastecimento** — escolhes a viagem e lanças data, local, litros, preço e
   km. O valor total é calculado (litros × preço) e a linha vai para a folha
   dessa viagem.
-- **Movimento** — lança no livro de contas: data, **tipo** (Investimento /
-  Despesa / Suprimento / Recebimento), **categoria**, item, descrição, viagem
-  (opcional) e quem pagou. O valor vai para a coluna desse sócio, por isso a
-  conta corrente continua certa.
+- **Contas** — o lançamento de contas: data, **tipo** (Investimento / Despesa /
+  Suprimento / Recebimento), **categoria**, descrição, valor, **quem pagou**,
+  meio (caixa / banco / sócio), viagem e nota.
+
+  É aqui que está a regra importante: o lançamento entra **sempre** em
+  `Movimentos Geral`; e quando quem pagou foi um **sócio**, entra **também** em
+  `Movimentos dos Investidores`, na coluna desse sócio. É isso que mantém a
+  conta corrente certa — tanto para investimentos como para despesas que um
+  sócio adianta. Pago pela empresa (caixa ou banco), fica só no livro geral.
+  O formulário diz-te, antes de gravares, em que folhas vai escrever.
 
 ## Instalação (uma vez, ~5 minutos)
 
