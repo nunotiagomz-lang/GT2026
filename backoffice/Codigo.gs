@@ -1,5 +1,5 @@
 /**
- * Back office da Nova Logística, Lda
+ * Back office da CNET Logistics, Lda
  * ----------------------------------
  * App web (Google Apps Script) para LANÇAR dados nas folhas do Google Sheets.
  * A app de consulta (o site) continua só a ler — quem escreve é este back office.
@@ -8,7 +8,7 @@
  */
 
 /* IDs dos ficheiros no Drive (os mesmos que o site usa) */
-var PLANO_ID = '1iLkuI2Lom-klgfCtcrfSJMvbitZpXpWGPzoSQjZ0G1I';   // Plano_Investimento_Transportes
+var PLANO_ID = '1iLkuI2Lom-klgfCtcrfSJMvbitZpXpWGPzoSQjZ0G1I';   // CNET LOGISTICS MGMT
 var ABAST_ID = '1bpq6tAXb40dbZ0G945FxKanbIipnRDStO_nhYuuaxKo';   // planilha de abastecimentos
 
 var FOLHA_VIAGENS  = 'Viagens';
@@ -29,7 +29,7 @@ var EMAILS_AUTORIZADOS = [
 
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('Formulario')
-    .setTitle('Nova Logística · Lançamentos')
+    .setTitle('CNET Logistics · Lançamentos')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }

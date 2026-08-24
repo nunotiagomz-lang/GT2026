@@ -1,10 +1,11 @@
-# Nova Logística, Lda · Plano de Investimento
+# CNET Logistics, Lda · Gestão
 
-App web (só de consulta) para os sócios da Nova Logística, Lda acompanharem o plano de
-investimento. Os dados vêm **sempre** do ficheiro Google Sheets
-**`Plano_Investimento_Transportes`** no Google Drive — a app não edita nada, apenas
-apresenta. Cada vez que alguém abre (ou volta a abrir) a página, os dados são lidos
-de novo do ficheiro, por isso qualquer alteração no Excel aparece automaticamente.
+App web (só de consulta) para os sócios da CNET Logistics, Lda acompanharem a
+gestão da empresa — investimentos, viagens, viaturas e contas. Os dados vêm
+**sempre** do ficheiro Google Sheets **`CNET LOGISTICS MGMT`** no Google Drive —
+a app não edita nada, apenas apresenta. Cada vez que alguém abre (ou volta a
+abrir) a página, os dados são lidos de novo do ficheiro, por isso qualquer
+alteração no Excel aparece automaticamente.
 
 Tudo está num único ficheiro: **`index.html`**. Sem servidores, sem base de dados,
 sem dependências.
@@ -110,7 +111,7 @@ rede, mostrando os últimos dados guardados (com aviso da data).
 
 ## Requisito único: partilha do ficheiro
 
-No Google Drive, o ficheiro `Plano_Investimento_Transportes` tem de estar partilhado
+No Google Drive, o ficheiro `CNET LOGISTICS MGMT` tem de estar partilhado
 como **«Qualquer pessoa com o link» → «Leitor»** (Partilhar → Acesso geral).
 Sem isto a app não consegue ler os dados. Ninguém consegue editar por essa via —
 apenas ler.
