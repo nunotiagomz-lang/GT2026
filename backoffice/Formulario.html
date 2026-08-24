@@ -96,11 +96,13 @@
     <input id="mvDescricao" type="text" placeholder="Ex.: Portagem Maputo - Tete">
     <label for="mvValor">Valor (MZN)</label>
     <input id="mvValor" type="number" inputmode="decimal" step="any" placeholder="0">
-    <label for="mvQuem">Pago por / recebido de</label>
-    <select id="mvQuem" onchange="atualizarDica()"></select>
+    <label for="mvQuem">Pago Por</label>
+    <input id="mvQuem" type="text" list="lPagadores" oninput="atualizarDica()"
+           placeholder="Um sócio, a empresa, ou um fornecedor / cliente">
+    <datalist id="lPagadores"></datalist>
     <div class="hint" id="mvQuemHint"></div>
     <label for="mvMeio">Meio</label>
-    <select id="mvMeio">
+    <select id="mvMeio" onchange="this.dataset.tocado='1'">
       <option value="">— automático —</option>
       <option value="Caixa">Caixa</option>
       <option value="Banco">Banco</option>
@@ -240,12 +242,14 @@ function construirMovimento(cfg) {
     }).join('');
   };
   document.getElementById('mvTipo').innerHTML = opcoes(cfg.tipos);
-  /* quem pagou: os sócios (vão também para o livro dos investidores) ou a empresa */
-  document.getElementById('mvQuem').innerHTML =
-    opcoes(cfg.socios) + '<option value="' + cfg.pagadorEmpresa + '">' + cfg.pagadorEmpresa + ' (caixa / banco)</option>';
-  document.getElementById('lCategorias').innerHTML = cfg.categorias.map(function (v) {
-    return '<option value="' + v.replace(/"/g, '&quot;') + '">';
-  }).join('');
+  var sugestoes = function (lista) {
+    return lista.map(function (v) { return '<option value="' + v.replace(/"/g, '&quot;') + '">'; }).join('');
+  };
+  document.getElementById('lCategorias').innerHTML = sugestoes(cfg.categorias);
+  /* sócios primeiro (são os que também vão para o livro dos investidores),
+     depois a empresa e quem já apareceu antes */
+  document.getElementById('lPagadores').innerHTML =
+    sugestoes(cfg.socios.concat([cfg.pagadorEmpresa]).concat(cfg.pagadores || []));
   atualizarDica();
 }
 
@@ -261,14 +265,23 @@ function atualizarDica() {
         ? 'Entrada de dinheiro de um sócio na empresa.'
         : 'Entrada de dinheiro de um cliente ou terceiro.';
 
-  var quem = document.getElementById('mvQuem').value;
-  var eSocio = CFG_MOV.socios.some(function (s) { return s === quem; });
-  var semColuna = eSocio && CFG_MOV.socioCols.length && CFG_MOV.socioCols.indexOf(quem) === -1;
-  document.getElementById('mvQuemHint').textContent = eSocio
-    ? (semColuna
-        ? 'Atenção: «' + quem + '» não tem coluna no livro dos investidores — acrescenta-a antes de gravar.'
-        : 'Vai para os dois livros: Movimentos Geral e Movimentos dos Investidores (conta corrente de ' + quem + ').')
-    : 'Vai só para o livro Movimentos Geral.';
+  var quem = document.getElementById('mvQuem').value.trim();
+  var socio = CFG_MOV.socios.filter(function (s) {
+    return s.toLowerCase() === quem.toLowerCase();
+  })[0];
+  var semColuna = socio && CFG_MOV.socioCols.length &&
+    !CFG_MOV.socioCols.some(function (c) { return c.toLowerCase() === quem.toLowerCase(); });
+  document.getElementById('mvQuemHint').textContent = !quem
+    ? 'Escreve um sócio (entra também na conta corrente dele) ou um fornecedor / cliente.'
+    : socio
+      ? (semColuna
+          ? 'Atenção: «' + socio + '» não tem coluna no livro dos investidores — acrescenta-a antes de gravar.'
+          : 'Vai para os dois livros: Movimentos Geral e Movimentos dos Investidores (conta corrente de ' + socio + ').')
+      : 'Vai só para o livro Movimentos Geral.';
+
+  /* meio automático: se foi um sócio a pagar, o dinheiro saiu do bolso dele */
+  var meio = document.getElementById('mvMeio');
+  if (!meio.dataset.tocado) meio.value = socio ? 'Sócio' : '';
 }
 
 function gravarMovimento() {
