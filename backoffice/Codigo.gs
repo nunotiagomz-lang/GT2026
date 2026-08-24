@@ -13,6 +13,11 @@ var ABAST_ID = '1bpq6tAXb40dbZ0G945FxKanbIipnRDStO_nhYuuaxKo';   // planilha de 
 
 var FOLHA_VIAGENS  = 'Viagens';
 var FOLHA_VIATURAS = 'Viaturas';
+var FOLHA_MOVS     = 'Movimentos Investimentos';   // o livro de contas
+var FOLHA_SOCIOS   = 'Sócios - Contas Correntes';
+
+/* Tipos possíveis de um movimento (o que o formulário oferece). */
+var TIPOS = ['Investimento', 'Despesa', 'Suprimento', 'Recebimento'];
 
 /* Quem pode lançar dados. Lista vazia = qualquer pessoa com o link
    (só faz sentido se a app for publicada apenas para a organização). */
@@ -192,6 +197,104 @@ function guardarAbastecimento(codigo, dados) {
       dados.km ? Number(dados.km) : ''
     ]);
     return { ok: true, folha: nomeFolha };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Dados para o formulário de movimentos: colunas do livro, nomes dos sócios
+ * (que são colunas próprias) e as categorias já usadas.
+ */
+function obterConfiguracaoMovimentos() {
+  verificarAcesso_();
+  var sh = folha_(PLANO_ID, FOLHA_MOVS);
+  var cab = cabecalho_(sh);
+  var ultima = sh.getLastRow();
+  var dados = ultima > cab.linha
+    ? sh.getRange(cab.linha + 1, 1, ultima - cab.linha, cab.cols.length).getValues()
+    : [];
+
+  /* sócios: cabeçalhos do livro que batem com a folha de contas correntes */
+  var socios = [];
+  try {
+    var shS = folha_(PLANO_ID, FOLHA_SOCIOS);
+    var cabS = cabecalho_(shS);
+    var iNome = indiceDe_(cabS.cols, [/^s[óo]cio$/i, /s[óo]cio/i]);
+    if (iNome < 0) iNome = 0;
+    if (shS.getLastRow() > cabS.linha) {
+      shS.getRange(cabS.linha + 1, iNome + 1, shS.getLastRow() - cabS.linha, 1)
+        .getValues().forEach(function (r) {
+          var v = String(r[0]).trim();
+          if (v && !/^total/i.test(v) && socios.indexOf(v) === -1) socios.push(v);
+        });
+    }
+  } catch (e) { /* folha de sócios ainda não existe */ }
+
+  var socioCols = socios.filter(function (nome) {
+    return cab.cols.some(function (c) { return c.toLowerCase() === nome.toLowerCase(); });
+  });
+
+  var iCat = indiceDe_(cab.cols, [/categoria/i]);
+  var categorias = [];
+  if (iCat >= 0) {
+    dados.forEach(function (r) {
+      var v = String(r[iCat]).trim();
+      if (v && categorias.indexOf(v) === -1) categorias.push(v);
+    });
+    categorias.sort();
+  }
+
+  return {
+    colunas: cab.cols.filter(function (c) { return c; }),
+    socios: socioCols.length ? socioCols : socios,
+    categorias: categorias,
+    tipos: TIPOS,
+    temTipo: indiceDe_(cab.cols, [/^tipo$/i]) >= 0,
+    temCategoria: iCat >= 0
+  };
+}
+
+/**
+ * Grava um movimento no livro de contas.
+ * `dados`: { data, item, descricao, tipo, categoria, viagem, socio, valor }
+ * O valor vai para a coluna do sócio que pagou.
+ */
+function guardarMovimento(dados) {
+  verificarAcesso_();
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var sh = folha_(PLANO_ID, FOLHA_MOVS);
+    var cab = cabecalho_(sh);
+
+    var valor = Number(dados.valor);
+    if (!valor) throw new Error('Indica um valor.');
+    var socio = String(dados.socio || '').trim();
+    if (!socio) throw new Error('Indica quem pagou.');
+
+    var iSocio = -1;
+    for (var i = 0; i < cab.cols.length; i++) {
+      if (cab.cols[i].toLowerCase() === socio.toLowerCase()) { iSocio = i; break; }
+    }
+    if (iSocio < 0) throw new Error('Não existe uma coluna para «' + socio + '» no livro de movimentos.');
+
+    var linha = [];
+    for (var j = 0; j < cab.cols.length; j++) linha.push('');
+    function por(padroes, valorCelula) {
+      var k = indiceDe_(cab.cols, padroes);
+      if (k >= 0 && valorCelula !== '' && valorCelula != null) linha[k] = valorCelula;
+    }
+    por([/^data$/i], dados.data || '');
+    por([/^item$/i], dados.item || '');
+    por([/descri/i, /nota/i], dados.descricao || '');
+    por([/^tipo$/i], dados.tipo || '');
+    por([/categoria/i], dados.categoria || '');
+    por([/^(vf|viagem)$/i], dados.viagem ? String(dados.viagem).replace(/\D/g, '') : '');
+    linha[iSocio] = valor;
+
+    sh.appendRow(linha);
+    return { ok: true };
   } finally {
     lock.releaseLock();
   }
