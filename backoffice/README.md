@@ -18,31 +18,45 @@ Corre no Google Apps Script, dentro da conta Google da empresa.
 - **Abastecimento** — escolhes a viagem e lanças data, local, litros, preço e
   km. O valor total é calculado (litros × preço) e a linha vai para a folha
   dessa viagem.
-- **Contas** — o lançamento de contas: data, **tipo** (Investimento / Despesa /
-  Suprimento / Recebimento), **categoria**, descrição, valor, **quem pagou**,
-  meio (caixa / banco / sócio), viagem e nota.
+- **Contas** — o livro geral da empresa. Data, **tipo** (Despesa / Recebimento /
+  Investimento / Suprimento), **categoria**, descrição, valor, **Pago Por**
+  (um sócio, a empresa, ou um fornecedor / cliente), meio (caixa / banco /
+  sócio), viagem e nota. Escreve **apenas** em `Movimentos Geral`.
 
-  É aqui que está a regra importante: o lançamento entra **sempre** em
-  `Movimentos Geral`; e quando quem pagou foi um **sócio**, entra **também** em
-  `Movimentos dos Investidores`, na coluna desse sócio. É isso que mantém a
-  conta corrente certa — tanto para investimentos como para despesas que um
-  sócio adianta. Pago pela empresa (caixa ou banco), fica só no livro geral.
-  O formulário diz-te, antes de gravares, em que folhas vai escrever.
+- **Investimentos** — o dinheiro dos sócios. Tem os mesmos campos, mas em vez de
+  um valor único tem **uma caixa por sócio**; o **total é a soma** dessas caixas
+  e vai-se atualizando à medida que escreves.
+
+  Escreve nas **duas** folhas: em `Movimentos dos Investidores` uma linha com o
+  valor de cada sócio na coluna dele, e em `Movimentos Geral` uma linha com o
+  **somatório**, já com `Meio = Sócio` e o `Pago Por` preenchido com os nomes de
+  quem contribuiu. É assim que a conta corrente e a contabilidade ficam ambas
+  certas com um só lançamento.
+
+  Os tipos aqui são `Investimento`, `Suprimento`, `Devolução` e `Dividendo` — os
+  dois últimos são dinheiro que sai para o sócio, e a app desconta-os ao que ele
+  tem investido.
 
 ## Instalação (uma vez, ~5 minutos)
 
-1. Vai a [script.google.com](https://script.google.com) → **Novo projeto**.
-2. Renomeia o projeto para `CNET Logistics — Back office`.
-3. Cola o conteúdo de `Codigo.gs` no ficheiro `Código.gs` que já existe.
-4. **+ (Ficheiros) → HTML**, dá-lhe o nome **`Formulario`** (sem acento, tal
-   como está no código) e cola o conteúdo de `Formulario.html`.
-5. Confirma no topo de `Codigo.gs` os IDs dos ficheiros e a lista
+Faz isto **no computador** — copiar código no telemóvel é penoso.
+
+1. Abre o `CNET LOGISTICS MGMT` no Google Sheets → menu **Extensões → Apps
+   Script**. (Assim o projeto fica agarrado ao ficheiro e voltas lá sempre por
+   este caminho.) Renomeia o projeto para `CNET Logistics — Back office`.
+2. Apaga o que estiver no `Código.gs` e cola o conteúdo de
+   [`Codigo.gs`](https://raw.githubusercontent.com/nunotiagomz-lang/GT2026/main/backoffice/Codigo.gs).
+3. **+ (Ficheiros) → HTML**, dá-lhe o nome **`Formulario`** (sem acento, tal
+   como está no código) e cola o conteúdo de
+   [`Formulario.html`](https://raw.githubusercontent.com/nunotiagomz-lang/GT2026/main/backoffice/Formulario.html).
+4. Confirma no topo de `Codigo.gs` os IDs dos ficheiros e a lista
    `EMAILS_AUTORIZADOS` — acrescenta os emails dos sócios que podem lançar dados.
-6. **Implementar → Nova implementação → Aplicação Web**:
+5. **Implementar → Nova implementação → Aplicação Web**:
    - *Executar como*: **Eu**
    - *Quem tem acesso*: **Qualquer pessoa com uma Conta Google**
      (o código só deixa passar os emails autorizados)
-7. Autoriza quando o Google pedir e guarda o link que aparece no fim.
+6. Autoriza quando o Google pedir (avisa que a app "não é verificada" — é
+   normal, é tua: **Avançadas → Aceder a…**) e guarda o link que aparece no fim.
 
 No telemóvel, abre esse link e usa "Adicionar ao ecrã principal" — fica com
 ícone próprio, ao lado da app de consulta.

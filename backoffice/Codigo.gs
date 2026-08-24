@@ -21,8 +21,13 @@ var FOLHA_SOCIOS   = 'Sócios - Contas Correntes';
 /* Quem pagou, quando não foi um sócio (sai da conta da empresa). */
 var PAGADOR_EMPRESA = 'Empresa';
 
-/* Tipos possíveis de um movimento (o que o formulário oferece). */
-var TIPOS = ['Investimento', 'Despesa', 'Suprimento', 'Recebimento'];
+/* Tipos que o formulário «Contas» oferece (livro geral). */
+var TIPOS = ['Despesa', 'Recebimento', 'Investimento', 'Suprimento'];
+
+/* Tipos que o formulário «Investimentos» oferece (livro dos sócios).
+   Devolução e Dividendo são dinheiro que sai para o sócio — a app
+   desconta-os ao que ele tem investido. */
+var TIPOS_INVESTIDORES = ['Investimento', 'Suprimento', 'Devolução', 'Dividendo'];
 
 /* Quem pode lançar dados. Lista vazia = qualquer pessoa com o link
    (só faz sentido se a app for publicada apenas para a organização). */
@@ -295,6 +300,7 @@ function obterConfiguracaoMovimentos() {
     categorias: categorias,
     pagadores: outros,
     tipos: TIPOS,
+    tiposInvestidores: TIPOS_INVESTIDORES,
     pagadorEmpresa: PAGADOR_EMPRESA,
     temGeral: temGeral,
     colunasGeral: colunasGeral
@@ -302,12 +308,33 @@ function obterConfiguracaoMovimentos() {
 }
 
 /**
- * Lançamento de contas.
- * Escreve SEMPRE no livro geral (`Movimentos Geral`). Quando quem pagou foi
- * um sócio, escreve TAMBÉM no livro dos investidores, na coluna desse sócio —
- * é isso que mantém a conta corrente dos sócios correta, tanto para
- * investimentos como para despesas adiantadas por eles.
- *
+ * Escreve uma linha no livro geral. Usado pelos dois formulários.
+ * `dados`: { data, tipo, categoria, descricao, valor, meio, quem, viagem, nota }
+ */
+function escreverGeral_(dados) {
+  var sh = folha_(PLANO_ID, FOLHA_GERAL);
+  var cab = cabecalho_(sh);
+  var linha = [];
+  for (var i = 0; i < cab.cols.length; i++) linha.push('');
+  function por(padroes, v) {
+    var k = indiceDe_(cab.cols, padroes);
+    if (k >= 0 && v !== '' && v != null) linha[k] = v;
+  }
+  por([/^data$/i], dados.data || '');
+  por([/^tipo$/i], dados.tipo || '');
+  por([/categoria/i], dados.categoria || '');
+  por([/descri/i, /^item$/i], dados.descricao || '');
+  por([/^valor/i, /montante/i], Number(dados.valor));
+  por([/sentido|natureza|entrada/i], sentidoDe_(dados.tipo));
+  por([/^meio/i, /forma\s*de\s*pagamento/i, /^conta$/i], dados.meio || '');
+  por([/pago\s*por|respons|contraparte|fornecedor/i], dados.quem || '');
+  por([/^(vf|viagem)$/i], dados.viagem ? String(dados.viagem).replace(/\D/g, '') : '');
+  por([/nota|observ/i], dados.nota || '');
+  sh.appendRow(linha);
+}
+
+/**
+ * Formulário «Contas» — escreve APENAS no livro geral.
  * `dados`: { data, tipo, categoria, descricao, valor, meio, quem, viagem, nota }
  */
 function guardarMovimento(dados) {
@@ -315,68 +342,82 @@ function guardarMovimento(dados) {
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    var valor = Number(dados.valor);
-    if (!valor) throw new Error('Indica um valor.');
-    var quem = String(dados.quem || '').trim();
-    if (!quem) throw new Error('Indica quem pagou ou recebeu.');
+    if (!Number(dados.valor)) throw new Error('Indica um valor.');
+    if (!String(dados.quem || '').trim()) throw new Error('Indica quem pagou ou recebeu.');
+    escreverGeral_(dados);
+    return { ok: true, folhas: [FOLHA_GERAL] };
+  } finally {
+    lock.releaseLock();
+  }
+}
 
-    var cfg = obterConfiguracaoMovimentos();
-    var eSocio = cfg.socios.some(function (s) { return s.toLowerCase() === quem.toLowerCase(); });
-    var escritas = [];
+/**
+ * Formulário «Investimentos» — escreve nos DOIS livros.
+ * O valor de cada sócio vai para a coluna dele no livro dos investidores;
+ * a soma desses valores é o valor da linha no livro geral.
+ *
+ * `dados`: { data, tipo, categoria, descricao, viagem, nota,
+ *            valores: { "Tommy": 1000, "Nuno": 500, ... } }
+ */
+function guardarInvestimento(dados) {
+  verificarAcesso_();
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var valores = dados.valores || {};
+    var shI = folhaEntre_(PLANO_ID, [FOLHA_MOVS, FOLHA_MOVS_ALT]);
+    var cabI = cabecalho_(shI);
 
-    /* 1) livro geral — sempre */
-    var shG = folha_(PLANO_ID, FOLHA_GERAL);
-    var cabG = cabecalho_(shG);
-    var linhaG = [];
-    for (var i = 0; i < cabG.cols.length; i++) linhaG.push('');
-    function porG(padroes, v) {
-      var k = indiceDe_(cabG.cols, padroes);
-      if (k >= 0 && v !== '' && v != null) linhaG[k] = v;
-    }
-    porG([/^data$/i], dados.data || '');
-    porG([/^tipo$/i], dados.tipo || '');
-    porG([/categoria/i], dados.categoria || '');
-    porG([/descri/i, /^item$/i], dados.descricao || '');
-    porG([/^valor/i, /montante/i], valor);
-    porG([/sentido|natureza|entrada/i], sentidoDe_(dados.tipo));
-    porG([/^meio/i, /forma\s*de\s*pagamento/i, /^conta$/i],
-         dados.meio || (eSocio ? 'Sócio' : ''));
-    porG([/pago\s*por|respons|contraparte|fornecedor/i], quem);
-    porG([/^(vf|viagem)$/i], dados.viagem ? String(dados.viagem).replace(/\D/g, '') : '');
-    porG([/nota|observ/i], dados.nota || '');
-    shG.appendRow(linhaG);
-    escritas.push(FOLHA_GERAL);
-
-    /* 2) livro dos investidores — só quando quem pagou foi um sócio */
-    if (eSocio) {
-      var shI = folhaEntre_(PLANO_ID, [FOLHA_MOVS, FOLHA_MOVS_ALT]);
-      var cabI = cabecalho_(shI);
-      var iSocio = -1;
+    /* casa cada sócio com a coluna dele e soma o total */
+    var total = 0, contribuintes = [], colunas = {};
+    for (var nome in valores) {
+      var v = Number(valores[nome]);
+      if (!v) continue;
+      var idx = -1;
       for (var j = 0; j < cabI.cols.length; j++) {
-        if (cabI.cols[j].toLowerCase() === quem.toLowerCase()) { iSocio = j; break; }
+        if (cabI.cols[j].toLowerCase() === String(nome).toLowerCase()) { idx = j; break; }
       }
-      if (iSocio < 0) {
-        throw new Error('Movimento gravado no livro geral, mas «' + quem +
-          '» não tem coluna no livro dos investidores — acrescenta-a para a conta corrente ficar certa.');
+      if (idx < 0) {
+        throw new Error('«' + nome + '» não tem coluna na folha ' + shI.getName() +
+          ' — acrescenta-a antes de lançar.');
       }
-      var linhaI = [];
-      for (var k2 = 0; k2 < cabI.cols.length; k2++) linhaI.push('');
-      function porI(padroes, v) {
-        var k = indiceDe_(cabI.cols, padroes);
-        if (k >= 0 && v !== '' && v != null) linhaI[k] = v;
-      }
-      porI([/^data$/i], dados.data || '');
-      porI([/^item$/i], dados.descricao || dados.categoria || '');
-      porI([/descri/i, /nota/i], dados.descricao || '');
-      porI([/^tipo$/i], dados.tipo || '');
-      porI([/categoria/i], dados.categoria || '');
-      porI([/^(vf|viagem)$/i], dados.viagem ? String(dados.viagem).replace(/\D/g, '') : '');
-      linhaI[iSocio] = valor;
-      shI.appendRow(linhaI);
-      escritas.push(shI.getName());
+      colunas[idx] = v;
+      contribuintes.push(nome);
+      total += v;
     }
+    if (!total) throw new Error('Preenche o valor de pelo menos um sócio.');
 
-    return { ok: true, folhas: escritas };
+    /* 1) livro dos investidores: uma linha, o valor de cada sócio na sua coluna */
+    var linhaI = [];
+    for (var i = 0; i < cabI.cols.length; i++) linhaI.push('');
+    function porI(padroes, v) {
+      var k = indiceDe_(cabI.cols, padroes);
+      if (k >= 0 && v !== '' && v != null) linhaI[k] = v;
+    }
+    porI([/^data$/i], dados.data || '');
+    /* Item = o "quê" (categoria), Descrição = o detalhe — como na folha atual */
+    porI([/^item$/i], dados.categoria || dados.descricao || dados.tipo || '');
+    porI([/descri/i, /nota/i], dados.descricao || '');
+    porI([/^tipo$/i], dados.tipo || '');
+    porI([/categoria/i], dados.categoria || '');
+    porI([/^(vf|viagem)$/i], dados.viagem ? String(dados.viagem).replace(/\D/g, '') : '');
+    for (var col in colunas) linhaI[Number(col)] = colunas[col];
+    shI.appendRow(linhaI);
+
+    /* 2) livro geral: uma linha com o SOMATÓRIO */
+    escreverGeral_({
+      data: dados.data,
+      tipo: dados.tipo,
+      categoria: dados.categoria,
+      descricao: dados.descricao,
+      valor: total,
+      meio: 'Sócio',
+      quem: contribuintes.join(', '),
+      viagem: dados.viagem,
+      nota: dados.nota
+    });
+
+    return { ok: true, total: total, folhas: [shI.getName(), FOLHA_GERAL] };
   } finally {
     lock.releaseLock();
   }

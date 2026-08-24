@@ -43,6 +43,14 @@
   .msg.err { display: block; background: rgba(208,59,59,.12); color: var(--bad); }
   .hint { font-size: 11.5px; color: var(--ink-muted); margin-top: 6px; }
   .loading { text-align: center; color: var(--ink-2); padding: 30px 0; font-size: 14px; }
+  .titulo { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+            color: var(--ink-muted); margin-bottom: 10px; }
+  .socio-linha { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
+  .socio-linha label { flex: 1; margin: 0; font-size: 14px; font-weight: 650; color: var(--ink); }
+  .socio-linha input { flex: 0 0 46%; text-align: right; }
+  .total { display: flex; justify-content: space-between; align-items: baseline;
+           margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--hairline);
+           font-size: 15px; font-weight: 750; }
 </style>
 </head>
 <body>
@@ -54,6 +62,7 @@
   <button id="tabViagem" class="on" onclick="mostrar('viagem')">Viagem</button>
   <button id="tabAbast" onclick="mostrar('abast')">Abastecimento</button>
   <button id="tabMov" onclick="mostrar('mov')">Contas</button>
+  <button id="tabInv" onclick="mostrar('inv')">Investimentos</button>
 </div>
 
 <div id="painelViagem">
@@ -117,13 +126,40 @@
   <div class="msg" id="msgMov"></div>
 </div>
 
+<div id="painelInv" style="display:none">
+  <div class="card">
+    <label for="ivData">Data</label>
+    <input id="ivData" type="date">
+    <label for="ivTipo">Tipo</label>
+    <select id="ivTipo" onchange="atualizarDicaInv()"></select>
+    <div class="hint" id="ivTipoHint"></div>
+    <label for="ivCategoria">Categoria</label>
+    <input id="ivCategoria" type="text" list="lCategorias" placeholder="Ex.: Camião">
+    <label for="ivDescricao">Descrição</label>
+    <input id="ivDescricao" type="text" placeholder="Ex.: Sinal / entrada do camião">
+    <label for="ivViagem">Viagem (opcional)</label>
+    <select id="ivViagem"><option value="">— sem viagem —</option></select>
+    <label for="ivNota">Nota (opcional)</label>
+    <input id="ivNota" type="text" placeholder="Ex.: nº do documento">
+  </div>
+
+  <div class="card">
+    <div class="titulo">Valor por sócio (MZN)</div>
+    <div id="ivSocios"><div class="loading">A carregar os sócios…</div></div>
+    <div class="total" id="ivTotal">Total: 0 MZN</div>
+  </div>
+
+  <button class="primary" onclick="gravarInvestimento()">Guardar investimento</button>
+  <div class="msg" id="msgInv"></div>
+</div>
+
 <script>
 var CONFIG = null;
 
 function mostrar(qual) {
-  ['viagem', 'abast', 'mov'].forEach(function (q) {
-    var painel = { viagem: 'painelViagem', abast: 'painelAbast', mov: 'painelMov' }[q];
-    var aba = { viagem: 'tabViagem', abast: 'tabAbast', mov: 'tabMov' }[q];
+  ['viagem', 'abast', 'mov', 'inv'].forEach(function (q) {
+    var painel = { viagem: 'painelViagem', abast: 'painelAbast', mov: 'painelMov', inv: 'painelInv' }[q];
+    var aba = { viagem: 'tabViagem', abast: 'tabAbast', mov: 'tabMov', inv: 'tabInv' }[q];
     document.getElementById(painel).style.display = q === qual ? '' : 'none';
     document.getElementById(aba).classList.toggle('on', q === qual);
   });
@@ -251,6 +287,93 @@ function construirMovimento(cfg) {
   document.getElementById('lPagadores').innerHTML =
     sugestoes(cfg.socios.concat([cfg.pagadorEmpresa]).concat(cfg.pagadores || []));
   atualizarDica();
+  construirInvestimento(cfg);
+}
+
+/* ---- formulário Investimentos: uma caixa de valor por sócio ---- */
+function idDoSocio(nome) { return 'iv_' + nome.replace(/[^a-zA-Z0-9]/g, '_'); }
+
+function construirInvestimento(cfg) {
+  document.getElementById('ivTipo').innerHTML = (cfg.tiposInvestidores || cfg.tipos)
+    .map(function (v) { return '<option value="' + v + '">' + v + '</option>'; }).join('');
+
+  var lista = cfg.socioCols && cfg.socioCols.length ? cfg.socioCols : cfg.socios;
+  if (!lista.length) {
+    document.getElementById('ivSocios').innerHTML =
+      '<div class="loading">Sem sócios — verifica a folha «Sócios - Contas Correntes».</div>';
+    return;
+  }
+  var semColuna = cfg.socios.filter(function (s) {
+    return !(cfg.socioCols || []).some(function (c) { return c.toLowerCase() === s.toLowerCase(); });
+  });
+  document.getElementById('ivSocios').innerHTML = lista.map(function (nome) {
+    var id = idDoSocio(nome);
+    return '<div class="socio-linha"><label for="' + id + '">' + nome + '</label>' +
+      '<input id="' + id + '" type="number" inputmode="decimal" step="any" placeholder="0" ' +
+      'oninput="somarInvestimento()"></div>';
+  }).join('') + (semColuna.length
+    ? '<div class="hint">Sem coluna no livro dos investidores: ' + semColuna.join(', ') +
+      '. Acrescenta-a à folha para poderem ser lançados.</div>'
+    : '');
+  somarInvestimento();
+  atualizarDicaInv();
+}
+
+function somarInvestimento() {
+  if (!CFG_MOV) return 0;
+  var lista = CFG_MOV.socioCols && CFG_MOV.socioCols.length ? CFG_MOV.socioCols : CFG_MOV.socios;
+  var total = 0;
+  lista.forEach(function (nome) {
+    var el = document.getElementById(idDoSocio(nome));
+    if (el) total += Number(el.value) || 0;
+  });
+  document.getElementById('ivTotal').innerHTML =
+    '<span>Total</span><span>' + total.toLocaleString('pt-PT') + ' MZN</span>';
+  return total;
+}
+
+function atualizarDicaInv() {
+  var tipo = document.getElementById('ivTipo').value;
+  var saiParaSocio = /devolu|dividend/i.test(tipo);
+  document.getElementById('ivTipoHint').textContent = saiParaSocio
+    ? 'Dinheiro que sai para os sócios — desconta ao que cada um tem investido.'
+    : 'Dinheiro que os sócios põem na empresa.';
+}
+
+function gravarInvestimento() {
+  if (!CFG_MOV) return;
+  var lista = CFG_MOV.socioCols && CFG_MOV.socioCols.length ? CFG_MOV.socioCols : CFG_MOV.socios;
+  var valores = {};
+  lista.forEach(function (nome) {
+    var el = document.getElementById(idDoSocio(nome));
+    if (el && Number(el.value)) valores[nome] = Number(el.value);
+  });
+  if (!somarInvestimento()) { mensagem('msgInv', 'Preenche o valor de pelo menos um sócio.', true); return; }
+
+  google.script.run
+    .withSuccessHandler(function (res) {
+      mensagem('msgInv', '✓ ' + res.total.toLocaleString('pt-PT') +
+        ' MZN guardados em: ' + res.folhas.join(' e ') + '.', false);
+      ['ivDescricao', 'ivNota'].forEach(function (id) { document.getElementById(id).value = ''; });
+      lista.forEach(function (nome) {
+        var el = document.getElementById(idDoSocio(nome));
+        if (el) el.value = '';
+      });
+      somarInvestimento();
+      recarregar();
+    })
+    .withFailureHandler(function (err) {
+      mensagem('msgInv', 'Não foi possível guardar: ' + err.message, true);
+    })
+    .guardarInvestimento({
+      data: formatarData(document.getElementById('ivData').value),
+      tipo: document.getElementById('ivTipo').value,
+      categoria: document.getElementById('ivCategoria').value,
+      descricao: document.getElementById('ivDescricao').value,
+      viagem: document.getElementById('ivViagem').value,
+      nota: document.getElementById('ivNota').value,
+      valores: valores
+    });
 }
 
 /* explica, antes de gravar, o que vai acontecer e onde */
@@ -335,6 +458,7 @@ function recarregar() {
       }).join('');
       document.getElementById('abCodigo').innerHTML = opcoes || '<option value="">(sem viagens)</option>';
       document.getElementById('mvViagem').innerHTML = '<option value="">— sem viagem —</option>' + opcoes;
+      document.getElementById('ivViagem').innerHTML = '<option value="">— sem viagem —</option>' + opcoes;
     })
     .listarViagens();
 }
@@ -343,6 +467,7 @@ function recarregar() {
 var hoje = new Date().toISOString().slice(0, 10);
 document.getElementById('abData').value = hoje;
 document.getElementById('mvData').value = hoje;
+document.getElementById('ivData').value = hoje;
 recarregar();
 </script>
 </body>
