@@ -252,11 +252,25 @@ function obterConfiguracaoMovimentos() {
       });
   }
 
+  /* quem já apareceu em «Pago Por»: sócios, fornecedores, clientes */
+  var pagadores = [];
+  function juntarPagadores(sh) {
+    var cab = cabecalho_(sh);
+    var iP = indiceDe_(cab.cols, [/pago\s*por|contraparte|fornecedor/i]);
+    if (iP < 0 || sh.getLastRow() <= cab.linha) return;
+    sh.getRange(cab.linha + 1, iP + 1, sh.getLastRow() - cab.linha, 1)
+      .getValues().forEach(function (r) {
+        var v = String(r[0]).trim();
+        if (v && pagadores.indexOf(v) === -1) pagadores.push(v);
+      });
+  }
+
   var temGeral = true, colunasGeral = [];
   try {
     var shG = folha_(PLANO_ID, FOLHA_GERAL);
     colunasGeral = cabecalho_(shG).cols.filter(function (c) { return c; });
     juntarCategorias(shG);
+    juntarPagadores(shG);
   } catch (e) { temGeral = false; }
 
   var socioCols = [];
@@ -270,10 +284,16 @@ function obterConfiguracaoMovimentos() {
   } catch (e) { /* livro dos investidores ainda não existe */ }
 
   categorias.sort();
+  /* na lista de escolha, os sócios primeiro; depois o resto do histórico */
+  var outros = pagadores.filter(function (v) {
+    return !socios.some(function (s) { return s.toLowerCase() === v.toLowerCase(); });
+  }).sort();
+
   return {
     socios: socios,
     socioCols: socioCols,
     categorias: categorias,
+    pagadores: outros,
     tipos: TIPOS,
     pagadorEmpresa: PAGADOR_EMPRESA,
     temGeral: temGeral,

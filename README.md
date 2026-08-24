@@ -31,17 +31,22 @@ sub-separadores no topo mostram as folhas do Excel dessa área.
 **`Movimentos Geral`** é o livro principal: **todos** os movimentos da empresa,
 uma linha por lançamento com um valor único.
 
+`Data · Tipo · Categoria · Descrição · Meio · Pago Por · VF · Valor (MZN) · Nota`
+
 | Coluna | Para que serve |
 |---|---|
 | `Data` | data do movimento |
 | `Tipo` | `Investimento` (dura anos), `Despesa` (consome-se agora), `Suprimento` (entrada de um sócio), `Recebimento` |
 | `Categoria` | Camião, Combustível, Portagens, Motorista, Manutenção, Seguros… |
 | `Descrição` | o que foi |
-| `Valor (MZN)` | sempre positivo — o sentido vem do tipo |
-| `Sentido` | opcional (`Entrada` / `Saída`); sem ela, deduz-se do tipo |
 | `Meio` | `Caixa`, `Banco` ou `Sócio` — é o que dá a tesouraria |
-| `Pago por` | sócio, fornecedor ou cliente |
+| `Pago Por` | um sócio (entra também na conta corrente dele), a empresa, ou um fornecedor / cliente |
 | `VF` | liga o movimento à viagem (toca no código para a abrir) |
+| `Valor (MZN)` | sempre positivo — o sentido (entrada ou saída) vem do tipo |
+| `Nota` | nº de documento ou observação |
+
+A **ordem das colunas não importa** — a app encontra-as pelo nome. Uma coluna
+`Sentido` (`Entrada` / `Saída`) é aceite se existir, mas é dispensável.
 
 **`Movimentos dos Investidores`** continua a ser o livro dos sócios — investimento,
 futuros dividendos e devoluções de capital. Mantém **uma coluna por sócio**, e é
