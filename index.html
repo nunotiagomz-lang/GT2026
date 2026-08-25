@@ -115,17 +115,8 @@
   }
   .section-title:first-child { margin-top: 4px; }
 
-  /* ---------- Stat tiles ---------- */
+  /* ---------- Esqueleto de carregamento ---------- */
   .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
-  .tile {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 14px; padding: 12px 14px;
-  }
-  .tile.wide { grid-column: 1 / -1; }
-  .tile .t-label { font-size: 12px; color: var(--ink-2); line-height: 1.25; margin-bottom: 5px; }
-  .tile .t-value { font-size: 22px; font-weight: 750; letter-spacing: -0.01em; line-height: 1.1; }
-  .tile .t-value small { font-size: 12px; font-weight: 600; color: var(--ink-muted); margin-left: 3px; }
-  .tile .t-sub { font-size: 11px; color: var(--ink-muted); margin-top: 4px; }
 
   /* ---------- Progress bars ---------- */
   .bar { height: 8px; border-radius: 4px; background: var(--track); overflow: hidden; margin-top: 10px; }
@@ -688,53 +679,157 @@ function investorRows() {
    RENDERS
    ===================================================================== */
 
-/* --- Resumo: dashboard geral ---
-   Indicadores vêm da folha "Resumo"; alertas, sócios, últimos movimentos
-   e próximos pagamentos são calculados das outras folhas já carregadas. */
-function renderResumo(rows) {
-  const pairs = [];
-  for (const r of rows) {
-    const cells = r.map(c => (c || "").trim()).filter(Boolean);
-    if (cells.length >= 2) {
-      const val = parseNum(cells[cells.length - 1]);
-      if (val != null && !/^\d/.test(cells[0])) pairs.push([cells[0], val]);
-    }
-  }
-  const find = re => { const p = pairs.find(([l]) => re.test(l)); return p ? p[1] : null; };
-  const total  = find(/total\s+investimento/i);
-  const pago   = find(/j[áa]\s*investido/i);
-  const falta  = find(/falta\s*investir/i);
-  const mensal = find(/despesa\s*recorrente/i);
-  const alvo   = find(/contribui[çc][ãa]o\s*alvo/i);
-  const pct = (total && pago != null) ? Math.max(0, Math.min(100, pago / total * 100)) : null;
+/* =====================================================================
+   RESUMO — o dashboard da empresa
+   Tudo aqui é calculado a partir dos livros e das viagens. Cada secção
+   só aparece se houver dados para ela, por isso a página cresce à medida
+   que o Excel cresce.
+   ===================================================================== */
 
-  /* dados das outras folhas (podem ainda não estar carregados) */
-  const movRows = investorRows(),
-        socRows = state.data["Sócios - Contas Correntes"] || null,
-        plRows = state.data["Investimentos Iniciais"] || null;
-  const movs   = movRows ? (extractMovs(movRows) || []) : [];
-  const socios = sociosContas() || (socRows ? (extractSocios(socRows) || []) : []);
-  const plano  = plRows ? extractPlano(plRows) : null;
+/* ---- peças reutilizáveis ---- */
+
+/* uma fila de números com rótulo */
+function statRow(itens, tamanho) {
+  const t = tamanho || 19;
+  return `<div style="display:flex;gap:18px;flex-wrap:wrap">` + itens.map(i => `
+    <div><div style="font-size:11px;color:var(--ink-muted)">${esc(i.label)}</div>
+      <b style="font-size:${t}px;${i.cor ? `color:${i.cor}` : ""}">${i.valor}</b>
+      ${i.sub ? `<div style="font-size:10.5px;color:var(--ink-muted);margin-top:2px">${esc(i.sub)}</div>` : ""}
+    </div>`).join("") + `</div>`;
+}
+
+/* barras horizontais para um top de categorias */
+function barrasHTML(lista, maior, cor) {
+  return lista.map((x, i) => `
+    <div style="padding:8px 0;${i < lista.length - 1 ? "border-bottom:1px solid var(--hairline)" : ""}">
+      <div style="display:flex;justify-content:space-between;gap:10px;font-size:13px">
+        <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.nome)}</span>
+        <b style="font-variant-numeric:tabular-nums;white-space:nowrap">${fmtMZN(x.valor)}</b>
+      </div>
+      <div class="bar" style="height:6px;margin-top:6px">
+        <i style="width:${Math.max(2, x.valor / maior * 100)}%;${cor ? `background:${cor}` : ""}"></i></div>
+    </div>`).join("");
+}
+
+/* Gráfico de barras agrupadas: entradas vs saídas por mês.
+   SVG inline, sem bibliotecas — escala sozinho à largura do ecrã. */
+function graficoMensalHTML(meses) {
+  if (meses.length < 2) return "";
+  const W = 320, H = 130, padL = 4, padB = 22, padT = 8;
+  const maxV = Math.max(...meses.flatMap(m => [m.entradas, m.saidas]), 1);
+  const grupoW = (W - padL * 2) / meses.length;
+  const barW = Math.min(13, (grupoW - 6) / 2);
+  const alturaUtil = H - padB - padT;
+  const y = v => padT + alturaUtil - (v / maxV * alturaUtil);
+
+  const barras = meses.map((m, i) => {
+    const cx = padL + grupoW * i + grupoW / 2;
+    const x1 = cx - barW - 1, x2 = cx + 1;   // 2px de intervalo entre as duas
+    const bar = (x, v, cor) => {
+      const h = Math.max(v > 0 ? 2 : 0, alturaUtil - (y(v) - padT));
+      return v > 0 ? `<rect x="${x.toFixed(1)}" y="${(padT + alturaUtil - h).toFixed(1)}"
+        width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${cor}"/>` : "";
+    };
+    return bar(x1, m.entradas, "var(--s1)") + bar(x2, m.saidas, "var(--s2)") +
+      `<text x="${cx.toFixed(1)}" y="${H - 7}" text-anchor="middle"
+         font-size="9.5" fill="var(--ink-muted)">${esc(m.rotulo)}</text>`;
+  }).join("");
+
+  return `<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+      <span style="font-size:12px;color:var(--ink-2)">Entradas e saídas por mês</span>
+      <span style="display:flex;gap:10px;font-size:11px;color:var(--ink-2)">
+        <span><span class="dot" style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--s1);margin-right:4px"></span>Entradas</span>
+        <span><span class="dot" style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--s2);margin-right:4px"></span>Saídas</span>
+      </span>
+    </div>
+    <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img"
+         aria-label="Entradas e saídas por mês">
+      <line x1="0" y1="${H - padB}" x2="${W}" y2="${H - padB}" stroke="var(--hairline)" stroke-width="1"/>
+      ${barras}
+    </svg>
+  </div>`;
+}
+
+const MESES_CURTOS = ["jan", "fev", "mar", "abr", "mai", "jun",
+                      "jul", "ago", "set", "out", "nov", "dez"];
+
+/* agrupa os movimentos do livro geral por mês (os últimos `n`) */
+function porMes(movs, n) {
+  const mapa = new Map();
+  for (const m of movs) {
+    if (!m.date) continue;
+    const chave = m.date.getFullYear() * 12 + m.date.getMonth();
+    if (!mapa.has(chave)) mapa.set(chave, { chave, entradas: 0, saidas: 0,
+      mes: m.date.getMonth(), ano: m.date.getFullYear() });
+    const e = mapa.get(chave);
+    if (m.entrada) e.entradas += m.valor; else e.saidas += m.valor;
+  }
+  const lista = [...mapa.values()].sort((a, b) => a.chave - b.chave).slice(-(n || 6));
+  /* mostra o ano no rótulo só quando o período atravessa mais do que um */
+  const varios = lista.length > 1 && lista[0].ano !== lista[lista.length - 1].ano;
+  lista.forEach(m => {
+    m.rotulo = MESES_CURTOS[m.mes] + (varios ? "/" + String(m.ano).slice(2) : "");
+  });
+  return lista;
+}
+
+/* ---- o dashboard ---- */
+function renderResumo(rows) {
+  const geral = extractGeral(state.data["Movimentos Geral"]) || [];
+  const td = tripsData();
+  const socios = sociosContas() || [];
+  const investidores = extractMovs(investorRows()) || [];
   socios.forEach(s => socioColor(s.nome));
 
-  let html = "";
+  const geralPeriodo = geral.filter(m => inPeriod(m.date, state.period));
+  const viagens = td ? tripsInPeriod(td) : [];
 
-  /* --- Alertas --- */
-  const emFalta = socios.filter(s => s.saldo != null && s.saldo < 0);
-  const totalEmFalta = emFalta.reduce((a, s) => a - s.saldo, 0);
-  const porConfirmar = plano ? plano.items.filter(it => /confirmar/i.test(it.sit) && (it.falta || 0) > 0) : [];
-  const valorPorConfirmar = porConfirmar.reduce((a, it) => a + (it.falta || 0), 0);
-  const td = tripsData();
-  const opTrips = td ? tripsInPeriod(td) : [];
-  const negativas = opTrips.filter(t => { const m = tripMargin(t); return m != null && m < 0; });
+  /* --- posição de tesouraria: só o que passou pela caixa e pelo banco --- */
+  const emCaixa = geral.filter(m => /caixa|banco/i.test(deaccent(m.meio)));
+  const saldoTesouraria = emCaixa.reduce((a, m) => a + (m.entrada ? m.valor : -m.valor), 0);
+  const temTesouraria = emCaixa.length > 0;
 
+  /* --- resultado do período: o investimento não é despesa --- */
+  const receitas = geralPeriodo.filter(m => m.entrada && m.tipo !== "Suprimento")
+    .reduce((a, m) => a + m.valor, 0);
+  const despesas = geralPeriodo.filter(m => !m.entrada && m.tipo !== "Investimento")
+    .reduce((a, m) => a + m.valor, 0);
+  const resultado = receitas - despesas;
+  const temResultado = receitas > 0 || despesas > 0;
+
+  const totalInvestido = investidores.reduce((a, m) =>
+    a + (saidaParaSocio(m.tipo) ? -m.total : m.total), 0);
+
+  let html = periodBar();
+
+  /* ---------- 1. os três números que interessam ---------- */
+  const heroItens = [];
+  if (temTesouraria) heroItens.push({ label: "Em caixa e banco",
+    valor: fmtMZN(saldoTesouraria), cor: saldoTesouraria >= 0 ? "" : "var(--serious)" });
+  if (temResultado) heroItens.push({ label: "Resultado do período",
+    valor: fmtMZN(resultado), cor: resultado >= 0 ? "var(--good-text)" : "var(--serious)" });
+  if (viagens.length) heroItens.push({ label: "Viagens", valor: String(viagens.length) });
+  if (!heroItens.length && totalInvestido) heroItens.push({
+    label: "Investido pelos sócios", valor: fmtMZN(totalInvestido) });
+  if (heroItens.length) {
+    html += `<div class="card">${statRow(heroItens, 22)}
+      <div style="font-size:10.5px;color:var(--ink-muted);margin-top:9px">
+        Valores em MZN${temResultado ? " · o investimento não conta como despesa do período" : ""}</div>
+    </div>`;
+  }
+
+  /* ---------- 2. alertas ---------- */
   const alertas = [];
+  const negativas = viagens.filter(t => { const m = tripMargin(t); return m != null && m < 0; });
   if (negativas.length) alertas.push({ goto: "viagens:viagens",
     txt: `<b>${negativas.length} viage${negativas.length > 1 ? "ns" : "m"}</b> com margem negativa — <b>${fmtMZN(negativas.reduce((a, t) => a - tripMargin(t), 0))} MZN</b> de prejuízo` });
-  if (emFalta.length) alertas.push({ goto: "contas:socios",
-    txt: `<b>${emFalta.length} sócio${emFalta.length > 1 ? "s" : ""}</b> com contribuição em falta — total <b>${fmtMZN(totalEmFalta)} MZN</b>` });
-  if (porConfirmar.length) alertas.push({ goto: "contas:plano",
-    txt: `<b>${porConfirmar.length} ${porConfirmar.length > 1 ? "itens" : "item"}</b> do plano por confirmar — <b>${fmtMZN(valorPorConfirmar)} MZN</b> por pagar` });
+  if (temTesouraria && saldoTesouraria < 0) alertas.push({ goto: "contas:correntes",
+    txt: `Tesouraria negativa — <b>${fmtMZN(saldoTesouraria)} MZN</b> em caixa e banco` });
+  const emFalta = socios.filter(s => s.saldo != null && s.saldo < -0.5);
+  if (emFalta.length) alertas.push({ goto: "contas:investimentos",
+    txt: `<b>${emFalta.length} sócio${emFalta.length > 1 ? "s" : ""}</b> com contribuição em falta — <b>${fmtMZN(emFalta.reduce((a, s) => a - s.saldo, 0))} MZN</b>` });
+
   if (alertas.length) {
     html += `<div class="card" style="border-left:4px solid var(--serious);padding-left:13px">` +
       alertas.map((a, i) => `<div class="goto" data-goto="${a.goto}" style="display:flex;align-items:center;gap:8px;padding:6px 0;${i < alertas.length - 1 ? "border-bottom:1px solid var(--hairline);" : ""}cursor:pointer">
@@ -742,133 +837,151 @@ function renderResumo(rows) {
         <span style="flex:1;font-size:13px;line-height:1.4">${a.txt}</span>
         <span style="color:var(--ink-muted)">›</span>
       </div>`).join("") + `</div>`;
-  } else if (socios.length) {
+  } else if (socios.length || viagens.length) {
     html += `<div class="card" style="display:flex;align-items:center;gap:8px">
-      <span class="status good" style="font-size:13px">✓ Tudo em dia</span>
-      <span style="font-size:12px;color:var(--ink-muted)">— sem contribuições em falta</span>
+      <span class="status good" style="font-size:13px">✓ Tudo em ordem</span>
+      <span style="font-size:12px;color:var(--ink-muted)">— sem alertas neste período</span>
     </div>`;
   }
 
-  /* --- Operação (viagens) --- */
-  if (opTrips.length) {
-    const rec = opTrips.reduce((a, t) => a + (t.receita || 0), 0);
-    const des = opTrips.reduce((a, t) => a + (t.despesa || 0), 0);
-    const km  = opTrips.reduce((a, t) => a + (t.km || 0), 0);
-    const marg = td.hasReceita ? rec - des : null;
-    html += `<div class="section-title">Operação</div>
-      <div class="card goto" data-goto="viagens:viagens" style="cursor:pointer">
-        <div style="display:flex;gap:18px;flex-wrap:wrap">
-          <div><div style="font-size:11px;color:var(--ink-muted)">Viagens</div><b style="font-size:19px">${opTrips.length}</b></div>
-          ${km ? `<div><div style="font-size:11px;color:var(--ink-muted)">Km</div><b style="font-size:19px">${fmtMZN(km)}</b></div>` : ""}
-          ${marg != null ? `<div><div style="font-size:11px;color:var(--ink-muted)">Margem</div>
-            <b style="font-size:19px;color:${marg >= 0 ? "var(--good-text)" : "var(--serious)"}">${fmtMZN(marg)}</b></div>` : ""}
-          ${marg != null && km ? `<div><div style="font-size:11px;color:var(--ink-muted)">Margem/km</div><b style="font-size:19px">${fmtNumRaw((marg / km).toFixed(2))}</b></div>` : ""}
-        </div>
-        <div style="font-size:11.5px;color:var(--accent);font-weight:650;margin-top:10px">Ver viagens ›</div>
+  /* ---------- 3. evolução mensal ---------- */
+  if (geral.length) {
+    html += graficoMensalHTML(porMes(geral, 6));
+  }
+
+  /* ---------- 4. resultado do período em detalhe ---------- */
+  if (temResultado) {
+    html += `<div class="section-title">Resultado do período</div>
+      <div class="card goto" data-goto="contas:correntes" style="cursor:pointer">
+        ${statRow([
+          { label: "Receitas", valor: fmtMZN(receitas), cor: "var(--good-text)" },
+          { label: "Despesas", valor: fmtMZN(despesas), cor: "var(--serious)" },
+          { label: "Resultado", valor: fmtMZN(resultado),
+            cor: resultado >= 0 ? "var(--good-text)" : "var(--serious)" },
+        ])}
+        <div style="font-size:11.5px;color:var(--accent);font-weight:650;margin-top:10px">Ver movimentos ›</div>
       </div>`;
   }
 
-  /* --- Execução do investimento --- */
-  if (total != null || pago != null) {
-    html += `<div class="card">
-      <div class="t-label" style="font-size:12px;color:var(--ink-2)">Execução do investimento</div>
-      <div style="font-size:28px;font-weight:800;letter-spacing:-0.01em;margin-top:4px">
-        ${pct != null ? fmtPct(pct) : "—"} <span style="font-size:13px;font-weight:600;color:var(--ink-muted)">realizado</span>
+  /* ---------- 5. operação ---------- */
+  if (viagens.length) {
+    const rec = viagens.reduce((a, t) => a + (t.receita || 0), 0);
+    const des = viagens.reduce((a, t) => a + (t.despesa || 0), 0);
+    const km  = viagens.reduce((a, t) => a + (t.km || 0), 0);
+    const marg = td.hasReceita ? rec - des : null;
+    const itens = [{ label: "Viagens", valor: String(viagens.length) }];
+    if (km) itens.push({ label: "Km", valor: fmtMZN(km) });
+    if (marg != null) itens.push({ label: "Margem", valor: fmtMZN(marg),
+      cor: marg >= 0 ? "var(--good-text)" : "var(--serious)" });
+    if (marg != null && km) itens.push({ label: "Margem/km", valor: fmtNumRaw((marg / km).toFixed(2)) });
+
+    /* melhor e pior viagem, quando há margens */
+    const comMargem = viagens.filter(t => tripMargin(t) != null)
+      .sort((a, b) => tripMargin(b) - tripMargin(a));
+    const destaque = comMargem.length >= 2
+      ? [{ t: comMargem[0], rot: "Melhor" }, { t: comMargem[comMargem.length - 1], rot: "Pior" }]
+      : [];
+
+    html += `<div class="section-title">Operação</div>
+      <div class="card goto" data-goto="viagens:viagens" style="cursor:pointer">
+        ${statRow(itens)}
+        <div style="font-size:11.5px;color:var(--accent);font-weight:650;margin-top:10px">Ver viagens ›</div>
       </div>
-      <div class="bar"><i style="width:${pct ?? 0}%"></i></div>
-      <div class="bar-legend">
-        <span>Investido: <b>${fmtMZN(pago)}</b> MZN</span>
-        <span>Total: <b>${fmtMZN(total)}</b> MZN</span>
-      </div>
-    </div>`;
+      ${destaque.length ? `<div class="card">` + destaque.map((d, i) => `
+        <div class="goto" data-viagem-cod="${esc(d.t.cod)}" style="display:flex;align-items:center;gap:10px;padding:8px 0;${i === 0 ? "border-bottom:1px solid var(--hairline)" : ""};cursor:pointer">
+          <span class="sr-kind" style="flex:none">${d.rot}</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:650">${esc(d.t.cod)}${d.t.rota ? ` · ${esc(d.t.rota)}` : ""}</div>
+            ${d.t.cliente ? `<div style="font-size:11.5px;color:var(--ink-muted)">${esc(d.t.cliente)}</div>` : ""}
+          </div>
+          <b style="font-size:13px;white-space:nowrap;color:${tripMargin(d.t) >= 0 ? "var(--good-text)" : "var(--serious)"}">${fmtMZN(tripMargin(d.t))}</b>
+        </div>`).join("") + `</div>` : ""}`;
   }
 
-  /* --- Indicadores --- */
-  const acumulado = movs.length ? movs.reduce((a, m) => a + m.total, 0) : null;
-  const ultimaData = [...movs].reverse().find(m => m.data)?.data;
-  html += `<div class="tiles">
-    ${tile("Já Investido (Pago)", pago, null, "MZN")}
-    ${tile("Falta Investir", falta, null, "MZN")}
-    ${tile("Total CAPEX Estimado", total, null, "MZN")}
-    ${tile("Despesa Mensal (fase inicial)", mensal, null, "MZN")}
-    ${acumulado != null ? tile("Investimento Acumulado (movimentos)", acumulado,
-        ultimaData ? "Último movimento: " + ultimaData : null, "MZN") : ""}
-    ${alvo != null ? tile("Contribuição Alvo por Sócio", alvo, "Participação igual · 25% por sócio", "MZN") : ""}
-  </div>`;
+  /* ---------- 6. despesas por categoria ----------
+     Sem o investimento: comprar o camião não é uma despesa do mês, e
+     misturado esmagaria as despesas de operação. */
+  const saidas = geralPeriodo.filter(m => !m.entrada && m.categoria && m.tipo !== "Investimento");
+  if (saidas.length) {
+    const porCat = new Map();
+    for (const m of saidas) porCat.set(m.categoria, (porCat.get(m.categoria) || 0) + m.valor);
+    const todas = [...porCat.entries()].map(([nome, valor]) => ({ nome, valor }))
+      .sort((a, b) => b.valor - a.valor);
+    const top = todas.slice(0, 5);
+    const resto = todas.slice(5).reduce((a, x) => a + x.valor, 0);
+    html += `<div class="section-title">Despesas por categoria</div>
+      <div class="card goto" data-goto="contas:correntes" style="cursor:pointer">
+        ${barrasHTML(top, top[0].valor)}
+        ${resto ? `<div style="font-size:11.5px;color:var(--ink-muted);margin-top:9px">
+          + ${todas.length - 5} outras categorias · ${fmtMZN(resto)} MZN</div>` : ""}
+      </div>`;
+  }
 
-  /* --- Sócios num relance --- */
+  /* ---------- 7. sócios ---------- */
   if (socios.length) {
     html += `<div class="section-title">Sócios</div>
-    <div class="card"><div class="glance">` +
-      socios.map(s => {
-        const credor = s.saldo != null && s.saldo > 0;
-        const emDia = s.saldo != null && s.saldo === 0;
-        const cor = credor ? "var(--good-text)" : emDia ? "var(--ink)" : "var(--serious)";
-        return `<div class="goto glance-item" data-goto="contas:socios">
-          <div class="avatar" style="background:${socioColor(s.nome)};width:38px;height:38px;font-size:13px">${esc(s.nome.slice(0, 2).toUpperCase())}</div>
-          <div class="g-name">${esc(s.nome)}</div>
-          <div class="g-saldo" style="color:${cor}">${fmtMZN(s.saldo)}</div>
-        </div>`;
-      }).join("") + `</div>
-      <div style="font-size:10.5px;color:var(--ink-muted);text-align:center;margin-top:8px">Saldo em MZN · verde = a receber · laranja = falta contribuir</div>
-    </div>`;
+      <div class="card">
+        ${totalInvestido ? `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px">
+          <span style="font-size:12px;color:var(--ink-2)">Investido pelos sócios</span>
+          <b style="font-size:16px;font-variant-numeric:tabular-nums">${fmtMZN(totalInvestido)} <small style="font-size:11px;color:var(--ink-muted)">MZN</small></b>
+        </div>` : ""}
+        <div class="glance">` + socios.map(s => {
+          const credor = s.saldo != null && s.saldo > 0.5;
+          const emDia = s.saldo != null && Math.abs(s.saldo) <= 0.5;
+          const cor = credor ? "var(--good-text)" : emDia ? "var(--ink)" : "var(--serious)";
+          return `<div class="goto glance-item" data-goto="contas:investimentos">
+            <div class="avatar" style="background:${socioColor(s.nome)};width:38px;height:38px;font-size:13px">${esc(s.nome.slice(0, 2).toUpperCase())}</div>
+            <div class="g-name">${esc(s.nome)}</div>
+            <div class="g-saldo" style="color:${cor}">${fmtMZN(s.saldo)}</div>
+          </div>`;
+        }).join("") + `</div>
+        <div style="font-size:10.5px;color:var(--ink-muted);text-align:center;margin-top:8px">
+          Saldo em MZN · verde = a receber · laranja = falta contribuir</div>
+      </div>`;
   }
 
-  /* --- Últimos movimentos --- */
-  if (movs.length) {
-    const ultimos = movs.slice(-3).reverse();
+  /* ---------- 8. últimos movimentos ---------- */
+  if (geral.length) {
+    const ultimos = geral.slice(-4).reverse();
     html += `<div class="section-title">Últimos movimentos</div><div class="card">` +
       ultimos.map(m => `<div class="mov">
         <div class="m-main">
-          <div class="m-item" style="font-size:13px">${esc(m.item)}</div>
-          ${m.data ? `<div class="m-date">${esc(m.data)}</div>` : ""}
+          <div class="m-item" style="font-size:13px">${esc(m.desc || m.categoria || "(sem descrição)")}</div>
+          <div class="m-date">${[m.data, m.categoria].filter(Boolean).map(esc).join(" · ")}</div>
         </div>
         <div class="m-side">
-          <div class="m-val" style="font-size:13px">${fmtMZN(m.total)}</div>
-          <div style="font-size:11px;color:var(--ink-muted);margin-top:2px;text-align:right">
-            ${m.pagadores.map(p => `<span class="dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${socioColor(p.por)};margin-right:3px"></span>${esc(p.por)}`).join(" ")}</div>
+          <div class="m-val" style="font-size:13px;color:${m.entrada ? "var(--good-text)" : "var(--ink)"}">
+            ${m.entrada ? "+" : "−"}${fmtMZN(m.valor)}</div>
         </div>
       </div>`).join("") +
-      `<div class="goto" data-goto="contas:movimentos" style="text-align:center;padding:10px 0 2px;font-size:13px;font-weight:650;color:var(--accent);cursor:pointer">Ver todos os movimentos ›</div>
+      `<div class="goto" data-goto="contas:correntes" style="text-align:center;padding:10px 0 2px;font-size:13px;font-weight:650;color:var(--accent);cursor:pointer">Ver todos os movimentos ›</div>
     </div>`;
   }
 
-  /* --- Próximos pagamentos (maiores valores em falta do plano) --- */
-  if (plano) {
-    const pendentes = plano.items.filter(it => (it.falta || 0) > 0)
-      .sort((a, b) => b.falta - a.falta).slice(0, 4);
-    if (pendentes.length) {
-      const maxFalta = pendentes[0].falta;
-      html += `<div class="section-title">Próximos pagamentos</div>
-      <div class="card goto" data-goto="contas:plano" style="cursor:pointer">` +
-        pendentes.map((it, i) => `<div style="padding:8px 0;${i < pendentes.length - 1 ? "border-bottom:1px solid var(--hairline)" : ""}">
-          <div style="display:flex;justify-content:space-between;gap:10px;font-size:13px">
-            <span style="flex:1;min-width:0">${esc(it.name)}</span>
-            <b style="font-variant-numeric:tabular-nums;white-space:nowrap">${fmtMZN(it.falta)} <small style="font-weight:600;color:var(--ink-muted)">MZN</small></b>
-          </div>
-          <div class="bar" style="height:5px;margin-top:6px"><i style="width:${Math.max(3, it.falta / maxFalta * 100)}%"></i></div>
-        </div>`).join("") + `</div>`;
+  /* ---------- 9. indicadores próprios da folha Resumo ---------- */
+  const pares = [];
+  for (const r of (rows || [])) {
+    const cells = r.map(c => (c || "").trim()).filter(Boolean);
+    if (cells.length >= 2) {
+      const val = parseNum(cells[cells.length - 1]);
+      if (val != null && !/^\d/.test(cells[0])) pares.push([cells[0], val]);
     }
   }
-
-  /* restantes indicadores da folha Resumo que não reconhecemos */
-  const known = /total\s+investimento|j[áa]\s*investido|falta\s*investir|despesa\s*recorrente|contribui[çc][ãa]o\s*alvo/i;
-  const extras = pairs.filter(([l]) => !known.test(l));
-  if (extras.length) {
-    html += `<div class="section-title">Outros indicadores</div><div class="card">` +
-      extras.map(([l, v], i) => `<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;${i < extras.length - 1 ? "border-bottom:1px solid var(--hairline);" : ""}font-size:13px">
+  if (pares.length) {
+    html += `<div class="section-title">Indicadores da folha Resumo</div><div class="card">` +
+      pares.map(([l, v], i) => `<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;${i < pares.length - 1 ? "border-bottom:1px solid var(--hairline);" : ""}font-size:13px">
         <span style="color:var(--ink-2)">${esc(l)}</span><b style="font-variant-numeric:tabular-nums;white-space:nowrap">${fmtMZN(v)}</b>
       </div>`).join("") + `</div>`;
   }
-  return html || emptyState("Sem dados no Resumo");
+
+  /* ---------- nada ainda ---------- */
+  if (!heroItens.length && !geral.length && !viagens.length && !socios.length && !pares.length) {
+    return emptyState("Ainda sem dados para o dashboard.",
+      "Assim que houver lançamentos nas folhas de contas e viagens, aparecem aqui resumidos.");
+  }
+  return html;
 }
-function tile(label, value, sub, unit) {
-  return `<div class="tile">
-    <div class="t-label">${esc(label)}</div>
-    <div class="t-value">${fmtMZN(value)}${unit ? `<small>${unit}</small>` : ""}</div>
-    ${sub ? `<div class="t-sub">${esc(sub)}</div>` : ""}
-  </div>`;
-}
+
 
 /* --- Movimentos: o livro de contas, filtrável por sócio, tipo e categoria --- */
 let movFilter = "Todos";   // sócio
