@@ -17,7 +17,7 @@ sub-separadores no topo mostram as folhas do Excel dessa área.
 
 | Área (em baixo) | Sub-separador (em cima) | Folha do Excel | Apresentação |
 |---|---|---|---|
-| Resumo | — | `Resumo` + cálculos das outras folhas | Dashboard: alertas, operação, execução, sócios, últimos movimentos, próximos pagamentos |
+| Resumo | — | todas as folhas | Dashboard completo — ver abaixo |
 | Viagens | Viagens | `Viagens` | Lista com margem por viagem → detalhe → abastecimentos e consumo |
 | Viagens | Motoristas | `Viagens` (derivado) | Ficha por motorista: viagens, km, margem, saldo |
 | Viagens | Clientes | `Viagens` (derivado) | Ficha por cliente: viagens, faturado, margem |
@@ -25,6 +25,29 @@ sub-separadores no topo mostram as folhas do Excel dessa área.
 | Contas | Investimentos | `Movimentos dos Investidores` (+ sócios, acertos) | Tudo o que passa pelos sócios: contas correntes, movimentos e acertos |
 | Contas | Movimentos Correntes | `Movimentos Geral` | Contabilidade e tesouraria de toda a empresa |
 | Faturação | — | *(em breve)* | — |
+
+### O dashboard
+
+O Resumo é calculado a partir de todos os livros e responde, por ordem, às
+perguntas que se fazem primeiro:
+
+1. **Os três números** — quanto há **em caixa e banco**, o **resultado do
+   período** (receitas − despesas, sem contar o investimento) e quantas viagens.
+2. **Alertas** — viagens com margem negativa, tesouraria negativa, sócios com
+   contribuição em falta. Cada um leva ao sítio respetivo; sem nada pendente,
+   diz "tudo em ordem".
+3. **Entradas e saídas por mês** — gráfico dos últimos 6 meses.
+4. **Resultado do período** em detalhe: receitas, despesas, resultado.
+5. **Operação** — viagens, km, margem e margem/km, com a **melhor e a pior
+   viagem** do período.
+6. **Despesas por categoria** — as 5 maiores (sem o investimento, que não é
+   despesa do mês).
+7. **Sócios** — investido no total e o saldo de cada um.
+8. **Últimos movimentos** do livro geral.
+
+Cada secção só aparece se houver dados para ela, e o **filtro de período** no
+topo afeta a página inteira. Se a folha `Resumo` tiver indicadores próprios,
+aparecem no fim.
 
 ### Os dois livros de contas
 
