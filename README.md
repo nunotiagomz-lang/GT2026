@@ -28,26 +28,35 @@ sub-separadores no topo mostram as folhas do Excel dessa área.
 
 ### O dashboard
 
-O Resumo é calculado a partir de todos os livros e responde, por ordem, às
-perguntas que se fazem primeiro:
+O Resumo é calculado a partir de todos os livros. O **filtro de período** no topo
+manda na página inteira, e **qualquer marca de um gráfico mostra os valores ao
+toque**.
 
-1. **Os três números** — quanto há **em caixa e banco**, o **resultado do
-   período** (receitas − despesas, sem contar o investimento) e quantas viagens.
+1. **Chips de indicadores** (deslizam na horizontal) — em caixa e banco,
+   resultado do período, receitas, despesas e viagens, cada um com a **variação
+   face ao período anterior** (↑ ↓).
 2. **Alertas** — viagens com margem negativa, tesouraria negativa, sócios com
-   contribuição em falta. Cada um leva ao sítio respetivo; sem nada pendente,
-   diz "tudo em ordem".
-3. **Entradas e saídas por mês** — gráfico dos últimos 6 meses.
-4. **Resultado do período** em detalhe: receitas, despesas, resultado.
-5. **Operação** — viagens, km, margem e margem/km, com a **melhor e a pior
+   contribuição em falta. Cada um leva ao sítio respetivo.
+3. **Receitas, despesas e resultado por mês** — barras dos últimos 6 meses com a
+   linha do resultado por cima.
+4. **Despesas por categoria** — anel com legenda e percentagens.
+5. **Despesas por categoria e mês** — mapa de calor: vê-se logo em que mês
+   disparou o combustível ou a manutenção.
+6. **Operação** — viagens, km, margem e margem/km, com a **melhor e a pior
    viagem** do período.
-6. **Despesas por categoria** — as 5 maiores (sem o investimento, que não é
-   despesa do mês).
-7. **Sócios** — investido no total e o saldo de cada um.
-8. **Últimos movimentos** do livro geral.
+7. **Custo das viagens** — barra de composição: quanto do dinheiro da estrada vai
+   para combustível, portagens, motorista…
+8. **Sócios** e **últimos movimentos**, com atalhos.
 
-Cada secção só aparece se houver dados para ela, e o **filtro de período** no
-topo afeta a página inteira. Se a folha `Resumo` tiver indicadores próprios,
-aparecem no fim.
+O **investimento fica de fora** das receitas/despesas e do resultado — comprar o
+camião não é custo do mês, e misturado esmagaria tudo o resto. Aparece nos
+Sócios e no livro dos investidores.
+
+Cada secção só aparece se houver dados para ela. Se a folha `Resumo` tiver
+indicadores próprios, aparecem no fim.
+
+Os gráficos são SVG escrito à mão — sem bibliotecas, por isso funcionam offline
+e não há nada para carregar.
 
 ### Os dois livros de contas
 

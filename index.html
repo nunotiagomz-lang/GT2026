@@ -31,6 +31,9 @@
     --critical:       #d03b3b;
     --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
     --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7; --s8: #e34948;
+    --heat-0: var(--track);
+    --heat-1: #cde2fb; --heat-2: #9ec5f4; --heat-3: #6da7ec;
+    --heat-4: #2a78d6; --heat-5: #184f95;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -48,6 +51,9 @@
       --good-text:      #0ca30c;
       --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
       --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+      --heat-0: var(--track);
+      --heat-1: #104281; --heat-2: #1c5cab; --heat-3: #2a78d6;
+      --heat-4: #5598e7; --heat-5: #9ec5f4;
     }
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -191,6 +197,53 @@
   .sr-title { font-size: 14px; font-weight: 650; }
   .sr-sub { font-size: 12px; color: var(--ink-2); margin-top: 2px; }
 
+  /* ---------- Dashboard: chips de indicadores ---------- */
+  .kpis {
+    display: flex; gap: 10px; overflow-x: auto; padding: 2px 2px 12px;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  }
+  .kpis::-webkit-scrollbar { display: none; }
+  .kpi {
+    flex: none; min-width: 40vw; max-width: 60vw;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 12px 14px;
+  }
+  .kpi .k-label { font-size: 11.5px; color: var(--ink-2); white-space: nowrap;
+                  overflow: hidden; text-overflow: ellipsis; }
+  .kpi .k-value { font-size: 21px; font-weight: 780; letter-spacing: -0.02em;
+                  line-height: 1.15; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .kpi .k-value small { font-size: 11px; font-weight: 600; color: var(--ink-muted); margin-left: 3px; }
+  .kpi .k-trend { display: inline-flex; align-items: center; gap: 3px; margin-top: 6px;
+                  font-size: 11.5px; font-weight: 700; }
+  .kpi .k-trend span.q { color: var(--ink-muted); font-weight: 600; }
+
+  /* ---------- Dashboard: gráficos ---------- */
+  .viz-head { display: flex; justify-content: space-between; align-items: baseline;
+              gap: 10px; margin-bottom: 10px; }
+  .viz-head .t { font-size: 12.5px; font-weight: 650; color: var(--ink); }
+  .legenda { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; }
+  .legenda > span { display: inline-flex; align-items: center; gap: 6px;
+                    font-size: 11.5px; color: var(--ink-2); }
+  .legenda i { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+  .legenda b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  svg .marca { cursor: pointer; }
+  .heat text { font-size: 8.5px; fill: var(--ink-muted); }
+  .escala { display: flex; align-items: center; gap: 6px; margin-top: 8px;
+            font-size: 10.5px; color: var(--ink-muted); }
+  .escala i { width: 20px; height: 8px; border-radius: 2px; }
+  .segbar { display: flex; gap: 2px; height: 12px; border-radius: 4px; overflow: hidden; margin-top: 4px; }
+  .segbar > i { display: block; height: 100%; }
+
+  /* valores ao toque */
+  .viz-tip {
+    position: fixed; z-index: 70; pointer-events: none;
+    background: var(--ink); color: var(--page);
+    font-size: 12px; font-weight: 600; line-height: 1.35;
+    padding: 7px 10px; border-radius: 9px; max-width: 62vw;
+    box-shadow: 0 4px 14px rgba(0,0,0,.22);
+  }
+  .viz-tip[hidden] { display: none; }
+
   /* ---------- Filter row ---------- */
   .filters {
     display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 10px;
@@ -329,6 +382,8 @@
 </div>
 
 <div class="updated-bar" id="updatedBar"></div>
+
+<div class="viz-tip" id="vizTip" hidden></div>
 
 <main id="main"></main>
 
@@ -681,98 +736,243 @@ function investorRows() {
 
 /* =====================================================================
    RESUMO — o dashboard da empresa
-   Tudo aqui é calculado a partir dos livros e das viagens. Cada secção
-   só aparece se houver dados para ela, por isso a página cresce à medida
-   que o Excel cresce.
+   Tudo calculado a partir dos livros e das viagens. Cada secção só
+   aparece se houver dados, e o filtro de período no topo manda em tudo.
+   Os gráficos são SVG feito à mão (sem bibliotecas, funciona offline);
+   qualquer marca com `data-tip` mostra os valores ao toque.
    ===================================================================== */
 
-/* ---- peças reutilizáveis ---- */
+const MESES_CURTOS = ["jan", "fev", "mar", "abr", "mai", "jun",
+                      "jul", "ago", "set", "out", "nov", "dez"];
 
-/* uma fila de números com rótulo */
+/* --- período atual e o anterior equivalente, para as tendências --- */
+function periodBounds(period, ref) {
+  const hoje = ref || new Date();
+  const d = (a, m, dia) => new Date(a, m, dia == null ? 1 : dia);
+  if (period === "m") {
+    const ini = d(hoje.getFullYear(), hoje.getMonth());
+    return { ini, fim: d(hoje.getFullYear(), hoje.getMonth() + 1),
+             iniAnt: d(hoje.getFullYear(), hoje.getMonth() - 1), fimAnt: ini };
+  }
+  if (period === "y") {
+    const ini = d(hoje.getFullYear(), 0);
+    return { ini, fim: d(hoje.getFullYear() + 1, 0),
+             iniAnt: d(hoje.getFullYear() - 1, 0), fimAnt: ini };
+  }
+  if (period === "3m") {
+    const fim = new Date(hoje); fim.setDate(fim.getDate() + 1);
+    const ini = new Date(fim); ini.setMonth(ini.getMonth() - 3);
+    const iniAnt = new Date(ini); iniAnt.setMonth(iniAnt.getMonth() - 3);
+    return { ini, fim, iniAnt, fimAnt: ini };
+  }
+  return null;   // "Tudo" não tem período anterior com que comparar
+}
+function entre(data, ini, fim) { return data && data >= ini && data < fim; }
+
+/* variação face ao período anterior */
+function tendencia(atual, anterior) {
+  if (anterior == null || !isFinite(anterior) || Math.abs(anterior) < 1) return null;
+  return (atual - anterior) / Math.abs(anterior) * 100;
+}
+function trendHTML(pct, bomSeSobe) {
+  if (pct == null) return "";
+  const sobe = pct >= 0;
+  const bom = bomSeSobe === false ? !sobe : sobe;
+  const cor = Math.abs(pct) < 0.5 ? "var(--ink-muted)" : bom ? "var(--good-text)" : "var(--serious)";
+  return `<div class="k-trend" style="color:${cor}">
+    ${Math.abs(pct) < 0.5 ? "→" : sobe ? "↑" : "↓"} ${fmtNumRaw(Math.abs(pct).toFixed(1))}%
+    <span class="q">vs período anterior</span></div>`;
+}
+
+/* --- fila de números com rótulo --- */
 function statRow(itens, tamanho) {
   const t = tamanho || 19;
   return `<div style="display:flex;gap:18px;flex-wrap:wrap">` + itens.map(i => `
     <div><div style="font-size:11px;color:var(--ink-muted)">${esc(i.label)}</div>
       <b style="font-size:${t}px;${i.cor ? `color:${i.cor}` : ""}">${i.valor}</b>
-      ${i.sub ? `<div style="font-size:10.5px;color:var(--ink-muted);margin-top:2px">${esc(i.sub)}</div>` : ""}
     </div>`).join("") + `</div>`;
 }
 
-/* barras horizontais para um top de categorias */
-function barrasHTML(lista, maior, cor) {
-  return lista.map((x, i) => `
-    <div style="padding:8px 0;${i < lista.length - 1 ? "border-bottom:1px solid var(--hairline)" : ""}">
-      <div style="display:flex;justify-content:space-between;gap:10px;font-size:13px">
-        <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.nome)}</span>
-        <b style="font-variant-numeric:tabular-nums;white-space:nowrap">${fmtMZN(x.valor)}</b>
-      </div>
-      <div class="bar" style="height:6px;margin-top:6px">
-        <i style="width:${Math.max(2, x.valor / maior * 100)}%;${cor ? `background:${cor}` : ""}"></i></div>
-    </div>`).join("");
-}
-
-/* Gráfico de barras agrupadas: entradas vs saídas por mês.
-   SVG inline, sem bibliotecas — escala sozinho à largura do ecrã. */
-function graficoMensalHTML(meses) {
-  if (meses.length < 2) return "";
-  const W = 320, H = 130, padL = 4, padB = 22, padT = 8;
-  const maxV = Math.max(...meses.flatMap(m => [m.entradas, m.saidas]), 1);
-  const grupoW = (W - padL * 2) / meses.length;
-  const barW = Math.min(13, (grupoW - 6) / 2);
-  const alturaUtil = H - padB - padT;
-  const y = v => padT + alturaUtil - (v / maxV * alturaUtil);
-
-  const barras = meses.map((m, i) => {
-    const cx = padL + grupoW * i + grupoW / 2;
-    const x1 = cx - barW - 1, x2 = cx + 1;   // 2px de intervalo entre as duas
-    const bar = (x, v, cor) => {
-      const h = Math.max(v > 0 ? 2 : 0, alturaUtil - (y(v) - padT));
-      return v > 0 ? `<rect x="${x.toFixed(1)}" y="${(padT + alturaUtil - h).toFixed(1)}"
-        width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${cor}"/>` : "";
-    };
-    return bar(x1, m.entradas, "var(--s1)") + bar(x2, m.saidas, "var(--s2)") +
-      `<text x="${cx.toFixed(1)}" y="${H - 7}" text-anchor="middle"
-         font-size="9.5" fill="var(--ink-muted)">${esc(m.rotulo)}</text>`;
-  }).join("");
-
-  return `<div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
-      <span style="font-size:12px;color:var(--ink-2)">Entradas e saídas por mês</span>
-      <span style="display:flex;gap:10px;font-size:11px;color:var(--ink-2)">
-        <span><span class="dot" style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--s1);margin-right:4px"></span>Entradas</span>
-        <span><span class="dot" style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--s2);margin-right:4px"></span>Saídas</span>
-      </span>
-    </div>
-    <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img"
-         aria-label="Entradas e saídas por mês">
-      <line x1="0" y1="${H - padB}" x2="${W}" y2="${H - padB}" stroke="var(--hairline)" stroke-width="1"/>
-      ${barras}
-    </svg>
+/* --- chip de indicador --- */
+function kpiHTML(k) {
+  return `<div class="kpi"${k.goto ? ` data-goto="${k.goto}" style="cursor:pointer"` : ""}>
+    <div class="k-label">${esc(k.label)}</div>
+    <div class="k-value"${k.cor ? ` style="color:${k.cor}"` : ""}>${k.valor}${k.unidade ? `<small>${esc(k.unidade)}</small>` : ""}</div>
+    ${k.trend || ""}
   </div>`;
 }
 
-const MESES_CURTOS = ["jan", "fev", "mar", "abr", "mai", "jun",
-                      "jul", "ago", "set", "out", "nov", "dez"];
+/* --- anel (donut) com legenda --- */
+function donutHTML(fatias, titulo, rodape) {
+  const total = fatias.reduce((a, f) => a + f.valor, 0);
+  if (!total) return "";
+  const R = 54, C = 2 * Math.PI * R, W = 140;
+  let offset = 0;
+  const arcos = fatias.map(f => {
+    const frac = f.valor / total;
+    const len = Math.max(frac * C - 2, 1);     // 2px de intervalo entre fatias
+    const arco = `<circle class="marca" cx="${W / 2}" cy="${W / 2}" r="${R}"
+      fill="none" stroke="${f.cor}" stroke-width="15" stroke-linecap="round"
+      stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}"
+      stroke-dashoffset="${(-offset).toFixed(2)}"
+      data-tip="${esc(f.nome)}&#10;${fmtMZN(f.valor)} MZN · ${fmtNumRaw((frac * 100).toFixed(1))}%"/>`;
+    offset += frac * C;
+    return arco;
+  }).join("");
 
-/* agrupa os movimentos do livro geral por mês (os últimos `n`) */
+  return `<div class="card">
+    <div class="viz-head"><span class="t">${esc(titulo)}</span>
+      ${rodape ? `<span style="font-size:11.5px;color:var(--ink-muted)">${esc(rodape)}</span>` : ""}</div>
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      <svg viewBox="0 0 ${W} ${W}" width="128" height="128" style="flex:none;transform:rotate(-90deg)"
+           role="img" aria-label="${esc(titulo)}">${arcos}</svg>
+      <div style="flex:1;min-width:130px">
+        <div style="font-size:11px;color:var(--ink-muted)">Total</div>
+        <div style="font-size:20px;font-weight:780;font-variant-numeric:tabular-nums">${fmtMZN(total)}
+          <small style="font-size:11px;font-weight:600;color:var(--ink-muted)">MZN</small></div>
+        <div class="legenda">
+          ${fatias.map(f => `<span><i style="background:${f.cor}"></i>${esc(f.nome)}
+            <b>${fmtNumRaw((f.valor / total * 100).toFixed(0))}%</b></span>`).join("")}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* --- barras (entradas/saídas) com a linha do resultado por cima --- */
+function fluxoMensalHTML(meses) {
+  if (meses.length < 2) return "";
+  const W = 320, H = 150, padT = 10, padB = 24, padL = 2;
+  const maxV = Math.max(...meses.flatMap(m => [m.receitas, m.despesas, Math.abs(m.resultado)]), 1);
+  const alt = H - padT - padB;
+  const grupo = (W - padL * 2) / meses.length;
+  const barW = Math.min(12, (grupo - 8) / 2);
+  const yBase = padT + alt;
+  const y = v => yBase - (v / maxV) * alt;
+
+  let barras = "", pontos = [];
+  meses.forEach((m, i) => {
+    const cx = padL + grupo * i + grupo / 2;
+    const bar = (x, v, cor, rot) => {
+      if (!v) return "";
+      const h = Math.max(2, alt - (y(v) - padT));
+      return `<rect class="marca" x="${x.toFixed(1)}" y="${(yBase - h).toFixed(1)}"
+        width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${cor}"
+        data-tip="${esc(m.rotulo)}&#10;${rot}: ${fmtMZN(v)} MZN"/>`;
+    };
+    barras += bar(cx - barW - 1, m.receitas, "var(--s1)", "Receitas") +
+              bar(cx + 1, m.despesas, "var(--s2)", "Despesas");
+    pontos.push({ x: cx, y: y(m.resultado), m });
+  });
+
+  const linha = pontos.map((p, i) => `${i ? "L" : "M"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+  const marcas = pontos.map(p => `<circle class="marca" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4"
+      fill="var(--surface)" stroke="var(--s7)" stroke-width="2"
+      data-tip="${esc(p.m.rotulo)}&#10;Resultado: ${fmtMZN(p.m.resultado)} MZN"/>`).join("");
+  const rotulos = meses.map((m, i) => `<text x="${(padL + grupo * i + grupo / 2).toFixed(1)}" y="${H - 8}"
+      text-anchor="middle" font-size="9.5" fill="var(--ink-muted)">${esc(m.rotulo)}</text>`).join("");
+
+  return `<div class="card">
+    <div class="viz-head"><span class="t">Receitas, despesas e resultado</span>
+      <span style="font-size:11px;color:var(--ink-muted)">toca para ver</span></div>
+    <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img"
+         aria-label="Receitas, despesas e resultado por mês">
+      <line x1="0" y1="${yBase}" x2="${W}" y2="${yBase}" stroke="var(--hairline)" stroke-width="1"/>
+      ${barras}
+      <path d="${linha}" fill="none" stroke="var(--s7)" stroke-width="2"
+            stroke-linejoin="round" stroke-linecap="round"/>
+      ${marcas}${rotulos}
+    </svg>
+    <div class="legenda">
+      <span><i style="background:var(--s1)"></i>Receitas</span>
+      <span><i style="background:var(--s2)"></i>Despesas</span>
+      <span><i style="background:var(--s7);border-radius:50%"></i>Resultado</span>
+    </div>
+  </div>`;
+}
+
+/* --- mapa de calor: categoria (linhas) × mês (colunas) --- */
+function heatmapHTML(cats, meses, matriz, maior) {
+  if (!cats.length || meses.length < 2) return "";
+  const cel = 26, gap = 3, rotW = 74;
+  const W = rotW + meses.length * (cel + gap);
+  const H = 16 + cats.length * (cel + gap);
+  const tom = v => {
+    if (!v) return "var(--heat-0)";
+    const f = v / maior;
+    return `var(--heat-${f > .75 ? 5 : f > .5 ? 4 : f > .25 ? 3 : f > .08 ? 2 : 1})`;
+  };
+  let corpo = "";
+  cats.forEach((c, r) => {
+    const yy = 16 + r * (cel + gap);
+    corpo += `<text x="0" y="${yy + cel / 2 + 3}">${esc(c.length > 12 ? c.slice(0, 11) + "…" : c)}</text>`;
+    meses.forEach((m, k) => {
+      const v = matriz[c][m.chave] || 0;
+      corpo += `<rect class="marca" x="${rotW + k * (cel + gap)}" y="${yy}"
+        width="${cel}" height="${cel}" rx="4" fill="${tom(v)}"
+        data-tip="${esc(c)} · ${esc(m.rotulo)}&#10;${v ? fmtMZN(v) + " MZN" : "sem despesas"}"/>`;
+    });
+  });
+  const cabecalho = meses.map((m, k) =>
+    `<text x="${rotW + k * (cel + gap) + cel / 2}" y="9" text-anchor="middle">${esc(m.rotulo)}</text>`).join("");
+
+  return `<div class="card">
+    <div class="viz-head"><span class="t">Despesas por categoria e mês</span></div>
+    <div class="tablewrap">
+      <svg class="heat" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"
+           role="img" aria-label="Despesas por categoria e mês">${cabecalho}${corpo}</svg>
+    </div>
+    <div class="escala"><span>menos</span>
+      ${[1, 2, 3, 4, 5].map(n => `<i style="background:var(--heat-${n})"></i>`).join("")}
+      <span>mais</span></div>
+  </div>`;
+}
+
+/* --- barra segmentada (composição) --- */
+function segbarHTML(partes, titulo) {
+  const total = partes.reduce((a, p) => a + p.valor, 0);
+  if (!total) return "";
+  return `<div class="card">
+    <div class="viz-head"><span class="t">${esc(titulo)}</span>
+      <span style="font-size:11.5px;color:var(--ink-muted)">${fmtMZN(total)} MZN</span></div>
+    <div class="segbar">
+      ${partes.map(p => `<i class="marca" style="width:${(p.valor / total * 100).toFixed(1)}%;background:${p.cor}"
+        data-tip="${esc(p.nome)}&#10;${fmtMZN(p.valor)} MZN · ${fmtNumRaw((p.valor / total * 100).toFixed(1))}%"></i>`).join("")}
+    </div>
+    <div class="legenda">
+      ${partes.map(p => `<span><i style="background:${p.cor}"></i>${esc(p.nome)}
+        <b>${fmtNumRaw((p.valor / total * 100).toFixed(0))}%</b></span>`).join("")}
+    </div>
+  </div>`;
+}
+
+/* agrupa o livro geral por mês */
 function porMes(movs, n) {
   const mapa = new Map();
   for (const m of movs) {
     if (!m.date) continue;
+    /* mesma regra dos indicadores: o investimento e os suprimentos são
+       financiamento, não operação — senão a compra do camião esmaga o resto */
+    const receita = m.entrada && m.tipo !== "Suprimento";
+    const despesa = !m.entrada && m.tipo !== "Investimento";
+    if (!receita && !despesa) continue;
     const chave = m.date.getFullYear() * 12 + m.date.getMonth();
-    if (!mapa.has(chave)) mapa.set(chave, { chave, entradas: 0, saidas: 0,
+    if (!mapa.has(chave)) mapa.set(chave, { chave, receitas: 0, despesas: 0,
       mes: m.date.getMonth(), ano: m.date.getFullYear() });
     const e = mapa.get(chave);
-    if (m.entrada) e.entradas += m.valor; else e.saidas += m.valor;
+    if (receita) e.receitas += m.valor; else e.despesas += m.valor;
   }
   const lista = [...mapa.values()].sort((a, b) => a.chave - b.chave).slice(-(n || 6));
-  /* mostra o ano no rótulo só quando o período atravessa mais do que um */
   const varios = lista.length > 1 && lista[0].ano !== lista[lista.length - 1].ano;
   lista.forEach(m => {
+    m.resultado = m.receitas - m.despesas;
     m.rotulo = MESES_CURTOS[m.mes] + (varios ? "/" + String(m.ano).slice(2) : "");
   });
   return lista;
 }
+
+const CORES_CAT = ["var(--s1)", "var(--s2)", "var(--s3)", "var(--s4)",
+                   "var(--s5)", "var(--s6)", "var(--s7)", "var(--s8)"];
 
 /* ---- o dashboard ---- */
 function renderResumo(rows) {
@@ -784,47 +984,54 @@ function renderResumo(rows) {
 
   const geralPeriodo = geral.filter(m => inPeriod(m.date, state.period));
   const viagens = td ? tripsInPeriod(td) : [];
+  const lim = periodBounds(state.period);
 
-  /* --- posição de tesouraria: só o que passou pela caixa e pelo banco --- */
+  /* contas do período e do período anterior (para as setas) */
+  const conta = movs => {
+    const receitas = movs.filter(m => m.entrada && m.tipo !== "Suprimento")
+      .reduce((a, m) => a + m.valor, 0);
+    const despesas = movs.filter(m => !m.entrada && m.tipo !== "Investimento")
+      .reduce((a, m) => a + m.valor, 0);
+    return { receitas, despesas, resultado: receitas - despesas };
+  };
+  const atual = conta(geralPeriodo);
+  const anterior = lim ? conta(geral.filter(m => entre(m.date, lim.iniAnt, lim.fimAnt))) : null;
+  const viagensAnt = lim && td ? td.trips.filter(t => entre(t.date, lim.iniAnt, lim.fimAnt)) : null;
+
+  /* tesouraria: só o que passou pela caixa e pelo banco */
   const emCaixa = geral.filter(m => /caixa|banco/i.test(deaccent(m.meio)));
   const saldoTesouraria = emCaixa.reduce((a, m) => a + (m.entrada ? m.valor : -m.valor), 0);
-  const temTesouraria = emCaixa.length > 0;
-
-  /* --- resultado do período: o investimento não é despesa --- */
-  const receitas = geralPeriodo.filter(m => m.entrada && m.tipo !== "Suprimento")
-    .reduce((a, m) => a + m.valor, 0);
-  const despesas = geralPeriodo.filter(m => !m.entrada && m.tipo !== "Investimento")
-    .reduce((a, m) => a + m.valor, 0);
-  const resultado = receitas - despesas;
-  const temResultado = receitas > 0 || despesas > 0;
-
   const totalInvestido = investidores.reduce((a, m) =>
     a + (saidaParaSocio(m.tipo) ? -m.total : m.total), 0);
+  const temResultado = atual.receitas > 0 || atual.despesas > 0;
 
   let html = periodBar();
 
-  /* ---------- 1. os três números que interessam ---------- */
-  const heroItens = [];
-  if (temTesouraria) heroItens.push({ label: "Em caixa e banco",
-    valor: fmtMZN(saldoTesouraria), cor: saldoTesouraria >= 0 ? "" : "var(--serious)" });
-  if (temResultado) heroItens.push({ label: "Resultado do período",
-    valor: fmtMZN(resultado), cor: resultado >= 0 ? "var(--good-text)" : "var(--serious)" });
-  if (viagens.length) heroItens.push({ label: "Viagens", valor: String(viagens.length) });
-  if (!heroItens.length && totalInvestido) heroItens.push({
-    label: "Investido pelos sócios", valor: fmtMZN(totalInvestido) });
-  if (heroItens.length) {
-    html += `<div class="card">${statRow(heroItens, 22)}
-      <div style="font-size:10.5px;color:var(--ink-muted);margin-top:9px">
-        Valores em MZN${temResultado ? " · o investimento não conta como despesa do período" : ""}</div>
-    </div>`;
-  }
+  /* ---------- 1. chips de indicadores ---------- */
+  const kpis = [];
+  if (emCaixa.length) kpis.push({ label: "Em caixa e banco", valor: fmtMZN(saldoTesouraria),
+    unidade: "MZN", cor: saldoTesouraria >= 0 ? "" : "var(--serious)", goto: "contas:correntes" });
+  if (temResultado) kpis.push({ label: "Resultado do período", valor: fmtMZN(atual.resultado),
+    unidade: "MZN", cor: atual.resultado >= 0 ? "var(--good-text)" : "var(--serious)",
+    trend: anterior ? trendHTML(tendencia(atual.resultado, anterior.resultado)) : "",
+    goto: "contas:correntes" });
+  if (atual.receitas) kpis.push({ label: "Receitas", valor: fmtMZN(atual.receitas), unidade: "MZN",
+    trend: anterior ? trendHTML(tendencia(atual.receitas, anterior.receitas)) : "" });
+  if (atual.despesas) kpis.push({ label: "Despesas", valor: fmtMZN(atual.despesas), unidade: "MZN",
+    trend: anterior ? trendHTML(tendencia(atual.despesas, anterior.despesas), false) : "" });
+  if (viagens.length) kpis.push({ label: "Viagens", valor: String(viagens.length),
+    trend: viagensAnt ? trendHTML(tendencia(viagens.length, viagensAnt.length)) : "",
+    goto: "viagens:viagens" });
+  if (!kpis.length && totalInvestido) kpis.push({ label: "Investido pelos sócios",
+    valor: fmtMZN(totalInvestido), unidade: "MZN", goto: "contas:investimentos" });
+  if (kpis.length) html += `<div class="kpis">${kpis.map(kpiHTML).join("")}</div>`;
 
   /* ---------- 2. alertas ---------- */
   const alertas = [];
   const negativas = viagens.filter(t => { const m = tripMargin(t); return m != null && m < 0; });
   if (negativas.length) alertas.push({ goto: "viagens:viagens",
     txt: `<b>${negativas.length} viage${negativas.length > 1 ? "ns" : "m"}</b> com margem negativa — <b>${fmtMZN(negativas.reduce((a, t) => a - tripMargin(t), 0))} MZN</b> de prejuízo` });
-  if (temTesouraria && saldoTesouraria < 0) alertas.push({ goto: "contas:correntes",
+  if (emCaixa.length && saldoTesouraria < 0) alertas.push({ goto: "contas:correntes",
     txt: `Tesouraria negativa — <b>${fmtMZN(saldoTesouraria)} MZN</b> em caixa e banco` });
   const emFalta = socios.filter(s => s.saldo != null && s.saldo < -0.5);
   if (emFalta.length) alertas.push({ goto: "contas:investimentos",
@@ -844,30 +1051,45 @@ function renderResumo(rows) {
     </div>`;
   }
 
-  /* ---------- 3. evolução mensal ---------- */
-  if (geral.length) {
-    html += graficoMensalHTML(porMes(geral, 6));
+  /* ---------- 3. fluxo mensal ---------- */
+  const meses = porMes(geral, 6);
+  if (meses.length >= 2) html += fluxoMensalHTML(meses);
+
+  /* ---------- 4. despesas por categoria (anel) ---------- */
+  const saidas = geralPeriodo.filter(m => !m.entrada && m.categoria && m.tipo !== "Investimento");
+  let topCats = [];
+  if (saidas.length) {
+    const porCat = new Map();
+    for (const m of saidas) porCat.set(m.categoria, (porCat.get(m.categoria) || 0) + m.valor);
+    const todas = [...porCat.entries()].map(([nome, valor]) => ({ nome, valor }))
+      .sort((a, b) => b.valor - a.valor);
+    topCats = todas.slice(0, 5);
+    const resto = todas.slice(5).reduce((a, x) => a + x.valor, 0);
+    const fatias = topCats.map((c, i) => ({ ...c, cor: CORES_CAT[i] }));
+    if (resto) fatias.push({ nome: "Outras", valor: resto, cor: "var(--ink-muted)" });
+    html += donutHTML(fatias, "Despesas por categoria", "sem investimento");
   }
 
-  /* ---------- 4. resultado do período em detalhe ---------- */
-  if (temResultado) {
-    html += `<div class="section-title">Resultado do período</div>
-      <div class="card goto" data-goto="contas:correntes" style="cursor:pointer">
-        ${statRow([
-          { label: "Receitas", valor: fmtMZN(receitas), cor: "var(--good-text)" },
-          { label: "Despesas", valor: fmtMZN(despesas), cor: "var(--serious)" },
-          { label: "Resultado", valor: fmtMZN(resultado),
-            cor: resultado >= 0 ? "var(--good-text)" : "var(--serious)" },
-        ])}
-        <div style="font-size:11.5px;color:var(--accent);font-weight:650;margin-top:10px">Ver movimentos ›</div>
-      </div>`;
+  /* ---------- 5. mapa de calor: categoria × mês ---------- */
+  if (topCats.length >= 2 && meses.length >= 2) {
+    const nomes = topCats.map(c => c.nome);
+    const matriz = {}; let maior = 0;
+    nomes.forEach(n => (matriz[n] = {}));
+    for (const m of geral) {
+      if (m.entrada || !m.date || m.tipo === "Investimento") continue;
+      if (nomes.indexOf(m.categoria) < 0) continue;
+      const chave = m.date.getFullYear() * 12 + m.date.getMonth();
+      matriz[m.categoria][chave] = (matriz[m.categoria][chave] || 0) + m.valor;
+      maior = Math.max(maior, matriz[m.categoria][chave]);
+    }
+    html += heatmapHTML(nomes, meses, matriz, maior);
   }
 
-  /* ---------- 5. operação ---------- */
+  /* ---------- 6. operação ---------- */
   if (viagens.length) {
     const rec = viagens.reduce((a, t) => a + (t.receita || 0), 0);
     const des = viagens.reduce((a, t) => a + (t.despesa || 0), 0);
-    const km  = viagens.reduce((a, t) => a + (t.km || 0), 0);
+    const km = viagens.reduce((a, t) => a + (t.km || 0), 0);
     const marg = td.hasReceita ? rec - des : null;
     const itens = [{ label: "Viagens", valor: String(viagens.length) }];
     if (km) itens.push({ label: "Km", valor: fmtMZN(km) });
@@ -875,12 +1097,10 @@ function renderResumo(rows) {
       cor: marg >= 0 ? "var(--good-text)" : "var(--serious)" });
     if (marg != null && km) itens.push({ label: "Margem/km", valor: fmtNumRaw((marg / km).toFixed(2)) });
 
-    /* melhor e pior viagem, quando há margens */
     const comMargem = viagens.filter(t => tripMargin(t) != null)
       .sort((a, b) => tripMargin(b) - tripMargin(a));
     const destaque = comMargem.length >= 2
-      ? [{ t: comMargem[0], rot: "Melhor" }, { t: comMargem[comMargem.length - 1], rot: "Pior" }]
-      : [];
+      ? [{ t: comMargem[0], rot: "Melhor" }, { t: comMargem[comMargem.length - 1], rot: "Pior" }] : [];
 
     html += `<div class="section-title">Operação</div>
       <div class="card goto" data-goto="viagens:viagens" style="cursor:pointer">
@@ -898,26 +1118,18 @@ function renderResumo(rows) {
         </div>`).join("") + `</div>` : ""}`;
   }
 
-  /* ---------- 6. despesas por categoria ----------
-     Sem o investimento: comprar o camião não é uma despesa do mês, e
-     misturado esmagaria as despesas de operação. */
-  const saidas = geralPeriodo.filter(m => !m.entrada && m.categoria && m.tipo !== "Investimento");
-  if (saidas.length) {
+  /* ---------- 7. custo das viagens: em que se gasta na estrada ---------- */
+  const daEstrada = geralPeriodo.filter(m => !m.entrada && m.viagem && m.categoria);
+  if (daEstrada.length >= 2) {
     const porCat = new Map();
-    for (const m of saidas) porCat.set(m.categoria, (porCat.get(m.categoria) || 0) + m.valor);
-    const todas = [...porCat.entries()].map(([nome, valor]) => ({ nome, valor }))
-      .sort((a, b) => b.valor - a.valor);
-    const top = todas.slice(0, 5);
-    const resto = todas.slice(5).reduce((a, x) => a + x.valor, 0);
-    html += `<div class="section-title">Despesas por categoria</div>
-      <div class="card goto" data-goto="contas:correntes" style="cursor:pointer">
-        ${barrasHTML(top, top[0].valor)}
-        ${resto ? `<div style="font-size:11.5px;color:var(--ink-muted);margin-top:9px">
-          + ${todas.length - 5} outras categorias · ${fmtMZN(resto)} MZN</div>` : ""}
-      </div>`;
+    for (const m of daEstrada) porCat.set(m.categoria, (porCat.get(m.categoria) || 0) + m.valor);
+    const partes = [...porCat.entries()].map(([nome, valor]) => ({ nome, valor }))
+      .sort((a, b) => b.valor - a.valor).slice(0, 6)
+      .map((p, i) => ({ ...p, cor: CORES_CAT[i] }));
+    html += segbarHTML(partes, "Custo das viagens");
   }
 
-  /* ---------- 7. sócios ---------- */
+  /* ---------- 8. sócios ---------- */
   if (socios.length) {
     html += `<div class="section-title">Sócios</div>
       <div class="card">
@@ -940,11 +1152,10 @@ function renderResumo(rows) {
       </div>`;
   }
 
-  /* ---------- 8. últimos movimentos ---------- */
+  /* ---------- 9. últimos movimentos ---------- */
   if (geral.length) {
-    const ultimos = geral.slice(-4).reverse();
     html += `<div class="section-title">Últimos movimentos</div><div class="card">` +
-      ultimos.map(m => `<div class="mov">
+      geral.slice(-4).reverse().map(m => `<div class="mov">
         <div class="m-main">
           <div class="m-item" style="font-size:13px">${esc(m.desc || m.categoria || "(sem descrição)")}</div>
           <div class="m-date">${[m.data, m.categoria].filter(Boolean).map(esc).join(" · ")}</div>
@@ -958,7 +1169,7 @@ function renderResumo(rows) {
     </div>`;
   }
 
-  /* ---------- 9. indicadores próprios da folha Resumo ---------- */
+  /* ---------- 10. indicadores próprios da folha Resumo ---------- */
   const pares = [];
   for (const r of (rows || [])) {
     const cells = r.map(c => (c || "").trim()).filter(Boolean);
@@ -974,14 +1185,12 @@ function renderResumo(rows) {
       </div>`).join("") + `</div>`;
   }
 
-  /* ---------- nada ainda ---------- */
-  if (!heroItens.length && !geral.length && !viagens.length && !socios.length && !pares.length) {
+  if (!kpis.length && !geral.length && !viagens.length && !socios.length && !pares.length) {
     return emptyState("Ainda sem dados para o dashboard.",
       "Assim que houver lançamentos nas folhas de contas e viagens, aparecem aqui resumidos.");
   }
   return html;
 }
-
 
 /* --- Movimentos: o livro de contas, filtrável por sócio, tipo e categoria --- */
 let movFilter = "Todos";   // sócio
@@ -2306,6 +2515,35 @@ mainEl.addEventListener("click", e => {
     repaintView("correntes"); window.scrollTo({ top: 0 }); return;
   }
 });
+
+/* ---------------- Valores ao toque nos gráficos ---------------- */
+const vizTip = document.getElementById("vizTip");
+let tipTimer = null;
+
+function mostrarTip(alvo, x, y) {
+  vizTip.innerHTML = esc(alvo.getAttribute("data-tip")).replace(/\n/g, "<br>");
+  vizTip.hidden = false;
+  const r = vizTip.getBoundingClientRect();
+  const px = Math.min(Math.max(8, x - r.width / 2), window.innerWidth - r.width - 8);
+  const py = y - r.height - 12 < 8 ? y + 16 : y - r.height - 12;
+  vizTip.style.left = px + "px";
+  vizTip.style.top = py + "px";
+  clearTimeout(tipTimer);
+  tipTimer = setTimeout(esconderTip, 2600);   // some sozinho no telemóvel
+}
+function esconderTip() { vizTip.hidden = true; }
+
+document.addEventListener("click", e => {
+  const marca = e.target.closest("[data-tip]");
+  if (!marca) { esconderTip(); return; }
+  mostrarTip(marca, e.clientX, e.clientY);
+}, true);
+document.addEventListener("pointermove", e => {
+  if (e.pointerType !== "mouse") return;
+  const marca = e.target.closest("[data-tip]");
+  if (marca) mostrarTip(marca, e.clientX, e.clientY); else esconderTip();
+});
+window.addEventListener("scroll", esconderTip, { passive: true });
 
 /* ---------------- Pesquisa global ---------------- */
 const searchOverlay = document.getElementById("searchOverlay");
