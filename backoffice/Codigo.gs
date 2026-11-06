@@ -21,6 +21,9 @@ var FOLHA_SOCIOS   = 'Sócios - Contas Correntes';
 /* Quem pagou, quando não foi um sócio (sai da conta da empresa). */
 var PAGADOR_EMPRESA = 'Empresa';
 
+/* Categoria com que um abastecimento entra no livro geral. */
+var CATEGORIA_COMBUSTIVEL = 'Combustível';
+
 /* Tipos que o formulário «Contas» oferece (livro geral). */
 var TIPOS = ['Despesa', 'Recebimento', 'Investimento', 'Suprimento'];
 
@@ -208,15 +211,36 @@ function guardarAbastecimento(codigo, dados) {
     var sh = folha_(ABAST_ID, nomeFolha);
     var litros = Number(dados.litros) || 0;
     var preco = Number(dados.preco) || 0;
+    var total = dados.valor ? Number(dados.valor) : (litros * preco);
+
     sh.appendRow([
       dados.data || '',
       dados.local || '',
       litros,
       preco,
-      dados.valor ? Number(dados.valor) : (litros * preco),
+      total,
       dados.km ? Number(dados.km) : ''
     ]);
-    return { ok: true, folha: nomeFolha };
+
+    /* O combustível é dinheiro que sai: entra também como despesa no livro
+       geral, senão a tesouraria e as despesas ficavam por baixo do real.
+       Não é preciso lançá-lo outra vez no formulário Contas. */
+    var escritas = [nomeFolha], aviso = null;
+    if (total) {
+      aviso = tentarEscreverGeral_({
+        data: dados.data,
+        tipo: 'Despesa',
+        categoria: CATEGORIA_COMBUSTIVEL,
+        descricao: 'Abastecimento' + (dados.local ? ' ' + dados.local : '') + ' · ' + nomeFolha,
+        valor: total,
+        meio: dados.meio || '',
+        quem: dados.quem || '',
+        viagem: nomeFolha,
+        nota: litros ? litros + ' L' + (preco ? ' a ' + preco + ' MZN/L' : '') : ''
+      });
+      if (!aviso) escritas.push(FOLHA_GERAL);
+    }
+    return { ok: true, folha: nomeFolha, total: total, folhas: escritas, aviso: aviso };
   } finally {
     lock.releaseLock();
   }
@@ -305,6 +329,16 @@ function obterConfiguracaoMovimentos() {
     temGeral: temGeral,
     colunasGeral: colunasGeral
   };
+}
+
+/**
+ * Como escreverGeral_, mas nunca rebenta: devolve o erro em texto.
+ * Usado depois de já se ter gravado noutra folha, para não deixar o
+ * lançamento a meio quando a folha «Movimentos Geral» ainda não existe.
+ */
+function tentarEscreverGeral_(dados) {
+  try { escreverGeral_(dados); return null; }
+  catch (e) { return e.message || String(e); }
 }
 
 /**
@@ -405,7 +439,7 @@ function guardarInvestimento(dados) {
     shI.appendRow(linhaI);
 
     /* 2) livro geral: uma linha com o SOMATÓRIO */
-    escreverGeral_({
+    var avisoInv = tentarEscreverGeral_({
       data: dados.data,
       tipo: dados.tipo,
       categoria: dados.categoria,
@@ -417,7 +451,9 @@ function guardarInvestimento(dados) {
       nota: dados.nota
     });
 
-    return { ok: true, total: total, folhas: [shI.getName(), FOLHA_GERAL] };
+    var folhasInv = [shI.getName()];
+    if (!avisoInv) folhasInv.push(FOLHA_GERAL);
+    return { ok: true, total: total, folhas: folhasInv, aviso: avisoInv };
   } finally {
     lock.releaseLock();
   }

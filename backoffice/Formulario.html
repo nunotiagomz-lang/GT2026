@@ -85,7 +85,18 @@
     <input id="abPreco" type="number" inputmode="decimal" step="any" placeholder="0">
     <label for="abKm">Km no conta-quilómetros</label>
     <input id="abKm" type="number" inputmode="numeric" step="any" placeholder="0">
-    <div class="hint">O valor total é calculado automaticamente (litros × preço).</div>
+    <label for="abQuem">Pago Por</label>
+    <input id="abQuem" type="text" list="lPagadores" placeholder="Posto, empresa ou sócio">
+    <label for="abMeio">Meio</label>
+    <select id="abMeio">
+      <option value="">— por indicar —</option>
+      <option value="Caixa">Caixa</option>
+      <option value="Banco">Banco</option>
+      <option value="Sócio">Sócio</option>
+    </select>
+    <div class="hint">O valor total é calculado automaticamente (litros × preço),
+      e o abastecimento entra sozinho como <b>despesa de combustível</b> no livro geral —
+      não o lances outra vez em Contas.</div>
   </div>
   <button class="primary" onclick="gravarAbastecimento()">Guardar abastecimento</button>
   <div class="msg" id="msgAbast"></div>
@@ -251,16 +262,25 @@ function gravarAbastecimento() {
     local: document.getElementById('abLocal').value,
     litros: document.getElementById('abLitros').value,
     preco: document.getElementById('abPreco').value,
-    km: document.getElementById('abKm').value
+    km: document.getElementById('abKm').value,
+    quem: document.getElementById('abQuem').value,
+    meio: document.getElementById('abMeio').value
   };
   if (!dados.litros) { mensagem('msgAbast', 'Indica os litros.', true); return; }
 
   google.script.run
     .withSuccessHandler(function (res) {
-      mensagem('msgAbast', '✓ Abastecimento guardado na folha ' + res.folha + '.', false);
+      if (res.aviso) {
+        mensagem('msgAbast', '✓ Guardado na folha ' + res.folha +
+          ', mas não entrou no livro geral: ' + res.aviso, true);
+      } else {
+        mensagem('msgAbast', '✓ ' + (res.total ? res.total.toLocaleString('pt-PT') + ' MZN guardados em: '
+          : 'Guardado em: ') + res.folhas.join(' e ') + '.', false);
+      }
       ['abLocal', 'abLitros', 'abPreco', 'abKm'].forEach(function (id) {
         document.getElementById(id).value = '';
       });
+      recarregar();
     })
     .withFailureHandler(function (err) {
       mensagem('msgAbast', 'Não foi possível guardar: ' + err.message, true);
@@ -352,8 +372,13 @@ function gravarInvestimento() {
 
   google.script.run
     .withSuccessHandler(function (res) {
-      mensagem('msgInv', '✓ ' + res.total.toLocaleString('pt-PT') +
-        ' MZN guardados em: ' + res.folhas.join(' e ') + '.', false);
+      if (res.aviso) {
+        mensagem('msgInv', '✓ Guardado no livro dos investidores, mas não entrou no livro geral: ' +
+          res.aviso, true);
+      } else {
+        mensagem('msgInv', '✓ ' + res.total.toLocaleString('pt-PT') +
+          ' MZN guardados em: ' + res.folhas.join(' e ') + '.', false);
+      }
       ['ivDescricao', 'ivNota'].forEach(function (id) { document.getElementById(id).value = ''; });
       lista.forEach(function (nome) {
         var el = document.getElementById(idDoSocio(nome));
