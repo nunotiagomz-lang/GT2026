@@ -81,6 +81,37 @@ function cabecalho_(sh) {
   return { linha: 1, cols: [] };
 }
 
+/**
+ * Cabeçalho de uma folha de abastecimentos. Aqui não serve a regra do
+ * cabecalho_ ("primeira linha com 2 células"), porque essa apanharia o bloco
+ * de título da viagem ("Viagem | VF56"). O cabeçalho é a linha com MAIS
+ * células preenchidas das primeiras — a mesma regra que a app de consulta usa.
+ */
+function cabecalhoAbast_(sh) {
+  var n = Math.min(10, sh.getLastRow() || 1);
+  var valores = sh.getRange(1, 1, n, sh.getLastColumn() || 1).getValues();
+  var melhor = -1, quantas = 0;
+  for (var i = 0; i < valores.length; i++) {
+    var preenchidas = valores[i].filter(function (c) { return String(c).trim(); }).length;
+    if (preenchidas > quantas) { quantas = preenchidas; melhor = i; }
+  }
+  if (melhor < 0 || quantas < 3) return { linha: 1, cols: [] };
+  return {
+    linha: melhor + 1,
+    cols: valores[melhor].map(function (c) { return String(c).trim(); })
+  };
+}
+
+/** Número à portuguesa: aceita "82,5", "1 234,56" e também o ponto. */
+function num_(v) {
+  if (typeof v === 'number') return v;
+  var t = String(v == null ? '' : v).replace(/[\s\u00a0]/g, '');
+  if (!t) return 0;
+  if (t.indexOf(',') >= 0) t = t.replace(/\./g, '').replace(',', '.');
+  var n = parseFloat(t);
+  return isNaN(n) ? 0 : n;
+}
+
 function indiceDe_(cols, padroes) {
   for (var p = 0; p < padroes.length; p++) {
     for (var i = 0; i < cols.length; i++) {
@@ -191,16 +222,100 @@ function guardarViagem(valores) {
 }
 
 /** Cria (se faltar) a folha de abastecimentos da viagem, com cabeçalhos. */
+var COLUNAS_ABAST = ['Data', 'Bomba', 'Local', 'Litros', 'Preço/Litro', 'Valor (MZN)', 'Km'];
+
+/** Matrícula, motorista e trajecto de uma viagem, lidos da folha Viagens. */
+function dadosDaViagem_(codigo) {
+  var numero = String(codigo).replace(/\D/g, '');
+  var out = { matricula: '', motorista: '', trajecto: '' };
+  try {
+    var sh = folha_(PLANO_ID, FOLHA_VIAGENS);
+    var cab = cabecalho_(sh);
+    if (sh.getLastRow() <= cab.linha) return out;
+    var iVF = indiceDe_(cab.cols, [/^vf$/i, /c[óo]digo/i]);
+    var iMat = indiceDe_(cab.cols, [/viatura|matr[íi]cula/i]);
+    var iMot = indiceDe_(cab.cols, [/motorista|condutor/i]);
+    var iTra = indiceDe_(cab.cols, [/trajecto|trajeto|rota|percurso|prov[íi]ncia|destino/i]);
+    var dados = sh.getRange(cab.linha + 1, 1, sh.getLastRow() - cab.linha, cab.cols.length).getValues();
+    for (var i = dados.length - 1; i >= 0; i--) {      // a mais recente, se houver repetidos
+      if (iVF < 0) break;
+      if (String(dados[i][iVF]).replace(/\D/g, '') !== numero) continue;
+      if (iMat >= 0) out.matricula = String(dados[i][iMat]).trim();
+      if (iMot >= 0) out.motorista = String(dados[i][iMot]).trim();
+      if (iTra >= 0) out.trajecto = String(dados[i][iTra]).trim();
+      break;
+    }
+  } catch (e) { /* folha Viagens em falta: fica sem cabeçalho de viagem */ }
+  return out;
+}
+
+/** Cria (se faltar) a folha de abastecimentos da viagem. */
 function criarFolhaAbastecimentos_(nomeFolha) {
   var ss = SpreadsheetApp.openById(ABAST_ID);
   if (ss.getSheetByName(nomeFolha)) return;
   var sh = ss.insertSheet(nomeFolha);
-  sh.appendRow(['Data', 'Local', 'Litros', 'Preço/Litro', 'Valor (MZN)', 'Km']);
-  sh.getRange(1, 1, 1, 6).setFontWeight('bold');
-  sh.setFrozenRows(1);
+
+  /* identificação da viagem, em pares rótulo/valor para não se confundirem
+     com o cabeçalho da tabela (que é a linha com mais células preenchidas) */
+  var v = dadosDaViagem_(nomeFolha);
+  sh.appendRow(['Viagem', nomeFolha]);
+  sh.appendRow(['Matrícula', v.matricula]);
+  sh.appendRow(['Motorista', v.motorista]);
+  sh.appendRow(['Trajecto', v.trajecto]);
+  sh.appendRow([]);
+  sh.getRange(1, 1, 4, 1).setFontWeight('bold');
+
+  sh.appendRow(COLUNAS_ABAST);
+  var linhaCab = sh.getLastRow();
+  sh.getRange(linhaCab, 1, 1, COLUNAS_ABAST.length).setFontWeight('bold');
+  sh.setFrozenRows(linhaCab);
 }
 
-/** Grava um abastecimento na folha da viagem indicada. */
+/**
+ * Acrescenta o bloco de título (Viagem / Matrícula / Motorista / Trajecto) às
+ * folhas de abastecimentos que já existiam antes desta alteração.
+ *
+ * Correr à mão uma vez, a partir do editor do Apps Script: escolher
+ * "preencherTitulosDasViagens" na lista de funções e clicar em Executar.
+ * É seguro repetir — salta as folhas que já têm o bloco e nunca mexe nos
+ * abastecimentos já lançados (as linhas são empurradas para baixo).
+ */
+function preencherTitulosDasViagens() {
+  verificarAcesso_();
+  var ss = SpreadsheetApp.openById(ABAST_ID);
+  var feitas = [], saltadas = [];
+
+  ss.getSheets().forEach(function (sh) {
+    var nome = sh.getName();
+    if (!/^vf\s*\d+$/i.test(nome.replace(/[\s\-_]/g, ''))) { saltadas.push(nome); return; }
+    if (String(sh.getRange(1, 1).getValue()).trim().toLowerCase() === 'viagem') {
+      saltadas.push(nome); return;      // já tem o bloco
+    }
+    var v = dadosDaViagem_(nome);
+    sh.insertRowsBefore(1, 5);
+    sh.getRange(1, 1, 4, 2).setValues([
+      ['Viagem', nome],
+      ['Matrícula', v.matricula],
+      ['Motorista', v.motorista],
+      ['Trajecto', v.trajecto]
+    ]);
+    sh.getRange(1, 1, 4, 1).setFontWeight('bold');
+    feitas.push(nome);
+  });
+
+  var aviso = 'Bloco de título acrescentado em ' + feitas.length + ' folha(s)';
+  if (feitas.length) aviso += ': ' + feitas.join(', ');
+  aviso += '. Sem alterações em ' + saltadas.length + '.';
+  Logger.log(aviso);
+  return { ok: true, feitas: feitas, saltadas: saltadas, aviso: aviso };
+}
+
+/**
+ * Grava um abastecimento na folha da viagem e, com ele, a despesa de
+ * combustível no livro geral. Escreve por NOME de coluna, para que uma
+ * folha antiga (sem a coluna "Bomba") continue a receber os valores nos
+ * sítios certos em vez de ficar desalinhada.
+ */
 function guardarAbastecimento(codigo, dados) {
   verificarAcesso_();
   var lock = LockService.getScriptLock();
@@ -209,32 +324,48 @@ function guardarAbastecimento(codigo, dados) {
     var nomeFolha = 'VF' + String(codigo).replace(/\D/g, '');
     criarFolhaAbastecimentos_(nomeFolha);
     var sh = folha_(ABAST_ID, nomeFolha);
-    var litros = Number(dados.litros) || 0;
-    var preco = Number(dados.preco) || 0;
-    var total = dados.valor ? Number(dados.valor) : (litros * preco);
+    var cab = cabecalhoAbast_(sh);
+    if (!cab.cols.length) {
+      throw new Error('A folha ' + nomeFolha + ' não tem cabeçalho de tabela ' +
+        '(Data, Litros, Preço/Litro…). Acrescenta-o e grava outra vez.');
+    }
 
-    sh.appendRow([
-      dados.data || '',
-      dados.local || '',
-      litros,
-      preco,
-      total,
-      dados.km ? Number(dados.km) : ''
-    ]);
+    var litros = num_(dados.litros);
+    var preco = num_(dados.preco);
+    var total = dados.valor ? num_(dados.valor) : (litros * preco);
+    var km = num_(dados.km);
+
+    var linha = [];
+    for (var i = 0; i < cab.cols.length; i++) linha.push('');
+    function por(padroes, v) {
+      var k = indiceDe_(cab.cols, padroes);
+      if (k >= 0 && v !== '' && v != null) linha[k] = v;
+    }
+    /* padrões ancorados no início do nome: "litros" solto também casaria com
+       "Preço/Litro", e os litros iriam para a coluna do preço */
+    por([/^data/i], dados.data || '');
+    por([/^bomba/i, /^posto/i], dados.bomba || '');
+    por([/^local/i, /^cidade/i, /^localidade/i], dados.local || '');
+    por([/^litros?\b/i, /^litros?$/i], litros || '');
+    por([/^pre[çc]o/i], preco || '');
+    por([/^valor/i, /^montante/i, /^total/i], total || '');
+    por([/^km\b/i, /^conta[\s-]?km/i, /^od[óo]metro/i, /^quil[óo]metr/i], km || '');
+    sh.appendRow(linha);
 
     /* O combustível é dinheiro que sai: entra também como despesa no livro
        geral, senão a tesouraria e as despesas ficavam por baixo do real.
        Não é preciso lançá-lo outra vez no formulário Contas. */
     var escritas = [nomeFolha], aviso = null;
     if (total) {
+      var onde = [dados.bomba, dados.local].filter(function (x) { return x; }).join(' ');
       aviso = tentarEscreverGeral_({
         data: dados.data,
         tipo: 'Despesa',
         categoria: CATEGORIA_COMBUSTIVEL,
-        descricao: 'Abastecimento' + (dados.local ? ' ' + dados.local : '') + ' · ' + nomeFolha,
+        descricao: 'Abastecimento' + (onde ? ' ' + onde : '') + ' · ' + nomeFolha,
         valor: total,
         meio: dados.meio || '',
-        quem: dados.quem || '',
+        quem: dados.quem || dados.bomba || '',
         viagem: nomeFolha,
         nota: litros ? litros + ' L' + (preco ? ' a ' + preco + ' MZN/L' : '') : ''
       });
@@ -281,16 +412,22 @@ function obterConfiguracaoMovimentos() {
       });
   }
 
-  /* quem já apareceu em «Pago Por»: sócios, fornecedores, clientes */
-  var pagadores = [];
+  /* quem já apareceu em «Pago Por»: sócios, fornecedores, clientes.
+     As linhas de combustível dão-nos também a lista das bombas. */
+  var pagadores = [], bombas = [];
   function juntarPagadores(sh) {
     var cab = cabecalho_(sh);
     var iP = indiceDe_(cab.cols, [/pago\s*por|contraparte|fornecedor/i]);
     if (iP < 0 || sh.getLastRow() <= cab.linha) return;
-    sh.getRange(cab.linha + 1, iP + 1, sh.getLastRow() - cab.linha, 1)
+    var iCat = indiceDe_(cab.cols, [/categoria/i]);
+    var largura = iCat >= 0 ? Math.max(iP, iCat) + 1 : iP + 1;
+    sh.getRange(cab.linha + 1, 1, sh.getLastRow() - cab.linha, largura)
       .getValues().forEach(function (r) {
-        var v = String(r[0]).trim();
-        if (v && pagadores.indexOf(v) === -1) pagadores.push(v);
+        var v = String(r[iP]).trim();
+        if (!v) return;
+        if (pagadores.indexOf(v) === -1) pagadores.push(v);
+        var cat = iCat >= 0 ? String(r[iCat]).trim().toLowerCase() : '';
+        if (cat.indexOf('combust') === 0 && bombas.indexOf(v) === -1) bombas.push(v);
       });
   }
 
@@ -323,6 +460,7 @@ function obterConfiguracaoMovimentos() {
     socioCols: socioCols,
     categorias: categorias,
     pagadores: outros,
+    bombas: bombas.sort(),
     tipos: TIPOS,
     tiposInvestidores: TIPOS_INVESTIDORES,
     pagadorEmpresa: PAGADOR_EMPRESA,
@@ -358,7 +496,7 @@ function escreverGeral_(dados) {
   por([/^tipo$/i], dados.tipo || '');
   por([/categoria/i], dados.categoria || '');
   por([/descri/i, /^item$/i], dados.descricao || '');
-  por([/^valor/i, /montante/i], Number(dados.valor));
+  por([/^valor/i, /montante/i], num_(dados.valor));
   por([/sentido|natureza|entrada/i], sentidoDe_(dados.tipo));
   por([/^meio/i, /forma\s*de\s*pagamento/i, /^conta$/i], dados.meio || '');
   por([/pago\s*por|respons|contraparte|fornecedor/i], dados.quem || '');
@@ -376,7 +514,7 @@ function guardarMovimento(dados) {
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    if (!Number(dados.valor)) throw new Error('Indica um valor.');
+    if (!num_(dados.valor)) throw new Error('Indica um valor.');
     if (!String(dados.quem || '').trim()) throw new Error('Indica quem pagou ou recebeu.');
     escreverGeral_(dados);
     return { ok: true, folhas: [FOLHA_GERAL] };
@@ -405,7 +543,7 @@ function guardarInvestimento(dados) {
     /* casa cada sócio com a coluna dele e soma o total */
     var total = 0, contribuintes = [], colunas = {};
     for (var nome in valores) {
-      var v = Number(valores[nome]);
+      var v = num_(valores[nome]);
       if (!v) continue;
       var idx = -1;
       for (var j = 0; j < cabI.cols.length; j++) {

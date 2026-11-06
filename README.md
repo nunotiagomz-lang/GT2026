@@ -136,6 +136,13 @@ Os abastecimentos vêm de um segundo ficheiro no Drive, chamado
 código da viagem (ex.: `vf15`). No detalhe de uma viagem, o botão
 "⛽ Abastecimentos" abre a folha correspondente.
 
+Cada folha dessa planilha começa com a **identificação da viagem** — `Viagem`,
+`Matrícula`, `Motorista`, `Trajecto`, um rótulo e um valor por linha — depois
+uma linha em branco e só então o cabeçalho da tabela
+(`Data · Bomba · Local · Litros · Preço/Litro · Valor (MZN) · Km`). A app salta
+esse bloco sozinha: o cabeçalho é a linha com mais células preenchidas, por isso
+podes acrescentar ou tirar linhas de título sem configurar nada.
+
 Para ligar: partilhar esse ficheiro como «Qualquer pessoa com o link — Leitor»
 e colocar o ID do ficheiro na constante `ABASTECIMENTOS_ID` no topo do
 `<script>` de `index.html` (o ID é a parte do link entre `/d/` e `/edit`).
