@@ -77,14 +77,18 @@
     <select id="abCodigo"><option>A carregar…</option></select>
     <label for="abData">Data</label>
     <input id="abData" type="date">
+    <label for="abBomba">Nome da bomba</label>
+    <input id="abBomba" type="text" list="lBombas" placeholder="Ex.: Petromoc">
+    <datalist id="lBombas"></datalist>
     <label for="abLocal">Local</label>
     <input id="abLocal" type="text" placeholder="Ex.: Chimoio">
     <label for="abLitros">Litros</label>
-    <input id="abLitros" type="number" inputmode="decimal" step="any" placeholder="0">
+    <input id="abLitros" type="text" inputmode="decimal" placeholder="0" oninput="somarAbastecimento()">
     <label for="abPreco">Preço por litro (MZN)</label>
-    <input id="abPreco" type="number" inputmode="decimal" step="any" placeholder="0">
+    <input id="abPreco" type="text" inputmode="decimal" placeholder="0" oninput="somarAbastecimento()">
+    <div class="total" id="abTotal"><span>Total</span><span>0 MZN</span></div>
     <label for="abKm">Km no conta-quilómetros</label>
-    <input id="abKm" type="number" inputmode="numeric" step="any" placeholder="0">
+    <input id="abKm" type="text" inputmode="decimal" placeholder="0">
     <label for="abQuem">Pago Por</label>
     <input id="abQuem" type="text" list="lPagadores" placeholder="Posto, empresa ou sócio">
     <label for="abMeio">Meio</label>
@@ -94,7 +98,8 @@
       <option value="Banco">Banco</option>
       <option value="Sócio">Sócio</option>
     </select>
-    <div class="hint">O valor total é calculado automaticamente (litros × preço),
+    <div class="hint">Nos litros e no preço podes usar casas decimais com vírgula
+      (ex.: <b>240,5</b> e <b>82,5</b>). O valor total é calculado automaticamente (litros × preço),
       e o abastecimento entra sozinho como <b>despesa de combustível</b> no livro geral —
       não o lances outra vez em Contas.</div>
   </div>
@@ -115,7 +120,7 @@
     <label for="mvDescricao">Descrição</label>
     <input id="mvDescricao" type="text" placeholder="Ex.: Portagem Maputo - Tete">
     <label for="mvValor">Valor (MZN)</label>
-    <input id="mvValor" type="number" inputmode="decimal" step="any" placeholder="0">
+    <input id="mvValor" type="text" inputmode="decimal" placeholder="0">
     <label for="mvQuem">Pago Por</label>
     <input id="mvQuem" type="text" list="lPagadores" oninput="atualizarDica()"
            placeholder="Um sócio, a empresa, ou um fornecedor / cliente">
@@ -178,6 +183,25 @@ function mostrar(qual) {
 
 function idDoCampo(nome) { return 'c_' + nome.replace(/[^a-zA-Z0-9]/g, '_'); }
 
+/* Número à portuguesa: "82,5" e "1 234,56" valem tanto como "82.5".
+   É por isto que os campos são de texto — o type="number" rejeita a vírgula. */
+function numero(v) {
+  var t = String(v == null ? '' : v).replace(/[\s\u00a0]/g, '');
+  if (!t) return 0;
+  if (t.indexOf(',') >= 0) t = t.replace(/\./g, '').replace(',', '.');
+  var n = parseFloat(t);
+  return isNaN(n) ? 0 : n;
+}
+function valorNum(id) { return numero(document.getElementById(id).value); }
+
+/* Mostra litros × preço enquanto se escreve — é a confirmação, no ecrã, de que
+   as casas decimais foram lidas como se escreveram. */
+function somarAbastecimento() {
+  var t = valorNum('abLitros') * valorNum('abPreco');
+  document.getElementById('abTotal').innerHTML = '<span>Total</span><span>' +
+    t.toLocaleString('pt-PT', { maximumFractionDigits: 2 }) + ' MZN</span>';
+}
+
 /* Constrói o formulário a partir das colunas reais da folha Viagens:
    acrescentas uma coluna no Excel e ela aparece aqui sozinha. */
 function construirViagem(cfg) {
@@ -206,8 +230,10 @@ function construirViagem(cfg) {
       return '<label for="' + id + '">' + nome + '</label><input id="' + id + '" type="date">';
     }
     if (/km|litros|valor|receita|despesa|saldo|pre.o|quantidade|req/.test(n)) {
+      /* data-num marca os campos que são convertidos de "1 234,5" para número
+         antes de irem para a folha — sem isto o Sheets recebia texto */
       return '<label for="' + id + '">' + nome + '</label>' +
-             '<input id="' + id + '" type="number" inputmode="decimal" step="any">';
+             '<input id="' + id + '" type="text" inputmode="decimal" data-num="1">';
     }
     return '<label for="' + id + '">' + nome + '</label><input id="' + id + '" type="text">';
   }).join('');
@@ -238,7 +264,8 @@ function gravarViagem() {
   CONFIG.colunas.forEach(function (nome) {
     var el = document.getElementById(idDoCampo(nome));
     if (!el) return;
-    valores[nome] = el.type === 'date' ? formatarData(el.value) : el.value;
+    valores[nome] = el.type === 'date' ? formatarData(el.value)
+      : (el.dataset.num && el.value ? numero(el.value) : el.value);
   });
 
   google.script.run
@@ -259,10 +286,11 @@ function gravarAbastecimento() {
   if (!codigo) { mensagem('msgAbast', 'Escolhe a viagem.', true); return; }
   var dados = {
     data: formatarData(document.getElementById('abData').value),
+    bomba: document.getElementById('abBomba').value,
     local: document.getElementById('abLocal').value,
-    litros: document.getElementById('abLitros').value,
-    preco: document.getElementById('abPreco').value,
-    km: document.getElementById('abKm').value,
+    litros: valorNum('abLitros'),
+    preco: valorNum('abPreco'),
+    km: valorNum('abKm'),
     quem: document.getElementById('abQuem').value,
     meio: document.getElementById('abMeio').value
   };
@@ -277,9 +305,12 @@ function gravarAbastecimento() {
         mensagem('msgAbast', '✓ ' + (res.total ? res.total.toLocaleString('pt-PT') + ' MZN guardados em: '
           : 'Guardado em: ') + res.folhas.join(' e ') + '.', false);
       }
-      ['abLocal', 'abLitros', 'abPreco', 'abKm'].forEach(function (id) {
+      /* limpa tudo o que é do abastecimento que acabou de entrar: nada de
+         valores antigos a seguirem caladamente para o lançamento seguinte */
+      ['abBomba', 'abLocal', 'abLitros', 'abPreco', 'abKm'].forEach(function (id) {
         document.getElementById(id).value = '';
       });
+      somarAbastecimento();
       recarregar();
     })
     .withFailureHandler(function (err) {
@@ -292,20 +323,30 @@ var CFG_MOV = null;
 
 function construirMovimento(cfg) {
   CFG_MOV = cfg;
+  /* tolerante a listas em falta ou com buracos: um campo vazio na configuração
+     não pode deixar o formulário sem listas nem sem as caixas dos sócios */
+  var limpa = function (lista) {
+    return (lista || []).map(function (v) { return String(v == null ? '' : v).trim(); })
+      .filter(Boolean);
+  };
   var opcoes = function (lista) {
-    return lista.map(function (v) {
+    return limpa(lista).map(function (v) {
       return '<option value="' + v.replace(/"/g, '&quot;') + '">' + v + '</option>';
     }).join('');
   };
   document.getElementById('mvTipo').innerHTML = opcoes(cfg.tipos);
   var sugestoes = function (lista) {
-    return lista.map(function (v) { return '<option value="' + v.replace(/"/g, '&quot;') + '">'; }).join('');
+    return limpa(lista).map(function (v) {
+      return '<option value="' + v.replace(/"/g, '&quot;') + '">';
+    }).join('');
   };
   document.getElementById('lCategorias').innerHTML = sugestoes(cfg.categorias);
   /* sócios primeiro (são os que também vão para o livro dos investidores),
      depois a empresa e quem já apareceu antes */
   document.getElementById('lPagadores').innerHTML =
-    sugestoes(cfg.socios.concat([cfg.pagadorEmpresa]).concat(cfg.pagadores || []));
+    sugestoes(limpa(cfg.socios).concat([cfg.pagadorEmpresa]).concat(cfg.pagadores || []));
+  /* bombas já usadas: saem de quem recebeu os pagamentos de combustível */
+  document.getElementById('lBombas').innerHTML = sugestoes(cfg.bombas || []);
   atualizarDica();
   construirInvestimento(cfg);
 }
@@ -317,19 +358,19 @@ function construirInvestimento(cfg) {
   document.getElementById('ivTipo').innerHTML = (cfg.tiposInvestidores || cfg.tipos)
     .map(function (v) { return '<option value="' + v + '">' + v + '</option>'; }).join('');
 
-  var lista = cfg.socioCols && cfg.socioCols.length ? cfg.socioCols : cfg.socios;
+  var lista = cfg.socioCols && cfg.socioCols.length ? cfg.socioCols : (cfg.socios || []);
   if (!lista.length) {
     document.getElementById('ivSocios').innerHTML =
       '<div class="loading">Sem sócios — verifica a folha «Sócios - Contas Correntes».</div>';
     return;
   }
-  var semColuna = cfg.socios.filter(function (s) {
+  var semColuna = (cfg.socios || []).filter(function (s) {
     return !(cfg.socioCols || []).some(function (c) { return c.toLowerCase() === s.toLowerCase(); });
   });
   document.getElementById('ivSocios').innerHTML = lista.map(function (nome) {
     var id = idDoSocio(nome);
     return '<div class="socio-linha"><label for="' + id + '">' + nome + '</label>' +
-      '<input id="' + id + '" type="number" inputmode="decimal" step="any" placeholder="0" ' +
+      '<input id="' + id + '" type="text" inputmode="decimal" placeholder="0" ' +
       'oninput="somarInvestimento()"></div>';
   }).join('') + (semColuna.length
     ? '<div class="hint">Sem coluna no livro dos investidores: ' + semColuna.join(', ') +
@@ -341,11 +382,12 @@ function construirInvestimento(cfg) {
 
 function somarInvestimento() {
   if (!CFG_MOV) return 0;
-  var lista = CFG_MOV.socioCols && CFG_MOV.socioCols.length ? CFG_MOV.socioCols : CFG_MOV.socios;
+  var lista = CFG_MOV.socioCols && CFG_MOV.socioCols.length
+    ? CFG_MOV.socioCols : (CFG_MOV.socios || []);
   var total = 0;
   lista.forEach(function (nome) {
     var el = document.getElementById(idDoSocio(nome));
-    if (el) total += Number(el.value) || 0;
+    if (el) total += numero(el.value);
   });
   document.getElementById('ivTotal').innerHTML =
     '<span>Total</span><span>' + total.toLocaleString('pt-PT') + ' MZN</span>';
@@ -362,11 +404,12 @@ function atualizarDicaInv() {
 
 function gravarInvestimento() {
   if (!CFG_MOV) return;
-  var lista = CFG_MOV.socioCols && CFG_MOV.socioCols.length ? CFG_MOV.socioCols : CFG_MOV.socios;
+  var lista = CFG_MOV.socioCols && CFG_MOV.socioCols.length
+    ? CFG_MOV.socioCols : (CFG_MOV.socios || []);
   var valores = {};
   lista.forEach(function (nome) {
     var el = document.getElementById(idDoSocio(nome));
-    if (el && Number(el.value)) valores[nome] = Number(el.value);
+    if (el && numero(el.value)) valores[nome] = numero(el.value);
   });
   if (!somarInvestimento()) { mensagem('msgInv', 'Preenche o valor de pelo menos um sócio.', true); return; }
 
@@ -417,8 +460,8 @@ function atualizarDica() {
   var socio = CFG_MOV.socios.filter(function (s) {
     return s.toLowerCase() === quem.toLowerCase();
   })[0];
-  var semColuna = socio && CFG_MOV.socioCols.length &&
-    !CFG_MOV.socioCols.some(function (c) { return c.toLowerCase() === quem.toLowerCase(); });
+  var semColuna = socio && (CFG_MOV.socioCols || []).length &&
+    !CFG_MOV.socioCols.some(function (c) { return String(c).toLowerCase() === quem.toLowerCase(); });
   document.getElementById('mvQuemHint').textContent = !quem
     ? 'Escreve um sócio (entra também na conta corrente dele) ou um fornecedor / cliente.'
     : socio
@@ -438,7 +481,7 @@ function gravarMovimento() {
     tipo: document.getElementById('mvTipo').value,
     categoria: document.getElementById('mvCategoria').value,
     descricao: document.getElementById('mvDescricao').value,
-    valor: document.getElementById('mvValor').value,
+    valor: valorNum('mvValor'),
     quem: document.getElementById('mvQuem').value,
     meio: document.getElementById('mvMeio').value,
     viagem: document.getElementById('mvViagem').value,

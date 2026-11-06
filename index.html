@@ -2216,9 +2216,12 @@ function abastHTML(td) {
       `Não foi encontrada nenhuma folha chamada «${code}» na planilha de abastecimentos. O nome do separador (em baixo, no Google Sheets) tem de ser exatamente o código da viagem — ex.: «${code.toUpperCase()}».`);
   }
 
+  /* a folha começa com o bloco de identificação da viagem (Viagem, Matrícula,
+     Motorista, Trajecto — duas células por linha); o cabeçalho da tabela é a
+     linha com mais células preenchidas das primeiras. */
   const clean = entry.rows.filter(r => !isRowEmpty(r));
   let hi = 0, best = 0;
-  clean.slice(0, 6).forEach((r, i) => {
+  clean.slice(0, 8).forEach((r, i) => {
     const filled = r.filter(c => c && c.trim()).length;
     if (filled > best) { best = filled; hi = i; }
   });

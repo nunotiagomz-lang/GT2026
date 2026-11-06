@@ -14,10 +14,27 @@ Corre no Google Apps Script, dentro da conta Google da empresa.
   sozinha. Sugere o próximo código VF, oferece listas de escolha para viatura
   (da folha `Viaturas`), motorista e cliente (do histórico), e ao guardar **cria
   automaticamente a folha da viagem** (ex.: `VF53`) na planilha de
-  abastecimentos.
-- **Abastecimento** — escolhes a viagem e lanças data, local, litros, preço, km,
-  quem recebeu o pagamento e o meio. O valor total é calculado (litros × preço)
-  e a linha vai para a folha dessa viagem.
+  abastecimentos — já com a **identificação da viagem no topo**:
+
+  ```
+  Viagem      VF53
+  Matrícula   AMQ-001-MP
+  Motorista   Claúdio Mute
+  Trajecto    MANICA - TETE
+
+  Data  Bomba  Local  Litros  Preço/Litro  Valor (MZN)  Km
+  ```
+
+  Assim, quem abre a folha no telemóvel sabe logo de que viatura e de que
+  percurso se trata, sem ter de ir à outra planilha.
+- **Abastecimento** — escolhes a viagem e lanças data, **nome da bomba**, local,
+  litros, preço, km, quem recebeu o pagamento e o meio. O valor total é
+  calculado (litros × preço) e **aparece no ecrã enquanto escreves**, e a linha
+  vai para a folha dessa viagem.
+
+  Nos litros, no preço e em qualquer campo de valor podes escrever **casas
+  decimais com vírgula** (`240,5`, `82,5`) ou com ponto — tanto faz. A bomba
+  oferece as que já usaste antes, e serve depois para comparar preços por posto.
 
   O mesmo abastecimento entra **automaticamente** no `Movimentos Geral` como
   **despesa de combustível**, já ligada à viagem — o combustível é dinheiro que
@@ -77,3 +94,13 @@ No telemóvel, abre esse link e usa "Adicionar ao ecrã principal" — fica com
 - Sempre que mudares a estrutura das folhas, não é preciso mexer no código —
   só se mudares os **nomes** das folhas (`Viagens`, `Viaturas`), que estão no
   topo de `Codigo.gs`.
+- As folhas de abastecimentos **antigas** (criadas antes do bloco de título)
+  continuam a funcionar como estavam. Para lhes acrescentar a matrícula, o
+  motorista e o trajecto de uma só vez: no editor do Apps Script, escolher a
+  função **`preencherTitulosDasViagens`** na lista ao lado do botão Executar e
+  correr uma vez. Só mexe nas folhas cujo nome é um código VF, salta as que já
+  têm o bloco, e os abastecimentos já lançados ficam intactos (descem quatro
+  linhas). Pode-se repetir sem risco.
+- O abastecimento é escrito **pelo nome da coluna**, não pela posição: uma folha
+  antiga sem a coluna `Bomba` recebe os valores nas colunas certas, e podes
+  acrescentar-lhe a coluna quando quiseres.
