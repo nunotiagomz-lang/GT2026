@@ -140,6 +140,11 @@ Para ligar: partilhar esse ficheiro como «Qualquer pessoa com o link — Leitor
 e colocar o ID do ficheiro na constante `ABASTECIMENTOS_ID` no topo do
 `<script>` de `index.html` (o ID é a parte do link entre `/d/` e `/edit`).
 
+Um abastecimento lançado pelo back office entra **nos dois sítios**: na folha da
+viagem (litros, preço, km — que é o que dá o consumo) e no `Movimentos Geral`
+como despesa de combustível ligada à viagem (que é o que dá a tesouraria e os
+custos). Um lançamento, os dois livros certos.
+
 ## Lançamento de dados (back office)
 
 O site é só de consulta. Para **lançar** viagens e abastecimentos há um

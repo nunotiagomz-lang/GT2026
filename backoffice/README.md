@@ -15,9 +15,14 @@ Corre no Google Apps Script, dentro da conta Google da empresa.
   (da folha `Viaturas`), motorista e cliente (do histórico), e ao guardar **cria
   automaticamente a folha da viagem** (ex.: `VF53`) na planilha de
   abastecimentos.
-- **Abastecimento** — escolhes a viagem e lanças data, local, litros, preço e
-  km. O valor total é calculado (litros × preço) e a linha vai para a folha
-  dessa viagem.
+- **Abastecimento** — escolhes a viagem e lanças data, local, litros, preço, km,
+  quem recebeu o pagamento e o meio. O valor total é calculado (litros × preço)
+  e a linha vai para a folha dessa viagem.
+
+  O mesmo abastecimento entra **automaticamente** no `Movimentos Geral` como
+  **despesa de combustível**, já ligada à viagem — o combustível é dinheiro que
+  sai, e sem isto a tesouraria e as despesas ficavam abaixo do real. **Não o
+  lances outra vez em Contas**, senão fica contado a dobrar.
 - **Contas** — o livro geral da empresa. Data, **tipo** (Despesa / Recebimento /
   Investimento / Suprimento), **categoria**, descrição, valor, **Pago Por**
   (um sócio, a empresa, ou um fornecedor / cliente), meio (caixa / banco /
