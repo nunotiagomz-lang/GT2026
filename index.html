@@ -403,7 +403,7 @@
    ===================================================================== */
 const SHEET_ID = "1iLkuI2Lom-klgfCtcrfSJMvbitZpXpWGPzoSQjZ0G1I";
 
-/* Ficheiro "planilha de abastecimentos" no Drive: uma folha por viagem,
+/* Ficheiro "Planilha de Abastecimentos CNET" no Drive: uma folha por viagem,
    com o nome igual ao código da viagem (ex.: vf15). Colocar aqui o ID
    do ficheiro (partilhado como "qualquer pessoa com o link — leitor"). */
 const ABASTECIMENTOS_ID = "1bpq6tAXb40dbZ0G945FxKanbIipnRDStO_nhYuuaxKo";
@@ -1593,7 +1593,7 @@ function renderAcertos(rows) {
    A folha "Viagens" tem uma linha por viagem. A lista mostra os campos
    principais; tocar numa viagem abre o detalhe completo, e daí o botão
    "Abastecimentos" abre a folha com o código da viagem no ficheiro
-   "planilha de abastecimentos". */
+   "Planilha de Abastecimentos CNET". */
 const viagemNav = { mode: "lista", sel: null };
 const abastCache = {};
 
@@ -1644,8 +1644,18 @@ function extractViagens(rows) {
   return { cols, iCod, trips };
 }
 
-/* campos preferidos na lista (por ordem) */
-const VG_PRIOR = [/data|partida/i, /matr[íi]cula|viatura/i, /motorista/i, /rota|origem|destino|percurso|prov[íi]ncia/i, /cliente/i, /estado|situa/i];
+/* Campos preferidos na lista, por ordem. Cada campo tem as suas alternativas
+   também por ordem: as ancoradas primeiro, porque uma folha com "Tipo Viatura"
+   (trailer/rígido) antes da "Viatura" mostrava o tipo em vez da matrícula. */
+const VG_PRIOR = [
+  [/data|partida/i],
+  [/^matr[íi]cula/i, /^viatura/i, /^ve[íi]culo/i, /matr[íi]cula|viatura/i],
+  [/^motorista/i, /motorista|condutor/i],
+  [/^(trajec?to|rota|percurso|itiner)/i, /^destino/i, /^prov[íìi]ncia/i,
+   /rota|origem|destino|percurso|prov[íìi]ncia/i],
+  [/^cliente/i, /cliente/i],
+  [/^estado/i, /estado|situa/i],
+];
 
 /* ---------- utilitários de colunas e datas ---------- */
 function findCol(cols, ...patterns) {
@@ -1688,9 +1698,15 @@ function tripsData() {
   const ix = {
     data:      findCol(C, /^partida$/i, /data.*partida/i, /^data$/i, /data/i),
     motorista: findCol(C, /motorista|condutor/i),
-    viatura:   findCol(C, /viatura|matr[íi]cula|ve[íi]culo|camia/i),
+    /* ancorado no início: há folhas com "Tipo Viatura" (trailer/rígido) antes
+       da coluna "Viatura" com a matrícula — sem isto vinha o tipo, não a chapa */
+    viatura:   findCol(C, /^matr[íi]cula/i, /^viatura/i, /^ve[íi]culo/i,
+                          /matr[íi]cula|viatura|ve[íi]culo|camia/i),
     cliente:   findCol(C, /cliente/i),
-    rota:      findCol(C, /prov[íi]ncia|rota|percurso|destino/i),
+    /* trajecto: uma coluna própria se existir, senão Destino (+ Província) */
+    rota:      findCol(C, /^(trajec?to|rota|percurso|itiner)/i, /^destino/i,
+                          /prov[íìi]ncia/i, /rota|percurso|destino/i),
+    provincia: findCol(C, /^prov[íìi]ncia/i),
     km:        findCol(C, /^km$/i, /km\s*(percorrid|total|viagem)/i, /quil[óo]metr/i),
     receita:   findCol(C, /receita|frete|faturad/i, /valor\s*(da\s*)?(viagem|servi|frete)/i),
     despesa:   findCol(C, /despesas?\s*total/i, /^despesas?/i),
@@ -1706,7 +1722,10 @@ function tripsData() {
     motorista: get(t.row, ix.motorista),
     viatura:   get(t.row, ix.viatura),
     cliente:   get(t.row, ix.cliente),
-    rota:      get(t.row, ix.rota),
+    rota:      (function () {
+                 const r = get(t.row, ix.rota), pr = get(t.row, ix.provincia);
+                 return pr && pr !== r ? (r ? r + ", " + pr : pr) : r;
+               })(),
     estado:    get(t.row, ix.estado),
     km:        num(t.row, ix.km),
     receita:   num(t.row, ix.receita),
@@ -1967,9 +1986,13 @@ function renderViagens() {
   if (viagemNav.mode === "abast") return abastHTML(td);
 
   const keyCols = [];
-  for (const re of VG_PRIOR) {
-    if (/data|partida/i.test(re.source)) continue; // a data já vai no topo do cartão
-    const c = td.cols.find(c => re.test(c.name) && !keyCols.includes(c));
+  for (const alternativas of VG_PRIOR) {
+    if (/data|partida/i.test(alternativas[0].source)) continue; // a data já vai no topo
+    let c = null;
+    for (const re of alternativas) {
+      c = td.cols.find(c => re.test(c.name) && !keyCols.includes(c));
+      if (c) break;
+    }
     if (c) keyCols.push(c);
     if (keyCols.length >= 4) break;
   }
@@ -2209,11 +2232,11 @@ function abastHTML(td) {
   }
   if (entry.err === "config") {
     return head + `<div class="state"><div class="icon">🔗</div><h3>Ficheiro por ligar</h3>
-      <p>A "planilha de abastecimentos" ainda não está ligada à app. É preciso partilhar esse ficheiro no Drive («Qualquer pessoa com o link — Leitor») e configurar o ID no site.</p></div>`;
+      <p>A "Planilha de Abastecimentos CNET" ainda não está ligada à app. É preciso partilhar esse ficheiro no Drive («Qualquer pessoa com o link — Leitor») e configurar o ID no site.</p></div>`;
   }
   if (entry.err) {
     return head + emptyState("Sem folha para esta viagem",
-      `Não foi encontrada nenhuma folha chamada «${code}» na planilha de abastecimentos. O nome do separador (em baixo, no Google Sheets) tem de ser exatamente o código da viagem — ex.: «${code.toUpperCase()}».`);
+      `Não foi encontrada nenhuma folha chamada «${code}» na Planilha de Abastecimentos CNET. O nome do separador (em baixo, no Google Sheets) tem de ser exatamente o código da viagem — ex.: «${code.toUpperCase()}».`);
   }
 
   /* a folha começa com o bloco de identificação da viagem (Viagem, Matrícula,
@@ -2236,7 +2259,7 @@ function abastHTML(td) {
     .filter(c => c.sum > 0);
 
   return head +
-    `<div style="font-size:11px;color:var(--ink-muted);margin:-4px 2px 8px">Folha «${esc(entry.sheetName || code)}» da planilha de abastecimentos</div>` +
+    `<div style="font-size:11px;color:var(--ink-muted);margin:-4px 2px 8px">Folha «${esc(entry.sheetName || code)}» da Planilha de Abastecimentos CNET</div>` +
     consumoHTML(t, header, dataRows) +
     tableHTML(header, dataRows) +
     (totais.length ? `<div class="card" style="display:flex;flex-wrap:wrap;gap:6px 18px">

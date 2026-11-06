@@ -9,7 +9,7 @@
 
 /* IDs dos ficheiros no Drive (os mesmos que o site usa) */
 var PLANO_ID = '1iLkuI2Lom-klgfCtcrfSJMvbitZpXpWGPzoSQjZ0G1I';   // CNET LOGISTICS MGMT
-var ABAST_ID = '1bpq6tAXb40dbZ0G945FxKanbIipnRDStO_nhYuuaxKo';   // planilha de abastecimentos
+var ABAST_ID = '1bpq6tAXb40dbZ0G945FxKanbIipnRDStO_nhYuuaxKo';   // Planilha de Abastecimentos CNET
 
 var FOLHA_VIAGENS  = 'Viagens';
 var FOLHA_VIATURAS = 'Viaturas';
@@ -233,9 +233,14 @@ function dadosDaViagem_(codigo) {
     var cab = cabecalho_(sh);
     if (sh.getLastRow() <= cab.linha) return out;
     var iVF = indiceDe_(cab.cols, [/^vf$/i, /c[óo]digo/i]);
-    var iMat = indiceDe_(cab.cols, [/viatura|matr[íi]cula/i]);
-    var iMot = indiceDe_(cab.cols, [/motorista|condutor/i]);
-    var iTra = indiceDe_(cab.cols, [/trajecto|trajeto|rota|percurso|prov[íi]ncia|destino/i]);
+    /* ancorados no início: "Tipo Viatura" não é a matrícula, e a Província
+       aparece escrita com acento grave ("Provìncia") em folhas reais */
+    var iMat = indiceDe_(cab.cols, [/^matr[íi]cula/i, /^viatura/i, /^ve[íi]culo/i,
+                                    /matr[íi]cula|viatura/i]);
+    var iMot = indiceDe_(cab.cols, [/^motorista/i, /motorista|condutor/i]);
+    var iTra = indiceDe_(cab.cols, [/^(trajec?to|rota|percurso|itiner)/i, /^destino/i,
+                                    /prov[íìi]ncia/i]);
+    var iPro = indiceDe_(cab.cols, [/^prov[íìi]ncia/i]);
     var dados = sh.getRange(cab.linha + 1, 1, sh.getLastRow() - cab.linha, cab.cols.length).getValues();
     for (var i = dados.length - 1; i >= 0; i--) {      // a mais recente, se houver repetidos
       if (iVF < 0) break;
@@ -243,6 +248,13 @@ function dadosDaViagem_(codigo) {
       if (iMat >= 0) out.matricula = String(dados[i][iMat]).trim();
       if (iMot >= 0) out.motorista = String(dados[i][iMot]).trim();
       if (iTra >= 0) out.trajecto = String(dados[i][iTra]).trim();
+      /* destino + província dão o trajecto completo (ex.: "Maxixe, Inhambane") */
+      if (iPro >= 0 && iPro !== iTra) {
+        var pr = String(dados[i][iPro]).trim();
+        if (pr && pr !== out.trajecto) {
+          out.trajecto = out.trajecto ? out.trajecto + ', ' + pr : pr;
+        }
+      }
       break;
     }
   } catch (e) { /* folha Viagens em falta: fica sem cabeçalho de viagem */ }

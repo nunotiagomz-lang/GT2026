@@ -129,10 +129,17 @@ Todas as colunas são detetadas pelo nome (ex.: `Km`, `Receita`, `Despesas
 Total`, `Motorista`, `Viatura`, `Cliente`, `Partida`). Se uma coluna não
 existir, a app simplesmente não mostra esse cálculo — nada rebenta.
 
+A procura dá prioridade ao nome **exato**: numa folha com `Tipo Viatura`
+(trailer/rígido) **e** `Viatura` (a matrícula), é a matrícula que conta — é por
+ela que se ligam as viagens à viatura. O mesmo para `Província`, que é aceite
+escrita com qualquer acento (`Província`, `Provìncia`). O **trajecto** sai de
+uma coluna própria (`Trajecto`, `Rota`, `Percurso`) se existir; se não, de
+`Destino` + `Província` — ex.: «Maxixe, Inhambane».
+
 ### Abastecimentos (ficheiro separado)
 
 Os abastecimentos vêm de um segundo ficheiro no Drive, chamado
-**«planilha de abastecimentos»**, com **uma folha por viagem** cujo nome é o
+**«Planilha de Abastecimentos CNET»**, com **uma folha por viagem** cujo nome é o
 código da viagem (ex.: `vf15`). No detalhe de uma viagem, o botão
 "⛽ Abastecimentos" abre a folha correspondente.
 
@@ -179,12 +186,22 @@ rede, mostrando os últimos dados guardados (com aviso da data).
 - **Privacidade**: quando entrarem dados de faturação/clientes/salários,
   ponderar um PIN de acesso na app ou alojamento com login.
 
-## Requisito único: partilha do ficheiro
+## Requisito único: partilha dos ficheiros
 
-No Google Drive, o ficheiro `CNET LOGISTICS MGMT` tem de estar partilhado
-como **«Qualquer pessoa com o link» → «Leitor»** (Partilhar → Acesso geral).
+No Google Drive, **os dois** ficheiros têm de estar partilhados como
+**«Qualquer pessoa com o link» → «Leitor»** (Partilhar → Acesso geral):
+
+- `CNET LOGISTICS MGMT` — os dados da gestão;
+- `Planilha de Abastecimentos CNET` — uma folha por viagem.
+
 Sem isto a app não consegue ler os dados. Ninguém consegue editar por essa via —
 apenas ler.
+
+**Mudar o nome ou a pasta destes ficheiros não parte nada.** A app e o back
+office identificam-nos pelo **ID** (`SHEET_ID` e `ABASTECIMENTOS_ID` no topo do
+`<script>` de `index.html`; `PLANO_ID` e `ABAST_ID` no `Codigo.gs`), e o ID não
+muda com o nome. O que parte é apagar o ficheiro, tirar a partilha, ou mudar o
+nome de um **separador** (o código VF de uma viagem).
 
 ## Publicar o site (GitHub Pages)
 
