@@ -48,6 +48,7 @@
   .socio-linha { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
   .socio-linha label { flex: 1; margin: 0; font-size: 14px; font-weight: 650; color: var(--ink); }
   .socio-linha input { flex: 0 0 46%; text-align: right; }
+  .socio-linha .pendente { display: block; font-size: 11.5px; font-weight: 500; color: var(--ink-2, #666); }
   .total { display: flex; justify-content: space-between; align-items: baseline;
            margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--hairline);
            font-size: 15px; font-weight: 750; }
@@ -62,7 +63,7 @@
   <button id="tabViagem" class="on" onclick="mostrar('viagem')">Viagem</button>
   <button id="tabAbast" onclick="mostrar('abast')">Abastecimento</button>
   <button id="tabMov" onclick="mostrar('mov')">Contas</button>
-  <button id="tabInv" onclick="mostrar('inv')">Investimentos</button>
+  <button id="tabInv" onclick="mostrar('inv')">Sócios</button>
 </div>
 
 <div id="painelViagem">
@@ -90,14 +91,16 @@
     <label for="abKm">Km no conta-quilómetros</label>
     <input id="abKm" type="text" inputmode="decimal" placeholder="0">
     <label for="abQuem">Pago Por</label>
-    <input id="abQuem" type="text" list="lPagadores" placeholder="Posto, empresa ou sócio">
+    <input id="abQuem" type="text" list="lPagadores" placeholder="Posto, empresa ou sócio"
+           oninput="dicaAbastSocio()">
     <label for="abMeio">Meio</label>
-    <select id="abMeio">
+    <select id="abMeio" onchange="dicaAbastSocio()">
       <option value="">— por indicar —</option>
       <option value="Caixa">Caixa</option>
       <option value="Banco">Banco</option>
       <option value="Sócio">Sócio</option>
     </select>
+    <div class="hint" id="abSocioHint"></div>
     <div class="hint">Nos litros e no preço podes usar casas decimais com vírgula
       (ex.: <b>240,5</b> e <b>82,5</b>). O valor total é calculado automaticamente (litros × preço),
       e o abastecimento entra sozinho como <b>despesa de combustível</b> no livro geral —
@@ -127,7 +130,7 @@
     <datalist id="lPagadores"></datalist>
     <div class="hint" id="mvQuemHint"></div>
     <label for="mvMeio">Meio</label>
-    <select id="mvMeio" onchange="this.dataset.tocado='1'">
+    <select id="mvMeio" onchange="this.dataset.tocado='1'; atualizarDica()">
       <option value="">— automático —</option>
       <option value="Caixa">Caixa</option>
       <option value="Banco">Banco</option>
@@ -149,6 +152,14 @@
     <label for="ivTipo">Tipo</label>
     <select id="ivTipo" onchange="atualizarDicaInv()"></select>
     <div class="hint" id="ivTipoHint"></div>
+    <div id="ivMeioBloco" style="display:none">
+      <label for="ivMeio">Por onde passou o dinheiro na empresa</label>
+      <select id="ivMeio">
+        <option value="">— escolher —</option>
+        <option value="Caixa">Caixa</option>
+        <option value="Banco">Banco</option>
+      </select>
+    </div>
     <label for="ivCategoria">Categoria</label>
     <input id="ivCategoria" type="text" list="lCategorias" placeholder="Ex.: Camião">
     <label for="ivDescricao">Descrição</label>
@@ -165,7 +176,7 @@
     <div class="total" id="ivTotal">Total: 0 MZN</div>
   </div>
 
-  <button class="primary" onclick="gravarInvestimento()">Guardar investimento</button>
+  <button class="primary" onclick="gravarInvestimento()">Guardar</button>
   <div class="msg" id="msgInv"></div>
 </div>
 
@@ -295,6 +306,10 @@ function gravarAbastecimento() {
     meio: document.getElementById('abMeio').value
   };
   if (!dados.litros) { mensagem('msgAbast', 'Indica os litros.', true); return; }
+  if (dados.meio === 'Sócio' && CFG_MOV && !(CFG_MOV.socios || []).some(function (s) {
+        return s.toLowerCase() === String(dados.quem).trim().toLowerCase(); })) {
+    mensagem('msgAbast', 'Com Meio = Sócio, escreve em «Pago Por» o sócio que pagou.', true); return;
+  }
 
   google.script.run
     .withSuccessHandler(function (res) {
@@ -355,8 +370,14 @@ function construirMovimento(cfg) {
 function idDoSocio(nome) { return 'iv_' + nome.replace(/[^a-zA-Z0-9]/g, '_'); }
 
 function construirInvestimento(cfg) {
-  document.getElementById('ivTipo').innerHTML = (cfg.tiposInvestidores || cfg.tipos)
-    .map(function (v) { return '<option value="' + v + '">' + v + '</option>'; }).join('');
+  var op = function (v) { return '<option value="' + v + '">' + v + '</option>'; };
+  var sel = document.getElementById('ivTipo');
+  var antes = sel.value;
+  sel.innerHTML = cfg.tiposCapital
+    ? '<optgroup label="Capital">' + cfg.tiposCapital.map(op).join('') + '</optgroup>' +
+      '<optgroup label="Adiantamentos e devoluções">' + (cfg.tiposAdiantamento || []).map(op).join('') + '</optgroup>'
+    : (cfg.tiposInvestidores || cfg.tipos).map(op).join('');
+  if (antes) sel.value = antes;
 
   var lista = cfg.socioCols && cfg.socioCols.length ? cfg.socioCols : (cfg.socios || []);
   if (!lista.length) {
@@ -369,7 +390,8 @@ function construirInvestimento(cfg) {
   });
   document.getElementById('ivSocios').innerHTML = lista.map(function (nome) {
     var id = idDoSocio(nome);
-    return '<div class="socio-linha"><label for="' + id + '">' + nome + '</label>' +
+    return '<div class="socio-linha"><label for="' + id + '">' + nome +
+      '<span class="pendente" id="' + id + '_pend"></span></label>' +
       '<input id="' + id + '" type="text" inputmode="decimal" placeholder="0" ' +
       'oninput="somarInvestimento()"></div>';
   }).join('') + (semColuna.length
@@ -394,12 +416,58 @@ function somarInvestimento() {
   return total;
 }
 
+/* classe de um tipo de adiantamento (a mesma regra do Codigo.gs e da app) */
+function classeAdiant(tipo) {
+  var s = String(tipo || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (/^adiantamento (do|pelo|de) socio/.test(s)) return 'do';
+  if (/^adiantamento (ao|para o|a) socio/.test(s)) return 'ao';
+  if (/^(devolucao|reembolso) ao socio/.test(s)) return 'devAo';
+  if (/^(devolucao|reembolso) (do|pelo) socio/.test(s)) return 'devDo';
+  if (/^despesa (paga )?(pelo|do) socio/.test(s)) return 'despesa';
+  return null;
+}
+
+var DICAS_INV = {
+  'do':    'O sócio põe dinheiro na empresa para lhe ser devolvido. Não conta como capital nem mexe nas quotas.',
+  'devAo': 'A empresa devolve ao sócio o que ele tinha adiantado — abate ao que a empresa lhe deve.',
+  'ao':    'A empresa entrega dinheiro ao sócio (ex.: para despesas da viagem). Ele fica a dever: as despesas que depois pagar com esse dinheiro abatem sozinhas.',
+  'devDo': 'O sócio devolve à empresa o que sobrou do adiantamento que levou.'
+};
+
 function atualizarDicaInv() {
   var tipo = document.getElementById('ivTipo').value;
+  var cl = classeAdiant(tipo);
   var saiParaSocio = /devolu|dividend/i.test(tipo);
-  document.getElementById('ivTipoHint').textContent = saiParaSocio
-    ? 'Dinheiro que sai para os sócios — desconta ao que cada um tem investido.'
-    : 'Dinheiro que os sócios põem na empresa.';
+  document.getElementById('ivTipoHint').textContent = cl ? DICAS_INV[cl]
+    : saiParaSocio
+      ? 'Dinheiro que sai para os sócios — desconta ao que cada um tem investido.'
+      : 'Dinheiro que os sócios põem na empresa como capital — conta para as quotas.';
+  /* adiantamentos, devoluções e dividendos passam pela caixa ou pelo banco */
+  document.getElementById('ivMeioBloco').style.display = (cl || saiParaSocio) ? '' : 'none';
+
+  /* pendente de cada sócio, para saber quanto devolver */
+  var saldos = (CFG_MOV && CFG_MOV.adiantamentos) || {};
+  var lista = CFG_MOV ? (CFG_MOV.socioCols && CFG_MOV.socioCols.length ? CFG_MOV.socioCols : (CFG_MOV.socios || [])) : [];
+  lista.forEach(function (nome) {
+    var el = document.getElementById(idDoSocio(nome) + '_pend');
+    if (!el) return;
+    var v = saldos[nome] || 0;
+    el.textContent = !cl || Math.abs(v) < 0.5 ? ''
+      : v > 0 ? ' · a empresa deve-lhe ' + Math.round(v).toLocaleString('pt-PT')
+              : ' · deve à empresa ' + Math.round(-v).toLocaleString('pt-PT');
+  });
+}
+
+/* abastecimento pago do bolso de um sócio */
+function dicaAbastSocio() {
+  var meio = document.getElementById('abMeio').value;
+  var quem = document.getElementById('abQuem').value.trim();
+  var socio = CFG_MOV && (CFG_MOV.socios || []).filter(function (s) {
+    return s.toLowerCase() === quem.toLowerCase();
+  })[0];
+  document.getElementById('abSocioHint').textContent = meio !== 'Sócio' ? ''
+    : socio ? 'Pago do bolso de ' + socio + ': conta a favor dele nos adiantamentos (abate ao que levou da empresa, ou a empresa fica a dever-lhe).'
+            : 'Com Meio = Sócio, escreve em «Pago Por» o sócio que pagou.';
 }
 
 function gravarInvestimento() {
@@ -412,6 +480,11 @@ function gravarInvestimento() {
     if (el && numero(el.value)) valores[nome] = numero(el.value);
   });
   if (!somarInvestimento()) { mensagem('msgInv', 'Preenche o valor de pelo menos um sócio.', true); return; }
+  var tipoInv = document.getElementById('ivTipo').value;
+  var meioInv = document.getElementById('ivMeio').value;
+  if ((classeAdiant(tipoInv) || /devolu|dividend/i.test(tipoInv)) && !meioInv) {
+    mensagem('msgInv', 'Indica por onde passou o dinheiro: Caixa ou Banco.', true); return;
+  }
 
   google.script.run
     .withSuccessHandler(function (res) {
@@ -420,7 +493,10 @@ function gravarInvestimento() {
           res.aviso, true);
       } else {
         mensagem('msgInv', '✓ ' + res.total.toLocaleString('pt-PT') +
-          ' MZN guardados em: ' + res.folhas.join(' e ') + '.', false);
+          ' MZN guardados em: ' + res.folhas.join(' e ') + '.' +
+          (res.colunaTipoCriada ? ' (Acrescentei a coluna «Tipo» ao livro dos investidores.)' : '') +
+          (res.avisos && res.avisos.length ? ' Atenção: ' + res.avisos.join(' ') : ''),
+          !!(res.avisos && res.avisos.length));
       }
       ['ivDescricao', 'ivNota'].forEach(function (id) { document.getElementById(id).value = ''; });
       lista.forEach(function (nome) {
@@ -435,7 +511,8 @@ function gravarInvestimento() {
     })
     .guardarInvestimento({
       data: formatarData(document.getElementById('ivData').value),
-      tipo: document.getElementById('ivTipo').value,
+      tipo: tipoInv,
+      meio: meioInv,
       categoria: document.getElementById('ivCategoria').value,
       descricao: document.getElementById('ivDescricao').value,
       viagem: document.getElementById('ivViagem').value,
@@ -462,17 +539,21 @@ function atualizarDica() {
   })[0];
   var semColuna = socio && (CFG_MOV.socioCols || []).length &&
     !CFG_MOV.socioCols.some(function (c) { return String(c).toLowerCase() === quem.toLowerCase(); });
-  document.getElementById('mvQuemHint').textContent = !quem
-    ? 'Escreve um sócio (entra também na conta corrente dele) ou um fornecedor / cliente.'
-    : socio
-      ? (semColuna
-          ? 'Atenção: «' + socio + '» não tem coluna no livro dos investidores — acrescenta-a antes de gravar.'
-          : 'Vai para os dois livros: Movimentos Geral e Movimentos dos Investidores (conta corrente de ' + socio + ').')
-      : 'Vai só para o livro Movimentos Geral.';
-
   /* meio automático: se foi um sócio a pagar, o dinheiro saiu do bolso dele */
   var meio = document.getElementById('mvMeio');
   if (!meio.dataset.tocado) meio.value = socio ? 'Sócio' : '';
+
+  var doBolso = socio && meio.value === 'Sócio';
+  document.getElementById('mvQuemHint').textContent = !quem
+    ? 'Escreve um sócio, a empresa, ou um fornecedor / cliente.'
+    : doBolso && tipo === 'Despesa'
+      ? (semColuna
+          ? 'Atenção: «' + socio + '» não tem coluna no livro dos investidores — acrescenta-a antes de gravar.'
+          : 'Despesa paga do bolso de ' + socio + ': vai para o livro geral e para os adiantamentos dele ' +
+            '(abate ao que levou da empresa, ou a empresa fica a dever-lhe). Se for para ficar como capital, usa o separador Sócios.')
+      : doBolso
+        ? 'Para o dinheiro de um sócio contar na conta dele, usa o separador Sócios.'
+        : 'Vai só para o livro Movimentos Geral.';
 }
 
 function gravarMovimento() {
@@ -491,7 +572,8 @@ function gravarMovimento() {
 
   google.script.run
     .withSuccessHandler(function (res) {
-      mensagem('msgMov', '✓ Lançamento guardado em: ' + res.folhas.join(' e ') + '.', false);
+      if (res.aviso) mensagem('msgMov', '✓ Guardado, mas: ' + res.aviso, true);
+      else mensagem('msgMov', '✓ Lançamento guardado em: ' + res.folhas.join(' e ') + '.', false);
       ['mvDescricao', 'mvValor', 'mvNota'].forEach(function (id) {
         document.getElementById(id).value = '';
       });

@@ -27,10 +27,23 @@ var CATEGORIA_COMBUSTIVEL = 'Combustível';
 /* Tipos que o formulário «Contas» oferece (livro geral). */
 var TIPOS = ['Despesa', 'Recebimento', 'Investimento', 'Suprimento'];
 
-/* Tipos que o formulário «Investimentos» oferece (livro dos sócios).
-   Devolução e Dividendo são dinheiro que sai para o sócio — a app
-   desconta-os ao que ele tem investido. */
-var TIPOS_INVESTIDORES = ['Investimento', 'Suprimento', 'Devolução', 'Dividendo'];
+/* Tipos que o formulário «Sócios» oferece (livro dos investidores).
+
+   CAPITAL — o que fica na empresa e conta para as quotas. Devolução de
+   capital e Dividendo são dinheiro que sai para o sócio: a app desconta-os
+   ao que ele tem investido. */
+var TIPOS_CAPITAL = ['Investimento', 'Suprimento', 'Devolução de capital', 'Dividendo'];
+
+/* ADIANTAMENTOS — dinheiro que tem de voltar, nos dois sentidos. Ficam fora
+   do capital (não mexem nas quotas) e fora do resultado (não são receita nem
+   despesa), mas passam pela caixa/banco da empresa.
+   «Despesa paga pelo sócio» não está na lista: é criada sozinha quando se
+   lança uma despesa (ou um abastecimento) com Meio = Sócio. */
+var TIPOS_ADIANTAMENTO = ['Adiantamento do sócio', 'Devolução ao sócio',
+                          'Adiantamento ao sócio', 'Devolução do sócio'];
+var TIPO_DESPESA_SOCIO = 'Despesa paga pelo sócio';
+
+var TIPOS_INVESTIDORES = TIPOS_CAPITAL.concat(TIPOS_ADIANTAMENTO);
 
 /* Quem pode lançar dados. Lista vazia = qualquer pessoa com o link
    (só faz sentido se a app for publicada apenas para a organização). */
@@ -111,6 +124,34 @@ function num_(v) {
   var n = parseFloat(t);
   return isNaN(n) ? 0 : n;
 }
+
+/** minúsculas e sem acentos, para comparar nomes e tipos */
+function semAcentos_(t) {
+  return String(t == null ? '' : t).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Classe de um tipo de adiantamento, ou null se for capital/outro.
+ *   do      sócio → empresa (a empresa fica a dever)
+ *   despesa sócio pagou do bolso uma despesa da empresa (idem)
+ *   devDo   sócio devolve o que tinha levado
+ *   ao      empresa → sócio (o sócio fica a dever)
+ *   devAo   empresa devolve ao sócio o que ele adiantou
+ * A mesma regra está na app (classeAdiant em index.html).
+ */
+function classeAdiant_(tipo) {
+  var s = semAcentos_(tipo);
+  if (!s) return null;
+  if (/^adiantamento (do|pelo|de) socio/.test(s)) return 'do';
+  if (/^adiantamento (ao|para o|a) socio/.test(s)) return 'ao';
+  if (/^(devolucao|reembolso) ao socio/.test(s)) return 'devAo';
+  if (/^(devolucao|reembolso) (do|pelo) socio/.test(s)) return 'devDo';
+  if (/^despesa (paga )?(pelo|do) socio/.test(s)) return 'despesa';
+  return null;
+}
+/* efeito no saldo do sócio: positivo = a empresa deve-lhe */
+var SINAL_ADIANT = { 'do': 1, despesa: 1, devDo: 1, ao: -1, devAo: -1 };
 
 function indiceDe_(cols, padroes) {
   for (var p = 0; p < padroes.length; p++) {
@@ -333,6 +374,12 @@ function guardarAbastecimento(codigo, dados) {
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
+    /* pago do bolso de um sócio: valida ANTES de escrever o que quer que seja */
+    var socioPagou = null;
+    if (dados.meio === 'Sócio') {
+      socioPagou = socioChamado_(dados.quem);
+      if (!socioPagou) throw new Error('Com Meio = Sócio, em «Pago Por» tem de estar o sócio que pagou.');
+    }
     var nomeFolha = 'VF' + String(codigo).replace(/\D/g, '');
     criarFolhaAbastecimentos_(nomeFolha);
     var sh = folha_(ABAST_ID, nomeFolha);
@@ -344,7 +391,8 @@ function guardarAbastecimento(codigo, dados) {
 
     var litros = num_(dados.litros);
     var preco = num_(dados.preco);
-    var total = dados.valor ? num_(dados.valor) : (litros * preco);
+    /* aos cêntimos: 129,31 × 116 não pode ir para a folha como 14999,960000000001 */
+    var total = Math.round((dados.valor ? num_(dados.valor) : (litros * preco)) * 100) / 100;
     var km = num_(dados.km);
 
     var linha = [];
@@ -382,6 +430,16 @@ function guardarAbastecimento(codigo, dados) {
         nota: litros ? litros + ' L' + (preco ? ' a ' + preco + ' MZN/L' : '') : ''
       });
       if (!aviso) escritas.push(FOLHA_GERAL);
+
+      /* e conta a favor do sócio nos adiantamentos */
+      if (socioPagou) {
+        var avisoS = registarDespesaDoSocio_(socioPagou, {
+          data: dados.data, categoria: CATEGORIA_COMBUSTIVEL, valor: total, viagem: nomeFolha,
+          descricao: 'Abastecimento' + (onde ? ' ' + onde : '') + ' · ' + nomeFolha
+        });
+        if (avisoS) aviso = (aviso ? aviso + ' · ' : '') + 'Adiantamentos: ' + avisoS;
+        else escritas.push(FOLHA_MOVS);
+      }
     }
     return { ok: true, folha: nomeFolha, total: total, folhas: escritas, aviso: aviso };
   } finally {
@@ -475,6 +533,9 @@ function obterConfiguracaoMovimentos() {
     bombas: bombas.sort(),
     tipos: TIPOS,
     tiposInvestidores: TIPOS_INVESTIDORES,
+    tiposCapital: TIPOS_CAPITAL,
+    tiposAdiantamento: TIPOS_ADIANTAMENTO,
+    adiantamentos: saldosAdiantamentos_(),
     pagadorEmpresa: PAGADOR_EMPRESA,
     temGeral: temGeral,
     colunasGeral: colunasGeral
@@ -528,8 +589,21 @@ function guardarMovimento(dados) {
   try {
     if (!num_(dados.valor)) throw new Error('Indica um valor.');
     if (!String(dados.quem || '').trim()) throw new Error('Indica quem pagou ou recebeu.');
+
+    /* despesa paga do bolso de um sócio: entra também nos adiantamentos dele */
+    var socio = null;
+    if (dados.tipo === 'Despesa' && dados.meio === 'Sócio') {
+      socio = socioChamado_(dados.quem);
+      if (!socio) throw new Error('Com Meio = Sócio, em «Pago Por» tem de estar o sócio que pagou.');
+    }
     escreverGeral_(dados);
-    return { ok: true, folhas: [FOLHA_GERAL] };
+    var folhas = [FOLHA_GERAL], aviso = null;
+    if (socio) {
+      aviso = registarDespesaDoSocio_(socio, dados);
+      if (!aviso) folhas.push(FOLHA_MOVS);
+      else aviso = 'Entrou no livro geral, mas não nos adiantamentos de ' + socio + ': ' + aviso;
+    }
+    return { ok: true, folhas: folhas, aviso: aviso };
   } finally {
     lock.releaseLock();
   }
@@ -550,17 +624,34 @@ function guardarInvestimento(dados) {
   try {
     var valores = dados.valores || {};
     var shI = folhaEntre_(PLANO_ID, [FOLHA_MOVS, FOLHA_MOVS_ALT]);
-    var cabI = cabecalho_(shI);
+    var classe = classeAdiant_(dados.tipo);
+
+    /* adiantamentos e devoluções passam pela caixa ou pelo banco da empresa */
+    var meio = 'Sócio';
+    if (classe || /devolu|dividend/i.test(semAcentos_(dados.tipo))) {
+      meio = dados.meio || '';
+      if (!/^(caixa|banco)$/i.test(meio)) {
+        throw new Error('Indica por onde passou o dinheiro na empresa: Caixa ou Banco.');
+      }
+    }
+
+    /* sem coluna Tipo, um adiantamento ficaria igual a um investimento */
+    var colunaCriada = false;
+    var cabI;
+    if (dados.tipo && dados.tipo !== 'Investimento') {
+      var g = garantirColunaTipo_(shI);
+      cabI = g.cab; colunaCriada = g.criada;
+    } else {
+      cabI = cabecalho_(shI);
+    }
+    var saldosAntes = classe ? saldosAdiantamentos_() : {};
 
     /* casa cada sócio com a coluna dele e soma o total */
     var total = 0, contribuintes = [], colunas = {};
     for (var nome in valores) {
       var v = num_(valores[nome]);
       if (!v) continue;
-      var idx = -1;
-      for (var j = 0; j < cabI.cols.length; j++) {
-        if (cabI.cols[j].toLowerCase() === String(nome).toLowerCase()) { idx = j; break; }
-      }
+      var idx = colunaDoSocio_(cabI.cols, nome);
       if (idx < 0) {
         throw new Error('«' + nome + '» não tem coluna na folha ' + shI.getName() +
           ' — acrescenta-a antes de lançar.');
@@ -571,6 +662,20 @@ function guardarInvestimento(dados) {
     }
     if (!total) throw new Error('Preenche o valor de pelo menos um sócio.');
 
+    /* uma devolução maior do que o pendente quase sempre é engano: avisa */
+    var avisos = [];
+    if (classe === 'devAo' || classe === 'devDo') {
+      contribuintes.forEach(function (nome) {
+        var pend = saldosAntes[nome] || 0;
+        var deve = classe === 'devAo' ? Math.max(0, pend) : Math.max(0, -pend);
+        var v = num_(valores[nome]);
+        if (v > deve + 0.5) {
+          avisos.push(nome + ' tinha ' + deve.toLocaleString('pt-PT') + ' MZN pendentes neste sentido e a devolução foi de ' +
+            v.toLocaleString('pt-PT') + ' — o excedente fica como adiantamento no sentido contrário.');
+        }
+      });
+    }
+
     /* 1) livro dos investidores: uma linha, o valor de cada sócio na sua coluna */
     var linhaI = [];
     for (var i = 0; i < cabI.cols.length; i++) linhaI.push('');
@@ -580,7 +685,7 @@ function guardarInvestimento(dados) {
     }
     porI([/^data$/i], dados.data || '');
     /* Item = o "quê" (categoria), Descrição = o detalhe — como na folha atual */
-    porI([/^item$/i], dados.categoria || dados.descricao || dados.tipo || '');
+    porI([/^item$/i], dados.categoria || dados.tipo || dados.descricao || '');
     porI([/descri/i, /nota/i], dados.descricao || '');
     porI([/^tipo$/i], dados.tipo || '');
     porI([/categoria/i], dados.categoria || '');
@@ -595,7 +700,7 @@ function guardarInvestimento(dados) {
       categoria: dados.categoria,
       descricao: dados.descricao,
       valor: total,
-      meio: 'Sócio',
+      meio: meio,
       quem: contribuintes.join(', '),
       viagem: dados.viagem,
       nota: dados.nota
@@ -603,7 +708,8 @@ function guardarInvestimento(dados) {
 
     var folhasInv = [shI.getName()];
     if (!avisoInv) folhasInv.push(FOLHA_GERAL);
-    return { ok: true, total: total, folhas: folhasInv, aviso: avisoInv };
+    return { ok: true, total: total, folhas: folhasInv, aviso: avisoInv,
+             avisos: avisos, colunaTipoCriada: colunaCriada };
   } finally {
     lock.releaseLock();
   }
@@ -611,8 +717,120 @@ function guardarInvestimento(dados) {
 
 /** Entrada (dinheiro que chega) ou saída, a partir do tipo. */
 function sentidoDe_(tipo) {
+  var cl = classeAdiant_(tipo);
+  if (cl) return SINAL_ADIANT[cl] > 0 ? 'Entrada' : 'Saída';
   var t = String(tipo || '').toLowerCase();
   return (t.indexOf('supriment') === 0 || t.indexOf('recebiment') === 0) ? 'Entrada' : 'Saída';
+}
+
+/* ------------------------------------------------------------------
+   Livro dos investidores: coluna Tipo, saldos e despesas pagas por sócios
+   ------------------------------------------------------------------ */
+
+/**
+ * Garante que o livro dos investidores tem a coluna «Tipo». Sem ela, um
+ * adiantamento ficaria igual a um investimento e entrava nas quotas.
+ * A coluna é acrescentada no FIM do cabeçalho, para não deslocar fórmulas.
+ * As linhas antigas, sem tipo, continuam a contar como Investimento.
+ */
+function garantirColunaTipo_(sh) {
+  var cab = cabecalho_(sh);
+  if (indiceDe_(cab.cols, [/^tipo$/i]) >= 0) return { cab: cab, criada: false };
+  var ultima = 0;
+  for (var i = 0; i < cab.cols.length; i++) if (cab.cols[i]) ultima = i + 1;
+  sh.getRange(cab.linha, ultima + 1).setValue('Tipo');
+  return { cab: cabecalho_(sh), criada: true };
+}
+
+/** Coluna de um sócio no livro dos investidores (-1 se não tiver). */
+function colunaDoSocio_(cols, nome) {
+  var n = semAcentos_(nome);
+  for (var j = 0; j < cols.length; j++) if (semAcentos_(cols[j]) === n) return j;
+  return -1;
+}
+
+/** Nome do sócio, tal como está na folha de sócios, ou null. */
+function socioChamado_(nome) {
+  var n = semAcentos_(nome);
+  if (!n) return null;
+  var socios = obterConfiguracaoMovimentos_socios_();
+  for (var i = 0; i < socios.length; i++) if (semAcentos_(socios[i]) === n) return socios[i];
+  return null;
+}
+
+function obterConfiguracaoMovimentos_socios_() {
+  var socios = [];
+  try {
+    var shS = folha_(PLANO_ID, FOLHA_SOCIOS);
+    var cabS = cabecalho_(shS);
+    var iNome = indiceDe_(cabS.cols, [/^s[óo]cio$/i, /s[óo]cio/i]);
+    if (iNome < 0) iNome = 0;
+    if (shS.getLastRow() > cabS.linha) {
+      shS.getRange(cabS.linha + 1, iNome + 1, shS.getLastRow() - cabS.linha, 1)
+        .getValues().forEach(function (r) {
+          var v = String(r[0]).trim();
+          if (v && !/^total/i.test(v) && socios.indexOf(v) === -1) socios.push(v);
+        });
+    }
+  } catch (e) { /* folha de sócios ainda não existe */ }
+  return socios;
+}
+
+/**
+ * Saldo de adiantamentos de cada sócio, a partir do livro dos investidores.
+ * Positivo = a empresa deve-lhe; negativo = ele deve à empresa.
+ */
+function saldosAdiantamentos_() {
+  var saldos = {};
+  try {
+    var sh = folhaEntre_(PLANO_ID, [FOLHA_MOVS, FOLHA_MOVS_ALT]);
+    var cab = cabecalho_(sh);
+    var iTipo = indiceDe_(cab.cols, [/^tipo$/i]);
+    if (iTipo < 0 || sh.getLastRow() <= cab.linha) return saldos;
+    var socios = obterConfiguracaoMovimentos_socios_();
+    var cols = socios.map(function (n) { return { nome: n, i: colunaDoSocio_(cab.cols, n) }; })
+      .filter(function (c) { return c.i >= 0; });
+    var dados = sh.getRange(cab.linha + 1, 1, sh.getLastRow() - cab.linha, cab.cols.length).getValues();
+    dados.forEach(function (r) {
+      var cl = classeAdiant_(r[iTipo]);
+      if (!cl) return;
+      cols.forEach(function (c) {
+        var v = num_(r[c.i]);
+        if (v) saldos[c.nome] = (saldos[c.nome] || 0) + SINAL_ADIANT[cl] * v;
+      });
+    });
+  } catch (e) { /* livro ainda não existe */ }
+  return saldos;
+}
+
+/**
+ * Regista no livro dos investidores uma despesa da empresa paga do bolso de
+ * um sócio. Conta a favor dele nos adiantamentos: abate ao que ele tinha
+ * levado da empresa, ou passa a ser dinheiro que a empresa lhe deve.
+ * Nunca rebenta — devolve o erro em texto (o livro geral já foi escrito).
+ */
+function registarDespesaDoSocio_(socio, d) {
+  try {
+    var sh = folhaEntre_(PLANO_ID, [FOLHA_MOVS, FOLHA_MOVS_ALT]);
+    var cab = garantirColunaTipo_(sh).cab;
+    var col = colunaDoSocio_(cab.cols, socio);
+    if (col < 0) return '«' + socio + '» não tem coluna na folha ' + sh.getName() + '.';
+    var linha = [];
+    for (var i = 0; i < cab.cols.length; i++) linha.push('');
+    function por(padroes, v) {
+      var k = indiceDe_(cab.cols, padroes);
+      if (k >= 0 && v !== '' && v != null) linha[k] = v;
+    }
+    por([/^data$/i], d.data || '');
+    por([/^item$/i], d.categoria || TIPO_DESPESA_SOCIO);
+    por([/descri/i, /nota/i], d.descricao || '');
+    por([/^tipo$/i], TIPO_DESPESA_SOCIO);
+    por([/categoria/i], d.categoria || '');
+    por([/^(vf|viagem)$/i], d.viagem ? String(d.viagem).replace(/\D/g, '') : '');
+    linha[col] = Math.round(num_(d.valor) * 100) / 100;
+    sh.appendRow(linha);
+    return null;
+  } catch (e) { return e.message || String(e); }
 }
 
 /** Códigos de viagem existentes, para o formulário de abastecimentos. */

@@ -22,8 +22,8 @@ sub-separadores no topo mostram as folhas do Excel dessa área.
 | Viagens | Motoristas | `Viagens` (derivado) | Ficha por motorista: viagens, km, margem, saldo |
 | Viagens | Clientes | `Viagens` (derivado) | Ficha por cliente: viagens, faturado, margem |
 | Viaturas | — | `Viaturas` (+ `Viagens`) | Frota com consumo esperado → ficha da viatura e as suas viagens |
-| Contas | Investimentos | `Movimentos dos Investidores` (+ sócios, acertos) | Tudo o que passa pelos sócios: contas correntes, movimentos e acertos |
 | Contas | Movimentos Correntes | `Movimentos Geral` | Contabilidade e tesouraria de toda a empresa |
+| Contas | Movimentos Sócios | `Movimentos dos Investidores` (+ sócios, acertos) | Tudo o que passa pelos sócios: Capital · Adiantamentos · Movimentos · Acertos |
 | Faturação | — | *(em breve)* | — |
 
 ### O dashboard
@@ -87,8 +87,9 @@ dele que sai a conta corrente de cada um.
 A app **calcula** as contas correntes a partir da soma desse livro — o livro
 geral da empresa não entra nesta conta:
 
-- **Pago** = soma da coluna do sócio (movimentos de tipo `Devolução` ou
-  `Dividendo` contam ao contrário, porque é dinheiro que sai para o sócio);
+- **Pago** = soma da coluna do sócio (movimentos de tipo `Devolução de capital`
+  ou `Dividendo` contam ao contrário, porque é dinheiro que sai para o sócio;
+  os **adiantamentos ficam de fora** — ver abaixo);
 - **Quota** = total investido × participação do sócio (divisão igual se a
   participação não estiver preenchida);
 - **Saldo** = pago + acertos − quota. Positivo = credor; negativo = falta
@@ -97,9 +98,47 @@ geral da empresa não entra nesta conta:
 Basta, por isso, ter na folha `Sócios - Contas Correntes` os **nomes** e as
 **participações** — os valores são recalculados pela app a cada abertura.
 
-Cada livro tem o seu formulário no back office: **Contas** escreve só no livro
-geral, e **Investimentos** escreve nos dois — o valor de cada sócio na coluna
-dele, e o **somatório** como valor da linha no livro geral. Ver
+### Adiantamentos e devoluções
+
+Investimento é capital: fica na empresa e conta para as quotas. Um
+**adiantamento** é dinheiro que **tem de voltar**, e pode ir nos dois sentidos.
+Vive no mesmo livro, `Movimentos dos Investidores`, distinguido pela coluna
+**`Tipo`**:
+
+| Tipo | Sentido | Efeito no saldo do sócio |
+|---|---|---|
+| `Adiantamento do sócio` | sócio → empresa | a empresa fica a dever-lhe |
+| `Despesa paga pelo sócio` | pagou do bolso uma despesa da empresa | a favor dele |
+| `Devolução ao sócio` | empresa → sócio | abate ao que a empresa lhe deve |
+| `Adiantamento ao sócio` | empresa → sócio (ex.: dinheiro para a viagem) | ele fica a dever |
+| `Devolução do sócio` | sócio → empresa | abate ao que ele deve |
+
+Cada sócio tem **um saldo único**: positivo = a empresa deve-lhe; negativo = ele
+deve à empresa. Por isso uma despesa que o sócio paga com dinheiro que tinha
+levado da empresa **abate sozinha** ao que ele devia — e, se pagar mais do que
+levou, a diferença passa a ser a empresa a dever-lhe.
+
+Os adiantamentos contam onde devem e só aí:
+
+- **fora do capital** — não entram no investido nem nas quotas;
+- **fora do resultado** — não são receita nem despesa (a despesa paga pelo sócio
+  já conta como despesa no livro geral; o adiantamento é só quem a financiou);
+- **dentro da tesouraria** — quando passam pela caixa ou pelo banco.
+
+Em **Contas → Movimentos Sócios → Adiantamentos** vê-se o que a empresa deve aos
+sócios, o que os sócios devem à empresa, o detalhe de cada um (adiantou,
+recebeu, já devolvido) e todos os movimentos. No Resumo, o que estiver pendente
+aparece nos alertas.
+
+As linhas antigas, sem tipo, continuam a contar como `Investimento` — que é o que
+a conta já assumia. A coluna `Tipo` é acrescentada pelo back office, **no fim**
+do cabeçalho (para não deslocar as fórmulas de quotas), no primeiro lançamento
+que não seja investimento.
+
+Cada livro tem o seu formulário no back office: **Contas** escreve no livro
+geral (e, numa despesa paga do bolso de um sócio, também nos adiantamentos
+dele), e **Sócios** escreve nos dois — o valor de cada sócio na coluna dele, e o
+**somatório** como valor da linha no livro geral. Ver
 [`backoffice/README.md`](backoffice/README.md).
 
 ### Sub-separadores que se adaptam ao Excel
