@@ -436,12 +436,13 @@ const NAV = [
     icon: '<path d="M4 6h16v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M4 6V5a1 1 0 0 1 1-1h11"/><path d="M8 11h8M8 15h5"/>',
     needs: ["Sócios - Contas Correntes", "Acertos entre Sócios"],
     views: [
-      /* movimentos dos sócios: investimento, dividendos, devoluções */
-      { id: "investimentos", sheet: "Movimentos dos Investidores", label: "Investimentos",
-        alt: ["Movimentos Investimentos"], render: "investimentos", expect: /^data$/i },
       /* contabilidade e tesouraria de toda a empresa */
       { id: "correntes", sheet: "Movimentos Geral", label: "Movimentos Correntes",
         render: "correntes", expect: /^data$/i },
+      /* tudo o que passa pelos sócios: capital, adiantamentos e devoluções.
+         (o id fica "investimentos" para não partir atalhos já guardados) */
+      { id: "investimentos", sheet: "Movimentos dos Investidores", label: "Movimentos Sócios",
+        alt: ["Movimentos Investimentos"], render: "investimentos", expect: /^data$/i },
     ] },
   /* Áreas futuras: soon:true mostra "Em breve" e não carrega dados.
      Para ativar, remover soon e preencher views com as folhas do Excel:
@@ -613,10 +614,12 @@ function extractMovs(rows) {
       data: (r[iData] || "").trim(),
       item,
       desc: iDesc >= 0 ? (r[iDesc] || "").trim() : "",
-      tipo: iTipo >= 0 ? (r[iTipo] || "").trim() : "",
+      tipoLido: iTipo >= 0 ? (r[iTipo] || "").trim() : "",
       categoria: iCat >= 0 ? (r[iCat] || "").trim() : "",
       viagem: iVF >= 0 ? tripCode((r[iVF] || "").trim()) : "",
     };
+    /* neste livro, uma linha sem tipo sempre contou como investimento */
+    base.tipo = base.tipoLido || "Investimento";
     if (socioCols.length) {
       if (!item || /^TOTAL/.test(item)) continue; // ignora vazias e linhas de totais
       const pagadores = [];
@@ -635,13 +638,50 @@ function extractMovs(rows) {
     }
   }
   /* as colunas Tipo/Categoria são opcionais: só existem se estiverem preenchidas */
-  movs.hasTipo = iTipo >= 0 && movs.some(m => m.tipo);
+  movs.hasTipo = iTipo >= 0 && movs.some(m => m.tipoLido);
   movs.hasCat = iCat >= 0 && movs.some(m => m.categoria);
   return movs;
 }
-/* normaliza o tipo para uma das quatro famílias conhecidas */
+/* ---------- adiantamentos entre os sócios e a empresa ----------
+   Dinheiro que tem de voltar, nos dois sentidos. Fica FORA do capital
+   (não conta para quotas nem para o investido) e fora do resultado
+   (não é receita nem despesa) — mas mexe na tesouraria. */
+const ADIANT_NOME = {
+  do:      "Adiantamento do sócio",   // sócio → empresa: a empresa fica a dever
+  despesa: "Despesa paga pelo sócio", // pagou do bolso uma despesa da empresa
+  devDo:   "Devolução do sócio",      // sócio devolve o que tinha levado
+  ao:      "Adiantamento ao sócio",   // empresa → sócio: o sócio fica a dever
+  devAo:   "Devolução ao sócio",      // empresa devolve o que o sócio adiantou
+};
+/* efeito no saldo do sócio: positivo = a empresa deve-lhe */
+const ADIANT_SINAL = { do: 1, despesa: 1, devDo: 1, ao: -1, devAo: -1 };
+/* do ponto de vista da empresa: dinheiro que chega (do sócio) ou que sai */
+const ADIANT_DO_SOCIO = { do: true, despesa: true, devDo: true, ao: false, devAo: false };
+
+function classeAdiant(tipo) {
+  const s = deaccent(tipo).replace(/\s+/g, " ").trim();
+  if (!s) return null;
+  if (/^adiantamento (do|pelo|de) socio/.test(s)) return "do";
+  if (/^adiantamento (ao|para o|a) socio/.test(s)) return "ao";
+  if (/^(devolucao|reembolso) ao socio/.test(s)) return "devAo";
+  if (/^(devolucao|reembolso) (do|pelo) socio/.test(s)) return "devDo";
+  if (/^despesa (paga )?(pelo|do) socio/.test(s)) return "despesa";
+  return null;
+}
+/* financiamento: entra ou sai dinheiro, mas não é operação */
+function ehFinanciamento(tipo) {
+  return tipo === "Suprimento" || !!classeAdiant(tipo) || saidaParaSocio(tipo);
+}
+const ehReceita = m => m.entrada && !ehFinanciamento(m.tipo);
+const ehDespesa = m => !m.entrada && m.tipo !== "Investimento" && !ehFinanciamento(m.tipo);
+
+/* normaliza o tipo para uma das famílias conhecidas */
 function tipoNorm(t) {
+  const a = classeAdiant(t);
+  if (a) return ADIANT_NOME[a];
   const s = deaccent(t);
+  /* antes do suprimento: "Devolução de capital" não é uma entrada */
+  if (/devolu|dividend|reembols|levantament|retirad/.test(s)) return String(t).trim();
   if (/investiment|capex|imobiliz/.test(s)) return "Investimento";
   if (/despesa|custo|opex|gasto/.test(s)) return "Despesa";
   if (/supriment|entrada|aporte|capital/.test(s)) return "Suprimento";
@@ -651,6 +691,9 @@ function tipoNorm(t) {
 const TIPO_COR = {
   "Investimento": "var(--s1)", "Despesa": "var(--s2)",
   "Suprimento": "var(--s3)", "Recebimento": "var(--s6)",
+  "Adiantamento do sócio": "var(--s4)", "Despesa paga pelo sócio": "var(--s4)",
+  "Devolução do sócio": "var(--s4)",
+  "Adiantamento ao sócio": "var(--s5)", "Devolução ao sócio": "var(--s5)",
 };
 
 function extractPlano(rows) {
@@ -953,8 +996,8 @@ function porMes(movs, n) {
     if (!m.date) continue;
     /* mesma regra dos indicadores: o investimento e os suprimentos são
        financiamento, não operação — senão a compra do camião esmaga o resto */
-    const receita = m.entrada && m.tipo !== "Suprimento";
-    const despesa = !m.entrada && m.tipo !== "Investimento";
+    const receita = ehReceita(m);
+    const despesa = ehDespesa(m);
     if (!receita && !despesa) continue;
     const chave = m.date.getFullYear() * 12 + m.date.getMonth();
     if (!mapa.has(chave)) mapa.set(chave, { chave, receitas: 0, despesas: 0,
@@ -988,10 +1031,8 @@ function renderResumo(rows) {
 
   /* contas do período e do período anterior (para as setas) */
   const conta = movs => {
-    const receitas = movs.filter(m => m.entrada && m.tipo !== "Suprimento")
-      .reduce((a, m) => a + m.valor, 0);
-    const despesas = movs.filter(m => !m.entrada && m.tipo !== "Investimento")
-      .reduce((a, m) => a + m.valor, 0);
+    const receitas = movs.filter(ehReceita).reduce((a, m) => a + m.valor, 0);
+    const despesas = movs.filter(ehDespesa).reduce((a, m) => a + m.valor, 0);
     return { receitas, despesas, resultado: receitas - despesas };
   };
   const atual = conta(geralPeriodo);
@@ -1002,7 +1043,7 @@ function renderResumo(rows) {
   const emCaixa = geral.filter(m => /caixa|banco/i.test(deaccent(m.meio)));
   const saldoTesouraria = emCaixa.reduce((a, m) => a + (m.entrada ? m.valor : -m.valor), 0);
   const totalInvestido = investidores.reduce((a, m) =>
-    a + (saidaParaSocio(m.tipo) ? -m.total : m.total), 0);
+    classeAdiant(m.tipo) ? a : a + (saidaParaSocio(m.tipo) ? -m.total : m.total), 0);
   const temResultado = atual.receitas > 0 || atual.despesas > 0;
 
   let html = periodBar();
@@ -1033,6 +1074,11 @@ function renderResumo(rows) {
     txt: `<b>${negativas.length} viage${negativas.length > 1 ? "ns" : "m"}</b> com margem negativa — <b>${fmtMZN(negativas.reduce((a, t) => a - tripMargin(t), 0))} MZN</b> de prejuízo` });
   if (emCaixa.length && saldoTesouraria < 0) alertas.push({ goto: "contas:correntes",
     txt: `Tesouraria negativa — <b>${fmtMZN(saldoTesouraria)} MZN</b> em caixa e banco` });
+  const adiant = adiantamentosSocios();
+  if (adiant.sociosDevem > 0.5) alertas.push({ goto: "contas:investimentos:adiantamentos",
+    txt: `Adiantamentos por devolver à empresa — <b>${fmtMZN(adiant.sociosDevem)} MZN</b>` });
+  if (adiant.empresaDeve > 0.5) alertas.push({ goto: "contas:investimentos:adiantamentos",
+    txt: `A empresa deve <b>${fmtMZN(adiant.empresaDeve)} MZN</b> aos sócios em adiantamentos` });
   const emFalta = socios.filter(s => s.saldo != null && s.saldo < -0.5);
   if (emFalta.length) alertas.push({ goto: "contas:investimentos",
     txt: `<b>${emFalta.length} sócio${emFalta.length > 1 ? "s" : ""}</b> com contribuição em falta — <b>${fmtMZN(emFalta.reduce((a, s) => a - s.saldo, 0))} MZN</b>` });
@@ -1056,7 +1102,7 @@ function renderResumo(rows) {
   if (meses.length >= 2) html += fluxoMensalHTML(meses);
 
   /* ---------- 4. despesas por categoria (anel) ---------- */
-  const saidas = geralPeriodo.filter(m => !m.entrada && m.categoria && m.tipo !== "Investimento");
+  const saidas = geralPeriodo.filter(m => ehDespesa(m) && m.categoria);
   let topCats = [];
   if (saidas.length) {
     const porCat = new Map();
@@ -1076,7 +1122,7 @@ function renderResumo(rows) {
     const matriz = {}; let maior = 0;
     nomes.forEach(n => (matriz[n] = {}));
     for (const m of geral) {
-      if (m.entrada || !m.date || m.tipo === "Investimento") continue;
+      if (!ehDespesa(m) || !m.date) continue;
       if (nomes.indexOf(m.categoria) < 0) continue;
       const chave = m.date.getFullYear() * 12 + m.date.getMonth();
       matriz[m.categoria][chave] = (matriz[m.categoria][chave] || 0) + m.valor;
@@ -1119,7 +1165,7 @@ function renderResumo(rows) {
   }
 
   /* ---------- 7. custo das viagens: em que se gasta na estrada ---------- */
-  const daEstrada = geralPeriodo.filter(m => !m.entrada && m.viagem && m.categoria);
+  const daEstrada = geralPeriodo.filter(m => ehDespesa(m) && m.viagem && m.categoria);
   if (daEstrada.length >= 2) {
     const porCat = new Map();
     for (const m of daEstrada) porCat.set(m.categoria, (porCat.get(m.categoria) || 0) + m.valor);
@@ -1292,10 +1338,13 @@ function pillBar(grupo, opcoes, ativa) {
 function renderInvestimentos(rows) {
   const sub = contasNav.investimentos;
   const bar = pillBar("investimentos", [
-    { id: "socios", label: "Sócios" },
+    { id: "socios", label: "Capital" },
+    { id: "adiantamentos", label: "Adiantamentos" },
     { id: "movimentos", label: "Movimentos" },
     { id: "acertos", label: "Acertos" },
   ], sub);
+
+  if (sub === "adiantamentos") return bar + renderAdiantamentos(rows);
 
   if (sub === "socios") {
     const socRows = state.data["Sócios - Contas Correntes"];
@@ -1577,6 +1626,101 @@ function renderSocios(rows) {
                  : "Valores lidos da folha «Sócios - Contas Correntes»."}</p>`;
 }
 
+/* --- Adiantamentos e devoluções ---
+   Saldo de cada sócio, nos dois sentidos: positivo = a empresa deve-lhe,
+   negativo = ele deve à empresa. Tudo desde o início (o pendente é
+   cumulativo, por isso o filtro de período não se aplica aqui). */
+function adiantamentosSocios(rows) {
+  const fonte = rows || investorRows();
+  const movs = (fonte && extractMovs(fonte)) || [];
+  const por = new Map();
+  const linhas = [];
+  for (const m of movs) {
+    const cl = classeAdiant(m.tipo);
+    if (!cl) continue;
+    linhas.push({ ...m, classe: cl });
+    for (const p of m.pagadores) {
+      if (!por.has(p.por)) por.set(p.por, { nome: p.por, do: 0, despesa: 0, devDo: 0, ao: 0, devAo: 0 });
+      por.get(p.por)[cl] += p.val;
+    }
+  }
+  const ordem = socioNames();
+  const socios = [...por.values()].map(e => ({ ...e,
+    saldo: e.do + e.despesa + e.devDo - e.ao - e.devAo }))
+    .sort((a, b) => (ordem.indexOf(a.nome) + 1 || 99) - (ordem.indexOf(b.nome) + 1 || 99));
+  return {
+    socios, linhas,
+    empresaDeve: socios.reduce((a, s) => a + Math.max(0, s.saldo), 0),
+    sociosDevem: socios.reduce((a, s) => a + Math.max(0, -s.saldo), 0),
+  };
+}
+
+function renderAdiantamentos(rows) {
+  const ad = adiantamentosSocios(rows);
+  if (!ad.linhas.length) {
+    return emptyState("Ainda não há adiantamentos.",
+      "Lançam-se no back office, separador Sócios: o sócio que adianta dinheiro à empresa, ou a empresa que adianta ao sócio, e depois as devoluções. Uma despesa paga do bolso de um sócio (Meio = Sócio, em Contas ou num abastecimento) entra aqui sozinha.");
+  }
+  ad.socios.forEach(s => socioColor(s.nome));
+  const mzn = '<small style="font-size:11px;color:var(--ink-muted)">MZN</small>';
+
+  const resumo = `<div class="card" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><div style="font-size:11.5px;color:var(--ink-2)">A empresa deve aos sócios</div>
+        <b style="font-size:17px;font-variant-numeric:tabular-nums;color:${ad.empresaDeve > 0.5 ? "var(--accent)" : "var(--ink)"}">${fmtMZN(ad.empresaDeve)}</b> ${mzn}</div>
+      <div><div style="font-size:11.5px;color:var(--ink-2)">Os sócios devem à empresa</div>
+        <b style="font-size:17px;font-variant-numeric:tabular-nums;color:${ad.sociosDevem > 0.5 ? "var(--serious)" : "var(--ink)"}">${fmtMZN(ad.sociosDevem)}</b> ${mzn}</div>
+    </div>`;
+
+  const linha = (rot, v) => v ? `<span>${rot}: <b>${fmtMZN(v)}</b></span>` : "";
+  const cartoes = ad.socios.map(s => {
+    const deve = s.saldo > 0.5, devido = s.saldo < -0.5;
+    return `<div class="card socio">
+      <div class="socio-head">
+        <div class="avatar" style="background:${socioColor(s.nome)}">${esc(s.nome.slice(0, 2).toUpperCase())}</div>
+        <div><div class="s-name">${esc(s.nome)}</div>
+          <div class="s-part">${deve ? "A empresa deve-lhe" : devido ? "Deve à empresa" : "Sem nada pendente"}</div></div>
+        <div class="s-saldo">
+          <div class="v" style="color:${deve ? "var(--accent)" : devido ? "var(--serious)" : "var(--ink)"}">${fmtMZN(Math.abs(s.saldo))} ${mzn}</div>
+          <span class="status ${deve ? "neutral" : devido ? "warn" : "good"}" style="font-size:11px">
+            ${deve ? "Pendente · a devolver-lhe" : devido ? "! Pendente · a devolver" : "✓ Liquidado"}</span>
+        </div>
+      </div>
+      <div class="socio-nums" style="flex-wrap:wrap;gap:4px 14px">
+        ${linha("Adiantou à empresa", s.do)}
+        ${linha("Despesas que pagou", s.despesa)}
+        ${linha("Já lhe foi devolvido", s.devAo)}
+        ${linha("Recebeu da empresa", s.ao)}
+        ${linha("Já devolveu", s.devDo)}
+      </div>
+    </div>`;
+  }).join("");
+
+  const lista = ad.linhas.slice().reverse().map(m => {
+    const doSocio = ADIANT_DO_SOCIO[m.classe];
+    const nomes = m.pagadores.map(p => `<span class="chip"><span class="dot" style="background:${socioColor(p.por)}"></span>${esc(p.por)}${m.pagadores.length > 1 ? ` · ${fmtMZN(p.val)}` : ""}</span>`).join("");
+    const tn = ADIANT_NOME[m.classe];
+    return `<div class="mov" style="flex-wrap:wrap">
+      <div class="m-main">
+        <div class="m-item">${esc(m.desc || m.item)}</div>
+        <div class="m-desc">${doSocio ? "Sócio → Empresa" : "Empresa → Sócio"}</div>
+        ${m.data ? `<div class="m-date">${esc(m.data)}</div>` : ""}
+      </div>
+      <div class="m-side"><div class="m-val">${fmtMZN(m.total)} ${mzn}</div></div>
+      <div style="flex-basis:100%;display:flex;flex-wrap:wrap;gap:5px;margin-top:7px">
+        <span class="chip" style="font-size:10.5px;padding:3px 7px;border-color:${TIPO_COR[tn]};color:${TIPO_COR[tn]};background:transparent">${esc(tn)}</span>
+        ${m.viagem ? `<span class="chip" data-viagem-cod="${esc(m.viagem)}" style="font-size:10.5px;padding:3px 7px;cursor:pointer;border-color:var(--accent);color:var(--accent)">${esc(m.viagem)} ›</span>` : ""}
+        ${nomes}
+      </div>
+    </div>`;
+  }).join("");
+
+  return resumo + cartoes +
+    `<div class="section-title">Movimentos de adiantamentos</div><div class="card">${lista}</div>
+    <p style="font-size:11px;color:var(--ink-muted);text-align:center;margin:2px 8px 8px;line-height:1.5">
+      Os adiantamentos ficam fora do capital (não mexem nas quotas) e fora do resultado
+      (não são receita nem despesa) — mas contam na tesouraria quando passam pela caixa ou pelo banco.</p>`;
+}
+
 /* --- Acertos entre Sócios --- */
 function renderAcertos(rows) {
   const h = findHeaderRow(rows, "Data");
@@ -1783,6 +1927,7 @@ function extractAcertos(rows) {
 
 /* devoluções de capital e dividendos saem do sócio: contam ao contrário */
 function saidaParaSocio(tipo) {
+  if (classeAdiant(tipo)) return false;      // adiantamentos têm conta própria
   return /devolu|dividend|reembols|levantament|retirad/.test(deaccent(tipo));
 }
 
@@ -1809,6 +1954,7 @@ function sociosContas() {
   const pago = new Map(base.map(s => [s.nome, 0]));
   let total = 0;
   for (const m of movs) {
+    if (classeAdiant(m.tipo)) continue;     // adiantamentos não são capital
     const sinal = saidaParaSocio(m.tipo) ? -1 : 1;
     for (const p of m.pagadores) {
       if (!pago.has(p.por)) continue;       // pagador que não é sócio
@@ -1866,7 +2012,9 @@ function extractGeral(rows) {
     const tipo = tipoNorm(get(r, ix.tipo));
     const sTxt = deaccent(get(r, ix.sentido));
     /* entrada = dinheiro que chega; saída = dinheiro que sai */
+    const cl = classeAdiant(tipo);
     const entrada = sTxt ? /entrada|receb|credito|\+/.test(sTxt)
+                         : cl ? ADIANT_DO_SOCIO[cl]
                          : (tipo === "Suprimento" || tipo === "Recebimento");
     movs.push({
       data: get(r, ix.data), date: parseDate(get(r, ix.data)),
@@ -2462,7 +2610,8 @@ mainEl.addEventListener("click", e => {
   }
   const jump = e.target.closest("[data-goto]");
   if (jump) {
-    const [g, v] = jump.dataset.goto.split(":");
+    const [g, v, pilula] = jump.dataset.goto.split(":");
+    if (pilula && contasNav[v] !== undefined) contasNav[v] = pilula;
     gotoView(g, v);
     return;
   }

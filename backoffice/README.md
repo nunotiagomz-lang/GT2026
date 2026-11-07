@@ -43,9 +43,16 @@ Corre no Google Apps Script, dentro da conta Google da empresa.
 - **Contas** — o livro geral da empresa. Data, **tipo** (Despesa / Recebimento /
   Investimento / Suprimento), **categoria**, descrição, valor, **Pago Por**
   (um sócio, a empresa, ou um fornecedor / cliente), meio (caixa / banco /
-  sócio), viagem e nota. Escreve **apenas** em `Movimentos Geral`.
+  sócio), viagem e nota. Escreve em `Movimentos Geral`.
 
-- **Investimentos** — o dinheiro dos sócios. Tem os mesmos campos, mas em vez de
+  **Despesa paga do bolso de um sócio** (tipo `Despesa`, `Meio = Sócio`, e o
+  sócio em `Pago Por`): entra também no livro dos investidores como
+  `Despesa paga pelo sócio`, a favor dele nos adiantamentos — abate ao que ele
+  tinha levado da empresa, ou passa a ser a empresa a dever-lhe. Se o dinheiro
+  for para ficar como **capital**, lança-o antes em **Sócios** como
+  `Investimento`. O mesmo vale para um **abastecimento** com `Meio = Sócio`.
+
+- **Sócios** (antes «Investimentos») — o dinheiro dos sócios. Tem os mesmos campos, mas em vez de
   um valor único tem **uma caixa por sócio**; o **total é a soma** dessas caixas
   e vai-se atualizando à medida que escreves.
 
@@ -55,9 +62,24 @@ Corre no Google Apps Script, dentro da conta Google da empresa.
   quem contribuiu. É assim que a conta corrente e a contabilidade ficam ambas
   certas com um só lançamento.
 
-  Os tipos aqui são `Investimento`, `Suprimento`, `Devolução` e `Dividendo` — os
-  dois últimos são dinheiro que sai para o sócio, e a app desconta-os ao que ele
-  tem investido.
+  Os tipos vêm em dois grupos:
+
+  - **Capital** — `Investimento`, `Suprimento`, `Devolução de capital`,
+    `Dividendo`. Os dois últimos são dinheiro que sai para o sócio, e a app
+    desconta-os ao que ele tem investido.
+  - **Adiantamentos e devoluções** — `Adiantamento do sócio`, `Devolução ao
+    sócio`, `Adiantamento ao sócio`, `Devolução do sócio`. Dinheiro que tem de
+    voltar; não mexe nas quotas.
+
+  Nos adiantamentos, devoluções e dividendos o formulário pede **por onde passou
+  o dinheiro na empresa** (Caixa ou Banco) — é o que os põe na tesouraria. Ao
+  escolher um tipo de adiantamento, cada sócio mostra o **pendente** («a empresa
+  deve-lhe 50 000» / «deve à empresa 5 000»), para saberes quanto devolver; uma
+  devolução maior do que o pendente grava mas avisa.
+
+  No primeiro lançamento que não seja investimento, o formulário acrescenta a
+  coluna **`Tipo`** ao fim do livro dos investidores, se ainda não existir. Sem
+  ela, um adiantamento ficaria igual a um investimento e entraria nas quotas.
 
 ## Instalação (uma vez, ~5 minutos)
 
