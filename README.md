@@ -17,43 +17,59 @@ sub-separadores no topo mostram as folhas do Excel dessa área.
 
 | Área (em baixo) | Sub-separador (em cima) | Folha do Excel | Apresentação |
 |---|---|---|---|
-| Resumo | — | todas as folhas | Dashboard completo — ver abaixo |
-| Viagens | Viagens | `Viagens` | Lista com margem por viagem → detalhe → abastecimentos e consumo |
-| Viagens | Motoristas | `Viagens` (derivado) | Ficha por motorista: viagens, km, margem, saldo |
-| Viagens | Clientes | `Viagens` (derivado) | Ficha por cliente: viagens, faturado, margem |
-| Viaturas | — | `Viaturas` (+ `Viagens`) | Frota com consumo esperado → ficha da viatura e as suas viagens |
-| Contas | Movimentos Correntes | `Movimentos Geral` | Contabilidade e tesouraria de toda a empresa |
-| Contas | Movimentos Sócios | `Movimentos dos Investidores` (+ sócios, acertos) | Tudo o que passa pelos sócios: Capital · Adiantamentos · Movimentos · Acertos |
+| Dashboard | — | todas as folhas | Painel de gestão — ver abaixo |
+| Operações | — | `Viagens` | Lista com margem por viagem → detalhe → abastecimentos e consumo |
+| Financeiro | Movimentos Correntes | `Movimentos Geral` | Contabilidade e tesouraria de toda a empresa |
+| Financeiro | Movimentos Sócios | `Movimentos dos Investidores` (+ sócios, acertos) | Tudo o que passa pelos sócios: Capital · Adiantamentos · Movimentos · Acertos |
+| Frota | — | `Viaturas` (+ `Viagens`) | Frota com consumo esperado → ficha da viatura e as suas viagens |
+| Pessoas | Motoristas | `Viagens` (derivado) | Ficha por motorista: viagens, km, margem, saldo |
+| Pessoas | Clientes | `Viagens` (derivado) | Ficha por cliente: viagens, faturado, margem |
 | Faturação | — | *(em breve)* | — |
 
-### O dashboard
+No cabeçalho: **pesquisa** (viagens, motoristas, viaturas, clientes), **sino**
+(leva às Próximas Ações; tem um ponto vermelho quando há alguma) e **atualizar**.
 
-O Resumo é calculado a partir de todos os livros. O **filtro de período** no topo
-manda na página inteira, e **qualquer marca de um gráfico mostra os valores ao
-toque**.
+### Aspeto
 
-1. **Chips de indicadores** (deslizam na horizontal) — em caixa e banco,
-   resultado do período, receitas, despesas e viagens, cada um com a **variação
-   face ao período anterior** (↑ ↓).
-2. **Alertas** — viagens com margem negativa, tesouraria negativa, sócios com
-   contribuição em falta. Cada um leva ao sítio respetivo.
-3. **Receitas, despesas e resultado por mês** — barras dos últimos 6 meses com a
-   linha do resultado por cima.
-4. **Despesas por categoria** — anel com legenda e percentagens.
-5. **Despesas por categoria e mês** — mapa de calor: vê-se logo em que mês
-   disparou o combustível ou a manutenção.
-6. **Operação** — viagens, km, margem e margem/km, com a **melhor e a pior
-   viagem** do período.
-7. **Custo das viagens** — barra de composição: quanto do dinheiro da estrada vai
-   para combustível, portagens, motorista…
-8. **Sócios** e **últimos movimentos**, com atalhos.
+Tema escuro em azul-marinho, sempre — a cor da marca. As cores dos gráficos são
+os passos escuros de uma paleta de dados validada **contra este fundo**
+(separação para daltonismo, contraste ≥ 3:1 das marcas); o texto tem sempre
+contraste ≥ 4,5:1 e nunca usa a cor de uma série — a identidade vai numa marca ao
+lado (ponto, quadrado, linha).
+
+### O painel (Dashboard)
+
+Calculado a partir de todos os livros. O **período** escolhe-se no canto do
+topo (desde o início, este mês, últimos 3 meses, este ano) e manda na página
+inteira; **qualquer marca de um gráfico mostra os valores ao toque**.
+
+1. **Receitas · Despesas · Resultado** (com a margem), cada um com a **variação
+   face ao período anterior**.
+2. **Em caixa e banco · Contribuições em falta · Viagens · Utilização da
+   frota** — esta última é a parte das viaturas que fez pelo menos uma viagem no
+   período, num medidor.
+3. **Evolução Financeira** — receitas e despesas por mês em barras, resultado em
+   linha, num só eixo; «Ver tabela» mostra os mesmos números em tabela.
+4. **Despesas por Categoria** — anel com o total ao centro e a tabela de
+   percentagens e valores. Sem despesas no período, mostra ali o **investimento
+   por categoria**. As cores ficam presas à categoria (não mudam com o período).
+5. **Frota** — viaturas por estado (se a folha `Viaturas` tiver uma coluna
+   `Estado`: em operação / em manutenção / inativo; senão, com e sem viagens no
+   período) · **Viagens & Operação** — número, variação e evolução mensal.
+6. **A Pagar / Receber** — por agora, os adiantamentos entre sócios e empresa;
+   a faturação entra aqui quando for ativada · **Indicadores de Gestão** —
+   margem, custo por km e receita por km das viagens do período.
+7. **Próximas Ações** — tesouraria negativa, viagens com margem negativa,
+   contribuições em falta, adiantamentos pendentes; cada uma com selo e atalho.
+8. Abaixo: investimento por categoria, custo das viagens, mapa de calor
+   categoria × mês, sócios e últimos movimentos.
 
 O **investimento fica de fora** das receitas/despesas e do resultado — comprar o
-camião não é custo do mês, e misturado esmagaria tudo o resto. Aparece nos
-Sócios e no livro dos investidores.
+camião não é custo do mês, e misturado esmagaria tudo o resto. O mesmo para
+suprimentos, adiantamentos e dividendos: mexem na tesouraria, não no resultado.
 
-Cada secção só aparece se houver dados para ela. Se a folha `Resumo` tiver
-indicadores próprios, aparecem no fim.
+Um valor só aparece quando é verdadeiro: sem receitas lançadas, a margem e a
+receita por km mostram «—» em vez de um número inventado.
 
 Os gráficos são SVG escrito à mão — sem bibliotecas, por isso funcionam offline
 e não há nada para carregar.
@@ -125,9 +141,9 @@ Os adiantamentos contam onde devem e só aí:
   já conta como despesa no livro geral; o adiantamento é só quem a financiou);
 - **dentro da tesouraria** — quando passam pela caixa ou pelo banco.
 
-Em **Contas → Movimentos Sócios → Adiantamentos** vê-se o que a empresa deve aos
+Em **Financeiro → Movimentos Sócios → Adiantamentos** vê-se o que a empresa deve aos
 sócios, o que os sócios devem à empresa, o detalhe de cada um (adiantou,
-recebeu, já devolvido) e todos os movimentos. No Resumo, o que estiver pendente
+recebeu, já devolvido) e todos os movimentos. No painel, o que estiver pendente
 aparece nos alertas.
 
 As linhas antigas, sem tipo, continuam a contar como `Investimento` — que é o que
@@ -158,7 +174,7 @@ Este ano) aplica-se às vistas operacionais e usa a coluna de data das viagens.
 A app não se limita a mostrar as folhas — cruza-as:
 
 - **Margem por viagem** = receita − despesas, com margem/km. Viagens com margem
-  negativa geram alerta no Resumo.
+  negativa aparecem nas Próximas Ações do painel.
 - **Consumo real vs esperado** — litros dos abastecimentos ÷ km da viagem,
   comparado com o consumo da folha `Viaturas`. Acima de 10% de desvio, avisa.
 - **Fichas ligadas** — motorista, viatura e cliente agregam as respetivas
@@ -215,13 +231,13 @@ rede, mostrando os últimos dados guardados (com aviso da data).
 
 - **Faturação** (separador em baixo, por ativar): faturas emitidas e clientes,
   com **aging de recebíveis** (quem deve, quanto, há quantos dias) e alertas de
-  vencidos no Resumo. Incluir como sub-separadores a **Tesouraria** (caixa/banco,
+  vencidos no painel. Incluir como sub-separadores a **Tesouraria** (caixa/banco,
   entradas e saídas) e os **Resultados mensais (P&L)** com evolução ao longo dos
   meses.
 - **Viaturas** (separador em baixo, por ativar): manutenções por viatura
   (revisões, pneus com km, avarias, custos, próximas intervenções) e
   **documentação de cada viatura** vinda de uma pasta do Drive organizada por
-  matrícula (seguro, inspeção, licenças, com validades e alertas no Resumo).
+  matrícula (seguro, inspeção, licenças, com validades e alertas no painel).
 - **Privacidade**: quando entrarem dados de faturação/clientes/salários,
   ponderar um PIN de acesso na app ou alojamento com login.
 

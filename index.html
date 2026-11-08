@@ -3,8 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#f9f9f7" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#08111f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <title>CNET Logistics, Lda · Gestão</title>
@@ -12,55 +11,46 @@
 <link rel="apple-touch-icon" href="assets/logo-192.png">
 <link rel="manifest" href="manifest.webmanifest">
 <style>
+  /* Tema azul-marinho (sempre escuro, como o painel de referência).
+     As cores das séries são os passos escuros da paleta de dados,
+     revalidados contra ESTA superfície (#0f1b2e): banda de luminosidade,
+     croma, separação para daltonismo (ΔE ≥ 8) e contraste ≥ 3:1. */
   :root {
-    color-scheme: light;
-    --page:           #f9f9f7;
-    --surface:        #fcfcfb;
-    --ink:            #0b0b0b;
-    --ink-2:          #52514e;
-    --ink-muted:      #898781;
-    --hairline:       #e1e0d9;
-    --border:         rgba(11,11,11,0.10);
-    --track:          #f0efec;
-    --accent:         #2a78d6;   /* categorical slot 1 (blue) */
-    --accent-soft:    #cde2fb;
+    color-scheme: dark;
+    --page:           #08111f;
+    --surface:        #0f1b2e;   /* cartões */
+    --surface-2:      #152540;   /* dentro dos cartões */
+    --ink:            #f2f5fa;   /* 15.8:1 */
+    --ink-2:          #aab6c8;   /*  8.4:1 */
+    --ink-muted:      #7d8ba1;   /*  5.0:1 */
+    --hairline:       #1e2d47;
+    --border:         rgba(140,175,230,0.14);
+    --track:          #1b2b45;
+    --accent:         #3987e5;
+    --accent-soft:    #184f95;
+    --accent-text:    #6aa8f0;   /* azul para TEXTO: 7.0:1 no cartão, 6.2:1 no elevado */
     --good:           #0ca30c;
-    --good-text:      #006300;
+    --good-text:      #0ca30c;   /* 5.2:1 */
     --warning:        #fab219;
-    --serious:        #ec835a;
-    --critical:       #d03b3b;
-    --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
-    --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7; --s8: #e34948;
+    --serious:        #ec835a;   /* texto negativo: 6.5:1 */
+    --critical:       #d03b3b;   /* só marcas, nunca texto pequeno */
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+    --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
     --heat-0: var(--track);
-    --heat-1: #cde2fb; --heat-2: #9ec5f4; --heat-3: #6da7ec;
-    --heat-4: #2a78d6; --heat-5: #184f95;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      color-scheme: dark;
-      --page:           #0d0d0d;
-      --surface:        #1a1a19;
-      --ink:            #ffffff;
-      --ink-2:          #c3c2b7;
-      --ink-muted:      #898781;
-      --hairline:       #2c2c2a;
-      --border:         rgba(255,255,255,0.10);
-      --track:          #383835;
-      --accent:         #3987e5;
-      --accent-soft:    #184f95;
-      --good-text:      #0ca30c;
-      --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
-      --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
-      --heat-0: var(--track);
-      --heat-1: #104281; --heat-2: #1c5cab; --heat-3: #2a78d6;
-      --heat-4: #5598e7; --heat-5: #9ec5f4;
-    }
+    --heat-1: #104281; --heat-2: #1c5cab; --heat-3: #2a78d6;
+    --heat-4: #5598e7; --heat-5: #9ec5f4;
+    --raio: 16px;
+    --sombra: 0 1px 0 rgba(255,255,255,0.04) inset, 0 8px 24px rgba(0,0,0,0.25);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
   body {
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    background: var(--page);
+    background:
+      radial-gradient(120% 60% at 85% -10%, rgba(57,135,229,0.16), transparent 60%),
+      radial-gradient(90% 50% at -10% 30%, rgba(144,133,233,0.08), transparent 60%),
+      var(--page);
+    background-attachment: fixed;
     color: var(--ink);
     min-height: 100dvh;
     padding-bottom: calc(64px + env(safe-area-inset-bottom));
@@ -69,27 +59,33 @@
   /* ---------- Header ---------- */
   header {
     position: sticky; top: 0; z-index: 20;
-    background: color-mix(in srgb, var(--page) 88%, transparent);
+    background: color-mix(in srgb, var(--page) 82%, transparent);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--hairline);
     padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
-    display: flex; align-items: center; gap: 12px;
+    display: flex; align-items: center; gap: 10px;
   }
   .logo {
-    width: 40px; height: 40px; border-radius: 10px; flex: none;
-    background: #fff; border: 1px solid var(--border);
-    object-fit: contain; display: block;
+    width: 44px; height: 44px; border-radius: 13px; flex: none;
+    border: 1.5px solid rgba(255,255,255,0.55);
+    object-fit: cover; display: block; background: #091f48;
   }
   .brand { flex: 1; min-width: 0; }
-  .brand h1 { font-size: 16px; font-weight: 700; line-height: 1.15; }
+  .brand h1 { font-size: clamp(15.5px, 4.4vw, 18px); font-weight: 750; line-height: 1.15; letter-spacing: -0.01em;
+              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .brand p  { font-size: 12px; color: var(--ink-2); line-height: 1.3;
               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .refresh-btn {
-    flex: none; width: 40px; height: 40px; border-radius: 50%;
-    border: 1px solid var(--border); background: var(--surface); color: var(--ink-2);
+    flex: none; width: 40px; height: 40px; border-radius: 50%; position: relative;
+    border: 1px solid var(--border); background: rgba(15,27,46,0.7); color: var(--ink);
     display: grid; place-items: center; cursor: pointer; touch-action: manipulation;
   }
+  .refresh-btn .ponto {
+    position: absolute; top: 8px; right: 9px; width: 9px; height: 9px; border-radius: 50%;
+    background: var(--critical); box-shadow: 0 0 0 2px var(--page);
+  }
+  .refresh-btn .ponto[hidden] { display: none; }
   .refresh-btn:active { background: var(--track); }
   .refresh-btn svg { width: 18px; height: 18px; }
   .refresh-btn.spinning svg { animation: spin 0.9s linear infinite; }
@@ -102,15 +98,16 @@
   .updated-bar .stale { color: var(--serious); }
 
   /* ---------- Layout ---------- */
-  main { padding: 12px 14px 24px; max-width: 720px; margin: 0 auto; }
+  main { padding: 12px 14px 24px; max-width: 980px; margin: 0 auto; }
   .panel { display: none; }
   .panel.active { display: block; animation: fadein .18s ease; }
   @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; } }
 
   .card {
-    background: var(--surface);
+    background: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0) 40%), var(--surface);
     border: 1px solid var(--border);
-    border-radius: 14px;
+    border-radius: var(--raio);
+    box-shadow: var(--sombra);
     padding: 14px 16px;
     margin-bottom: 12px;
   }
@@ -134,7 +131,7 @@
     display: inline-flex; align-items: center; gap: 5px;
     font-size: 11px; font-weight: 600; line-height: 1;
     padding: 4px 8px; border-radius: 999px;
-    border: 1px solid var(--border); color: var(--ink-2); background: var(--track);
+    border: 1px solid var(--border); color: var(--ink-2); background: var(--surface-2);
   }
   .chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-muted); flex: none; }
   .status { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; }
@@ -158,6 +155,8 @@
     touch-action: manipulation; white-space: nowrap;
   }
   .subtabs button.on { color: var(--ink); border-bottom-color: var(--accent); }
+  .subtabs button:focus-visible, .filters button:focus-visible, nav button:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
   .subtabs[hidden], .subtabs button[hidden] { display: none; }
 
   /* ---------- Pesquisa global ---------- */
@@ -179,7 +178,7 @@
   .search-head input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
   .search-head button {
     flex: none; border: none; background: none; cursor: pointer;
-    font-family: inherit; font-size: 14px; font-weight: 650; color: var(--accent);
+    font-family: inherit; font-size: 14px; font-weight: 650; color:var(--accent-text);
     padding: 8px 4px; touch-action: manipulation;
   }
   .search-body { flex: 1; overflow-y: auto; padding: 10px 14px calc(20px + env(safe-area-inset-bottom)); }
@@ -196,26 +195,6 @@
   .sr-main { flex: 1; min-width: 0; }
   .sr-title { font-size: 14px; font-weight: 650; }
   .sr-sub { font-size: 12px; color: var(--ink-2); margin-top: 2px; }
-
-  /* ---------- Dashboard: chips de indicadores ---------- */
-  .kpis {
-    display: flex; gap: 10px; overflow-x: auto; padding: 2px 2px 12px;
-    -webkit-overflow-scrolling: touch; scrollbar-width: none;
-  }
-  .kpis::-webkit-scrollbar { display: none; }
-  .kpi {
-    flex: none; min-width: 40vw; max-width: 60vw;
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 14px; padding: 12px 14px;
-  }
-  .kpi .k-label { font-size: 11.5px; color: var(--ink-2); white-space: nowrap;
-                  overflow: hidden; text-overflow: ellipsis; }
-  .kpi .k-value { font-size: 21px; font-weight: 780; letter-spacing: -0.02em;
-                  line-height: 1.15; margin-top: 4px; font-variant-numeric: tabular-nums; }
-  .kpi .k-value small { font-size: 11px; font-weight: 600; color: var(--ink-muted); margin-left: 3px; }
-  .kpi .k-trend { display: inline-flex; align-items: center; gap: 3px; margin-top: 6px;
-                  font-size: 11.5px; font-weight: 700; }
-  .kpi .k-trend span.q { color: var(--ink-muted); font-weight: 600; }
 
   /* ---------- Dashboard: gráficos ---------- */
   .viz-head { display: flex; justify-content: space-between; align-items: baseline;
@@ -237,7 +216,7 @@
   /* valores ao toque */
   .viz-tip {
     position: fixed; z-index: 70; pointer-events: none;
-    background: var(--ink); color: var(--page);
+    background: #f2f5fa; color: #08111f;
     font-size: 12px; font-weight: 600; line-height: 1.35;
     padding: 7px 10px; border-radius: 9px; max-width: 62vw;
     box-shadow: 0 4px 14px rgba(0,0,0,.22);
@@ -257,7 +236,9 @@
     display: inline-flex; align-items: center; gap: 6px; touch-action: manipulation;
   }
   .filters button .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-  .filters button.on { background: var(--ink); color: var(--page); border-color: var(--ink); }
+  .filters button.on {
+    background: linear-gradient(180deg, #2f7ad6, #1c5cab); color: #fff; border-color: rgba(120,170,240,0.5);
+    box-shadow: 0 4px 14px rgba(57,135,229,0.30); }
 
   /* ---------- Movement rows ---------- */
   .mov {
@@ -333,23 +314,168 @@
   /* ---------- Bottom nav ---------- */
   nav {
     position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
-    background: color-mix(in srgb, var(--surface) 92%, transparent);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    border-top: 1px solid var(--hairline);
-    display: flex;
-    padding-bottom: env(safe-area-inset-bottom);
+    background: color-mix(in srgb, #0b1628 90%, transparent);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-top: 1px solid var(--border);
+    display: flex; gap: 2px;
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
   }
   nav button {
-    flex: 1; border: none; background: none; cursor: pointer;
-    padding: 8px 2px 7px; color: var(--ink-muted);
+    flex: 1; min-width: 0; border: 1px solid transparent; background: none; cursor: pointer;
+    padding: 7px 2px 6px; color: var(--ink-2); border-radius: 14px;
     display: flex; flex-direction: column; align-items: center; gap: 3px;
-    font-family: inherit; font-size: 10px; font-weight: 600; touch-action: manipulation;
+    font-family: inherit; font-size: 10.5px; font-weight: 600; touch-action: manipulation;
+  }
+  nav button span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  @media (max-width: 389px) {
+    header { gap: 6px; padding-left: 12px; padding-right: 12px; }
+    .logo { width: 40px; height: 40px; border-radius: 11px; }
+    .refresh-btn { width: 36px; height: 36px; }
+    .refresh-btn svg { width: 17px; height: 17px; }
+    .brand h1 { font-size: 15px; }
+    .brand p { font-size: 11px; }
+    nav { gap: 0; padding-left: 3px; padding-right: 3px; }
+    nav button { font-size: 9.5px; padding-left: 0; padding-right: 0; letter-spacing: -0.01em; }
   }
   nav button svg { width: 22px; height: 22px; }
-  nav button.on { color: var(--accent); }
+  nav button.on {
+    color: #8fc0ff;
+    background: linear-gradient(180deg, rgba(57,135,229,0.30), rgba(57,135,229,0.10));
+    border-color: rgba(120,170,240,0.35);
+  }
 
   footer { text-align: center; font-size: 11px; color: var(--ink-muted); padding: 8px 16px 20px; }
+
+  /* =========== Painel de gestão (dashboard) =========== */
+  .hero {
+    position: relative; overflow: hidden; border-radius: 20px;
+    padding: 18px 18px 20px; margin: 2px 0 14px; min-height: 150px;
+    background:
+      radial-gradient(70% 90% at 92% 105%, rgba(236,131,90,0.42), transparent 60%),
+      radial-gradient(60% 80% at 70% 0%, rgba(57,135,229,0.22), transparent 70%),
+      linear-gradient(160deg, #0f1f38, #0a1527 70%);
+    border: 1px solid var(--border);
+  }
+  .hero .deco { position: absolute; right: -6px; bottom: 0; width: 58%; max-width: 360px;
+                height: auto; pointer-events: none; opacity: .95; }
+  .hero > *:not(.deco) { position: relative; }
+  .hero .ola { font-size: 14px; color: var(--ink-2); padding-top: 6px; }
+  .hero h2 { font-size: clamp(24px, 7vw, 32px); font-weight: 800; letter-spacing: -0.02em;
+             line-height: 1.1; margin-top: 18px; max-width: 80%; }
+  /* o texto acaba onde o camião começa (a decoração ocupa os 58% da direita) */
+  .hero p { font-size: 13px; color: var(--ink-2); margin-top: 6px; max-width: 44%; line-height: 1.4; }
+  .periodo {
+    position: relative; display: inline-flex; align-items: center; gap: 8px;
+    margin-top: 14px; padding: 9px 14px; border-radius: 12px;
+    background: rgba(8,17,31,0.72); border: 1px solid rgba(140,175,230,0.25);
+    font-size: 13px; font-weight: 650; color: var(--ink);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+  .periodo svg { width: 17px; height: 17px; flex: none; }
+  .periodo select {
+    position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0;
+    font-size: 16px; cursor: pointer;   /* 16px: o iOS não faz zoom */
+  }
+  .periodo:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+  /* como no modelo: o período fica no canto superior direito do topo */
+  .hero > .periodo { position: absolute; top: 14px; right: 14px; margin-top: 0; padding: 8px 12px; }
+  .hero { min-height: 172px; }
+
+  .grelha { display: grid; gap: 10px; margin-bottom: 10px; }
+  .grelha > .card { margin-bottom: 0; min-width: 0; }
+  .g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .g2l { grid-template-columns: 1fr; }
+  @media (min-width: 560px) { .g2l { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .gc { grid-template-columns: 1fr; }
+  @media (max-width: 379px) { .g3 { grid-template-columns: 1fr 1fr; } .g3 > :first-child { grid-column: 1 / -1; }
+                              .g2 { grid-template-columns: 1fr; } }
+  @media (min-width: 640px) { .g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+                              .gc { grid-template-columns: 1.45fr 1fr; } }
+
+  /* cartão de indicador principal (receitas / despesas / resultado) */
+  .kc { padding: 13px 13px 12px; }
+  .kc .topo { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+  @media (min-width: 640px) { .kc .topo { flex-direction: row; align-items: center; gap: 10px; } }
+  .icone {
+    width: 36px; height: 36px; border-radius: 11px; flex: none;
+    display: grid; place-items: center;
+    background: color-mix(in srgb, var(--cor, var(--accent)) 22%, transparent);
+    border: 1px solid color-mix(in srgb, var(--cor, var(--accent)) 40%, transparent);
+    color: var(--cor, var(--accent));
+  }
+  .icone svg { width: 19px; height: 19px; }
+  .kc .rot { font-size: 12.5px; color: var(--ink-2); font-weight: 600; min-width: 0;
+             overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .kc .val { font-size: clamp(17px, 5.2vw, 24px); font-weight: 780; letter-spacing: -0.02em;
+             margin-top: 6px; line-height: 1.1; overflow-wrap: anywhere; }
+  .kc .val small, .kt .val small { font-size: 11px; font-weight: 650; color: var(--ink-muted); margin-left: 3px; letter-spacing: 0; }
+  .k-trend { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px; font-weight: 700; }
+  .k-trend .q { color: var(--ink-muted); font-weight: 500; }
+  .kc .k-trend { margin-top: 6px; font-size: 11px; }
+  .kc .sub { font-size: 11.5px; color: var(--ink-2); margin-top: 6px; }
+  .kc.verde { border-color: rgba(12,163,12,0.38); }
+  .kc.laranja { border-color: rgba(217,89,38,0.38); }
+
+  /* cartões pequenos (caixa, contribuições, viagens, frota) */
+  .kt { padding: 13px 14px; display: flex; flex-direction: column; gap: 6px; }
+  .kt .ic { color: var(--ink-2); }
+  .kt .ic svg { width: 22px; height: 22px; }
+  .kt .rot { font-size: 12.5px; color: var(--ink-2); line-height: 1.25; }
+  .kt .val { font-size: clamp(18px, 5.4vw, 24px); font-weight: 780; letter-spacing: -0.02em; line-height: 1.1; }
+  .kt .sub { font-size: 12px; color: var(--ink-2); }
+  .kt .mais { color: var(--ink-muted); margin-left: auto; }
+  .gauge { display: flex; align-items: flex-end; justify-content: space-between; gap: 6px; }
+
+  .card-t { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; }
+  .card-t svg { width: 20px; height: 20px; color: var(--ink-2); flex: none; }
+  .card-t h3 { font-size: 15px; font-weight: 720; letter-spacing: -0.01em; }
+  .card-t .extra { margin-left: auto; font-size: 11.5px; color: var(--ink-muted); }
+  .vazio-mini { font-size: 12.5px; color: var(--ink-muted); line-height: 1.5; padding: 6px 0 4px; }
+
+  .eixo text { font-size: 9.5px; fill: var(--ink-muted); }
+  .leg-tab { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
+  .leg-tab td { padding: 4px 0; border: none; color: var(--ink-2); }
+  .leg-tab td.n { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); white-space: nowrap; padding-left: 8px; }
+  .leg-tab td.p { font-weight: 700; color: var(--ink); }
+  .leg-tab i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 7px; vertical-align: 0; }
+
+  .estado-lista { display: grid; gap: 5px; margin-top: 10px; font-size: 12.5px; color: var(--ink-2); }
+  .estado-lista > div { display: flex; align-items: center; gap: 7px; }
+  .estado-lista i { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .estado-lista b { margin-left: auto; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+  .pr { display: flex; align-items: center; gap: 9px; padding: 10px 12px; border-radius: 12px;
+        border: 1px solid var(--border); margin-top: 8px; cursor: pointer; font-size: 13px; }
+  .pr b { margin-left: auto; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pr.receber { background: rgba(12,163,12,0.10); border-color: rgba(12,163,12,0.35); }
+  .pr.pagar   { background: rgba(217,89,38,0.10); border-color: rgba(217,89,38,0.38); }
+  .pr .icone { width: 26px; height: 26px; border-radius: 8px; }
+  .pr .icone svg { width: 15px; height: 15px; }
+
+  .ind { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); text-align: center; }
+  .ind > div { padding: 2px 4px; min-width: 0; }
+  .ind > div + div { border-left: 1px solid var(--hairline); }
+  .ind .rot { font-size: 11.5px; color: var(--ink-2); }
+  .ind .val { font-size: clamp(15px, 4.4vw, 19px); font-weight: 760; margin-top: 6px; line-height: 1.15; }
+  .ind .val small { font-size: 10px; color: var(--ink-muted); font-weight: 650; }
+
+  .acoes { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .acao { display: flex; align-items: center; gap: 10px; padding: 11px 12px; cursor: pointer; }
+  .acao + .acao { border-top: 1px solid var(--hairline); }
+  .acao svg.i { width: 20px; height: 20px; flex: none; }
+  .acao .txt { flex: 1; min-width: 0; font-size: 13.5px; line-height: 1.35; }
+  .acao .seta { color: var(--ink-muted); }
+  details.tabela-ver { margin-top: 8px; }
+  details.tabela-ver summary { font-size: 12px; font-weight: 650; color:var(--accent-text); cursor: pointer; padding: 4px 0; }
+  details.tabela-ver table { margin-top: 6px; font-size: 12px; }
+  .selo { flex: none; font-size: 11px; font-weight: 700; padding: 4px 9px; border-radius: 999px;
+          border: 1px solid var(--border); color: var(--ink-2); background: var(--surface-2); }
+  .selo.urgente { color: #fff; background: rgba(208,59,59,0.85); border-color: rgba(240,112,112,0.6); }
+  .selo.atencao { color: #1a1300; background: var(--warning); border-color: transparent; }
+
 </style>
 </head>
 <body>
@@ -358,12 +484,18 @@
   <img class="logo" src="assets/logo-mark.png" alt="CNET Logistics">
   <div class="brand">
     <h1>CNET Logistics, Lda</h1>
-    <p>Gestão · Transportes e Logística</p>
+    <p>Transportes · Logística</p>
   </div>
   <button class="refresh-btn" id="searchBtn" aria-label="Procurar" title="Procurar">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
     </svg>
+  </button>
+  <button class="refresh-btn" id="alertBtn" aria-label="Próximas ações" title="Próximas ações">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9"/><path d="M10 20a2 2 0 0 0 4 0"/>
+    </svg>
+    <span class="ponto" id="alertDot" hidden></span>
   </button>
   <button class="refresh-btn" id="refreshBtn" aria-label="Atualizar dados" title="Atualizar">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -409,31 +541,24 @@ const SHEET_ID = "1iLkuI2Lom-klgfCtcrfSJMvbitZpXpWGPzoSQjZ0G1I";
 const ABASTECIMENTOS_ID = "1bpq6tAXb40dbZ0G945FxKanbIipnRDStO_nhYuuaxKo";
 
 const NAV = [
-  { id: "resumo", label: "Resumo",
-    icon: '<path d="M3 12h5l2-7 4 14 2-7h5"/>',
+  { id: "resumo", label: "Dashboard",
+    icon: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h4.5v-6h4v6h4.5V10"/>',
     views: [
-      { id: "resumo", sheet: "Resumo", label: "Resumo", render: "resumo" },
+      { id: "resumo", sheet: "Resumo", label: "Dashboard", render: "resumo" },
     ] },
-  { id: "viagens", label: "Viagens",
+  /* (os ids dos grupos ficam os antigos: atalhos guardados continuam a funcionar) */
+  { id: "viagens", label: "Operações",
     icon: '<circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/><path d="M6 17V7a2 2 0 0 1 2-2h5v12"/><path d="M13 9h4l3 4v4h-2"/><path d="M8 19h8"/>',
     needs: ["Viaturas"],   // consumo esperado por matrícula
     views: [
-      { id: "viagens",    sheet: "Viagens", label: "Viagens",    render: "viagens",    expect: /^vf$|c[óo]digo/i },
-      { id: "motoristas", sheet: "Viagens", label: "Motoristas", render: "motoristas", expect: /^vf$|c[óo]digo/i },
-      { id: "clientes",   sheet: "Viagens", label: "Clientes",   render: "clientes",   expect: /^vf$|c[óo]digo/i },
+      { id: "viagens", sheet: "Viagens", label: "Viagens", render: "viagens", expect: /^vf$|c[óo]digo/i },
     ] },
-  { id: "viaturas", label: "Viaturas",
-    icon: '<rect x="3" y="8" width="12" height="8" rx="1.5"/><path d="M15 11h3.5l2.5 3v2h-2"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/>',
-    needs: ["Viagens"],    // viagens de cada viatura
-    views: [
-      { id: "viaturas", sheet: "Viaturas", label: "Viaturas", render: "viaturas", expect: /matr[íi]cula|viatura/i },
-    ] },
-  /* Contas: o livro de movimentos de dinheiro, visto de várias maneiras.
+  /* Financeiro: o livro de movimentos de dinheiro, visto de várias maneiras.
      `expect` é a assinatura do cabeçalho da folha — se deixar de bater
      certo (folha apagada ou reestruturada), o sub-separador desaparece
      em vez de mostrar os dados de outra folha. */
-  { id: "contas", label: "Contas",
-    icon: '<path d="M4 6h16v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M4 6V5a1 1 0 0 1 1-1h11"/><path d="M8 11h8M8 15h5"/>',
+  { id: "contas", label: "Financeiro",
+    icon: '<ellipse cx="12" cy="6" rx="7" ry="2.6"/><path d="M5 6v4c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6V6"/><path d="M5 10v4c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6v-4"/><path d="M5 14v4c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6v-4"/>',
     needs: ["Sócios - Contas Correntes", "Acertos entre Sócios"],
     views: [
       /* contabilidade e tesouraria de toda a empresa */
@@ -443,6 +568,20 @@ const NAV = [
          (o id fica "investimentos" para não partir atalhos já guardados) */
       { id: "investimentos", sheet: "Movimentos dos Investidores", label: "Movimentos Sócios",
         alt: ["Movimentos Investimentos"], render: "investimentos", expect: /^data$/i },
+    ] },
+  { id: "viaturas", label: "Frota",
+    icon: '<rect x="3" y="8" width="12" height="8" rx="1.5"/><path d="M15 11h3.5l2.5 3v2h-2"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/>',
+    needs: ["Viagens"],    // viagens de cada viatura
+    views: [
+      { id: "viaturas", sheet: "Viaturas", label: "Viaturas", render: "viaturas", expect: /matr[íi]cula|viatura/i },
+    ] },
+  /* Pessoas: fichas derivadas das viagens */
+  { id: "pessoas", label: "Pessoas",
+    icon: '<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="17" cy="9" r="2.5"/><path d="M15.5 14.2c2.4.1 4.3 1.7 4.9 4.8"/>',
+    needs: ["Viaturas"],
+    views: [
+      { id: "motoristas", sheet: "Viagens", label: "Motoristas", render: "motoristas", expect: /^vf$|c[óo]digo/i },
+      { id: "clientes",   sheet: "Viagens", label: "Clientes",   render: "clientes",   expect: /^vf$|c[óo]digo/i },
     ] },
   /* Áreas futuras: soon:true mostra "Em breve" e não carrega dados.
      Para ativar, remover soon e preencher views com as folhas do Excel:
@@ -457,7 +596,7 @@ function groupSheets(g) {
 }
 /* o Resumo cruza dados de várias áreas */
 const RESUMO_SHEETS = ["Resumo", "Movimentos dos Investidores", "Movimentos Geral",
-                       "Sócios - Contas Correntes", "Viagens"];
+                       "Sócios - Contas Correntes", "Viagens", "Viaturas"];
 
 /* Cores fixas por sócio (ordem fixa — nunca reciclar) */
 const SOCIO_COLORS = ["var(--s1)", "var(--s2)", "var(--s3)", "var(--s4)",
@@ -827,113 +966,6 @@ function trendHTML(pct, bomSeSobe) {
     <span class="q">vs período anterior</span></div>`;
 }
 
-/* --- fila de números com rótulo --- */
-function statRow(itens, tamanho) {
-  const t = tamanho || 19;
-  return `<div style="display:flex;gap:18px;flex-wrap:wrap">` + itens.map(i => `
-    <div><div style="font-size:11px;color:var(--ink-muted)">${esc(i.label)}</div>
-      <b style="font-size:${t}px;${i.cor ? `color:${i.cor}` : ""}">${i.valor}</b>
-    </div>`).join("") + `</div>`;
-}
-
-/* --- chip de indicador --- */
-function kpiHTML(k) {
-  return `<div class="kpi"${k.goto ? ` data-goto="${k.goto}" style="cursor:pointer"` : ""}>
-    <div class="k-label">${esc(k.label)}</div>
-    <div class="k-value"${k.cor ? ` style="color:${k.cor}"` : ""}>${k.valor}${k.unidade ? `<small>${esc(k.unidade)}</small>` : ""}</div>
-    ${k.trend || ""}
-  </div>`;
-}
-
-/* --- anel (donut) com legenda --- */
-function donutHTML(fatias, titulo, rodape) {
-  const total = fatias.reduce((a, f) => a + f.valor, 0);
-  if (!total) return "";
-  const R = 54, C = 2 * Math.PI * R, W = 140;
-  let offset = 0;
-  const arcos = fatias.map(f => {
-    const frac = f.valor / total;
-    const len = Math.max(frac * C - 2, 1);     // 2px de intervalo entre fatias
-    const arco = `<circle class="marca" cx="${W / 2}" cy="${W / 2}" r="${R}"
-      fill="none" stroke="${f.cor}" stroke-width="15" stroke-linecap="round"
-      stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}"
-      stroke-dashoffset="${(-offset).toFixed(2)}"
-      data-tip="${esc(f.nome)}&#10;${fmtMZN(f.valor)} MZN · ${fmtNumRaw((frac * 100).toFixed(1))}%"/>`;
-    offset += frac * C;
-    return arco;
-  }).join("");
-
-  return `<div class="card">
-    <div class="viz-head"><span class="t">${esc(titulo)}</span>
-      ${rodape ? `<span style="font-size:11.5px;color:var(--ink-muted)">${esc(rodape)}</span>` : ""}</div>
-    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-      <svg viewBox="0 0 ${W} ${W}" width="128" height="128" style="flex:none;transform:rotate(-90deg)"
-           role="img" aria-label="${esc(titulo)}">${arcos}</svg>
-      <div style="flex:1;min-width:130px">
-        <div style="font-size:11px;color:var(--ink-muted)">Total</div>
-        <div style="font-size:20px;font-weight:780;font-variant-numeric:tabular-nums">${fmtMZN(total)}
-          <small style="font-size:11px;font-weight:600;color:var(--ink-muted)">MZN</small></div>
-        <div class="legenda">
-          ${fatias.map(f => `<span><i style="background:${f.cor}"></i>${esc(f.nome)}
-            <b>${fmtNumRaw((f.valor / total * 100).toFixed(0))}%</b></span>`).join("")}
-        </div>
-      </div>
-    </div>
-  </div>`;
-}
-
-/* --- barras (entradas/saídas) com a linha do resultado por cima --- */
-function fluxoMensalHTML(meses) {
-  if (meses.length < 2) return "";
-  const W = 320, H = 150, padT = 10, padB = 24, padL = 2;
-  const maxV = Math.max(...meses.flatMap(m => [m.receitas, m.despesas, Math.abs(m.resultado)]), 1);
-  const alt = H - padT - padB;
-  const grupo = (W - padL * 2) / meses.length;
-  const barW = Math.min(12, (grupo - 8) / 2);
-  const yBase = padT + alt;
-  const y = v => yBase - (v / maxV) * alt;
-
-  let barras = "", pontos = [];
-  meses.forEach((m, i) => {
-    const cx = padL + grupo * i + grupo / 2;
-    const bar = (x, v, cor, rot) => {
-      if (!v) return "";
-      const h = Math.max(2, alt - (y(v) - padT));
-      return `<rect class="marca" x="${x.toFixed(1)}" y="${(yBase - h).toFixed(1)}"
-        width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${cor}"
-        data-tip="${esc(m.rotulo)}&#10;${rot}: ${fmtMZN(v)} MZN"/>`;
-    };
-    barras += bar(cx - barW - 1, m.receitas, "var(--s1)", "Receitas") +
-              bar(cx + 1, m.despesas, "var(--s2)", "Despesas");
-    pontos.push({ x: cx, y: y(m.resultado), m });
-  });
-
-  const linha = pontos.map((p, i) => `${i ? "L" : "M"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
-  const marcas = pontos.map(p => `<circle class="marca" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4"
-      fill="var(--surface)" stroke="var(--s7)" stroke-width="2"
-      data-tip="${esc(p.m.rotulo)}&#10;Resultado: ${fmtMZN(p.m.resultado)} MZN"/>`).join("");
-  const rotulos = meses.map((m, i) => `<text x="${(padL + grupo * i + grupo / 2).toFixed(1)}" y="${H - 8}"
-      text-anchor="middle" font-size="9.5" fill="var(--ink-muted)">${esc(m.rotulo)}</text>`).join("");
-
-  return `<div class="card">
-    <div class="viz-head"><span class="t">Receitas, despesas e resultado</span>
-      <span style="font-size:11px;color:var(--ink-muted)">toca para ver</span></div>
-    <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img"
-         aria-label="Receitas, despesas e resultado por mês">
-      <line x1="0" y1="${yBase}" x2="${W}" y2="${yBase}" stroke="var(--hairline)" stroke-width="1"/>
-      ${barras}
-      <path d="${linha}" fill="none" stroke="var(--s7)" stroke-width="2"
-            stroke-linejoin="round" stroke-linecap="round"/>
-      ${marcas}${rotulos}
-    </svg>
-    <div class="legenda">
-      <span><i style="background:var(--s1)"></i>Receitas</span>
-      <span><i style="background:var(--s2)"></i>Despesas</span>
-      <span><i style="background:var(--s7);border-radius:50%"></i>Resultado</span>
-    </div>
-  </div>`;
-}
-
 /* --- mapa de calor: categoria (linhas) × mês (colunas) --- */
 function heatmapHTML(cats, meses, matriz, maior) {
   if (!cats.length || meses.length < 2) return "";
@@ -1017,19 +1049,299 @@ function porMes(movs, n) {
 const CORES_CAT = ["var(--s1)", "var(--s2)", "var(--s3)", "var(--s4)",
                    "var(--s5)", "var(--s6)", "var(--s7)", "var(--s8)"];
 
-/* ---- o dashboard ---- */
+/* ---- ícones do painel (traço, 24×24) ---- */
+const IC = {
+  receitas:  '<ellipse cx="10" cy="7" rx="6" ry="2.5"/><path d="M4 7v4c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V7"/><path d="M4 11v4c0 1.4 2.7 2.5 6 2.5"/><circle cx="17" cy="16" r="4"/>',
+  despesas:  '<path d="M5 8h13l-3.5-3.5"/><path d="M19 16H6l3.5 3.5"/>',
+  resultado: '<path d="M4 20h16"/><path d="M5.5 15.5 10 11l3 3 5.5-6"/><path d="M15 8h3.5v3.5"/>',
+  carteira:  '<path d="M5 7.5V6a2 2 0 0 1 2-2h10v3.5"/><rect x="4" y="7.5" width="16" height="12" rx="2.5"/><path d="M15.5 13.5h2"/>',
+  pessoas:   '<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="17" cy="9" r="2.5"/><path d="M15.5 14.2c2.4.1 4.3 1.7 4.9 4.8"/>',
+  estrada:   '<path d="M8.5 4 5 20M15.5 4 19 20M12 5v2.5M12 10.5v3M12 16.5v2.5"/>',
+  conta:     '<path d="M4.5 16.5a7.5 7.5 0 1 1 15 0"/><path d="m12 16.5 4-5"/>',
+  barras:    '<path d="M4 20h16"/><rect x="5.5" y="11" width="3" height="7" rx="1"/><rect x="10.5" y="6.5" width="3" height="11.5" rx="1"/><rect x="15.5" y="13" width="3" height="5" rx="1"/>',
+  moedas:    '<ellipse cx="12" cy="6" rx="7" ry="2.6"/><path d="M5 6v4c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6V6"/><path d="M5 10v4c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6v-4"/><path d="M5 14v4c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6v-4"/>',
+  camiao:    '<rect x="2.5" y="7" width="12" height="9" rx="1.5"/><path d="M14.5 10h4l3 3.5V16h-7"/><circle cx="6.5" cy="17.5" r="1.8"/><circle cx="17.5" cy="17.5" r="1.8"/>',
+  documento: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/>',
+  lista:     '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1"/><path d="M9 10h6M9 14h6M9 18h3"/>',
+  alerta:    '<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.3"/>',
+  relogio:   '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  ok:        '<circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.8 2.8L16.5 9.5"/>',
+  calendario:'<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+  seta:      '<path d="m9 6 6 6-6 6"/>',
+  abaixo:    '<path d="m6 9 6 6 6-6"/>',
+  receber:   '<path d="M12 4v12M7 11l5 5 5-5M5 20h14"/>',
+  pagar:     '<path d="M12 20V8M7 13l5-5 5 5M5 4h14"/>',
+};
+const svgIc = (k, extra) =>
+  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"${extra ? " " + extra : ""}>${IC[k]}</svg>`;
+const MZN = '<small>MZN</small>';
+
+/* valores dos eixos: 0 · 20 mil · 40 mil (por extenso abaixo de 10 mil) */
+function eixoRot(v, passo) {
+  if (v === 0) return "0";
+  if (Math.abs(passo) >= 10000 || Math.abs(v) >= 100000) {
+    const m = v / 1000;
+    return (v < 0 ? "−" : "") + fmtNumRaw(String(Math.abs(Math.round(m * 10) / 10)).replace(".", ",")) + " mil";
+  }
+  return fmtMZN(v);
+}
+function passoRedondo(alcance, n) {
+  const bruto = alcance / (n || 4);
+  const p = Math.pow(10, Math.floor(Math.log10(bruto || 1)));
+  const f = bruto / p;
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p;
+}
+
+/* --- rótulo do período (ex.: "Ago – Nov 2026") --- */
+const MESES_CAP = MESES_CURTOS.map(m => m[0].toUpperCase() + m.slice(1));
+function rotuloPeriodo(datas) {
+  const hoje = new Date();
+  const mm = d => MESES_CAP[d.getMonth()];
+  const intervalo = (a, b) => a.getFullYear() === b.getFullYear()
+    ? (a.getMonth() === b.getMonth() ? `${mm(b)} ${b.getFullYear()}` : `${mm(a)} – ${mm(b)} ${b.getFullYear()}`)
+    : `${mm(a)} ${a.getFullYear()} – ${mm(b)} ${b.getFullYear()}`;
+  if (state.period === "m") return intervalo(hoje, hoje);
+  if (state.period === "y") return `Jan – ${mm(hoje)} ${hoje.getFullYear()}`;
+  if (state.period === "3m") {
+    const ini = new Date(hoje); ini.setMonth(ini.getMonth() - 3);
+    return intervalo(ini, hoje);
+  }
+  const validas = datas.filter(Boolean);
+  if (!validas.length) return "Desde o início";
+  const ini = new Date(Math.min(...validas)), fim = new Date(Math.max(...validas, hoje));
+  return intervalo(ini, fim);
+}
+
+/* --- topo: saudação, título e escolha do período --- */
+function heroHTML(rotulo) {
+  const h = new Date().getHours();
+  const ola = h < 12 ? "Bom dia" : h < 19 ? "Boa tarde" : "Boa noite";
+  const opcoes = [["all", "Desde o início"], ["m", "Este mês"], ["3m", "Últimos 3 meses"], ["y", "Este ano"]];
+  return `<div class="hero">
+    ${camiaoSVG()}
+    <div class="ola">${ola} 👋</div>
+    <h2>Painel de Gestão</h2>
+    <p>Visão geral da operação, financeira e da frota.</p>
+    <label class="periodo" title="Período">
+      ${svgIc("calendario")}<span>${esc(rotulo)}</span>${svgIc("abaixo", 'style="width:15px;height:15px"')}
+      <select data-period-select aria-label="Período">
+        ${opcoes.map(([id, t]) => `<option value="${id}"${state.period === id ? " selected" : ""}>${t}</option>`).join("")}
+      </select>
+    </label>
+  </div>`;
+}
+
+/* camião ao pôr do sol: decoração do topo (só formas, sem imagens) */
+function camiaoSVG() {
+  return `<svg class="deco" viewBox="0 0 300 140" aria-hidden="true">
+    <defs>
+      <radialGradient id="dSol" cx="78%" cy="78%" r="55%">
+        <stop offset="0" stop-color="#f6a35c" stop-opacity=".55"/><stop offset="1" stop-color="#f6a35c" stop-opacity="0"/></radialGradient>
+      <linearGradient id="dReb" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#dfe6f0"/><stop offset=".55" stop-color="#9aa8bc"/><stop offset="1" stop-color="#55627a"/></linearGradient>
+      <linearGradient id="dCab" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#f4f7fb"/><stop offset=".6" stop-color="#b9c4d4"/><stop offset="1" stop-color="#6d7b92"/></linearGradient>
+      <linearGradient id="dVid" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#2c4a78"/><stop offset=".7" stop-color="#e58a52"/><stop offset="1" stop-color="#f3b27a"/></linearGradient>
+      <radialGradient id="dFarol" cx="50%" cy="50%" r="50%">
+        <stop offset="0" stop-color="#fff6d8"/><stop offset=".4" stop-color="#ffd27a" stop-opacity=".8"/><stop offset="1" stop-color="#ffd27a" stop-opacity="0"/></radialGradient>
+    </defs>
+    <rect x="0" y="0" width="300" height="140" fill="url(#dSol)"/>
+    <path d="M0 118 H300" stroke="rgba(255,255,255,.14)" stroke-width="1"/>
+    <path d="M20 126 H70 M95 126 H145 M170 126 H220 M245 126 H295" stroke="rgba(255,255,255,.10)" stroke-width="2"/>
+    <ellipse cx="150" cy="114" rx="140" ry="6" fill="rgba(0,0,0,.35)"/>
+    <rect x="22" y="38" width="168" height="62" rx="4" fill="url(#dReb)" stroke="rgba(255,255,255,.35)" stroke-width=".8"/>
+    <path d="M52 40v58M82 40v58M112 40v58M142 40v58M172 40v58" stroke="rgba(30,45,70,.18)" stroke-width="1.2"/>
+    <path d="M196 98V48l6-24h44l10 20v54z" fill="url(#dCab)" stroke="rgba(255,255,255,.4)" stroke-width=".8"/>
+    <path d="M203 28h40l8 18h-52z" fill="rgba(25,40,65,.25)"/>
+    <path d="M232 50h22l2 20h-26z" fill="url(#dVid)"/>
+    <path d="M206 50h20v20h-22z" fill="url(#dVid)" opacity=".85"/>
+    <rect x="252" y="84" width="10" height="7" rx="2" fill="#fff4cf"/>
+    <circle cx="262" cy="87" r="20" fill="url(#dFarol)"/>
+    <rect x="18" y="98" width="246" height="7" rx="2" fill="#16233a"/>
+    ${[44, 68, 150, 174, 214, 244].map(x => `<circle cx="${x}" cy="106" r="10" fill="#0b1324" stroke="#56667f" stroke-width="2"/><circle cx="${x}" cy="106" r="3.5" fill="#8a97ab"/>`).join("")}
+  </svg>`;
+}
+
+/* --- cartão de indicador principal --- */
+function kcHTML(o) {
+  return `<div class="card kc${o.goto ? " goto" : ""}" style="--cor:${o.cor};border-color:color-mix(in srgb, ${o.cor} 38%, transparent)${o.goto ? ";cursor:pointer" : ""}"${o.goto ? ` data-goto="${o.goto}"` : ""}>
+    <div class="topo"><span class="icone">${svgIc(o.icone)}</span><span class="rot">${esc(o.rotulo)}</span></div>
+    <div class="val">${o.valor}${o.unidade === false ? "" : MZN}</div>
+    ${o.trend || ""}${o.sub ? `<div class="sub">${o.sub}</div>` : ""}
+  </div>`;
+}
+/* --- cartão pequeno --- */
+function ktHTML(o) {
+  return `<div class="card kt${o.goto ? " goto" : ""}"${o.goto ? ` data-goto="${o.goto}" style="cursor:pointer"` : ""}>
+    <span class="ic">${svgIc(o.icone)}</span>
+    <div class="rot">${esc(o.rotulo)}</div>
+    ${o.corpo}
+  </div>`;
+}
+
+/* --- medidor semicircular (utilização da frota) --- */
+function medidorHTML(pct) {
+  const r = 24, L = Math.PI * r, f = Math.max(0, Math.min(1, pct / 100));
+  const cor = pct >= 60 ? "var(--good)" : pct >= 30 ? "var(--warning)" : "var(--serious)";
+  const ang = Math.PI * (1 - f);
+  const px = 30 + r * Math.cos(ang), py = 30 - r * Math.sin(ang);
+  return `<svg viewBox="0 0 60 34" width="66" height="37" role="img" aria-label="${Math.round(pct)}%">
+    <path d="M6 30a24 24 0 0 1 48 0" fill="none" stroke="var(--track)" stroke-width="7" stroke-linecap="round"/>
+    ${f > 0 ? `<path d="M6 30a24 24 0 0 1 48 0" fill="none" stroke="${cor}" stroke-width="7" stroke-linecap="round"
+       stroke-dasharray="${(L * f).toFixed(2)} ${L.toFixed(2)}"/>` : ""}
+    <line x1="30" y1="30" x2="${px.toFixed(1)}" y2="${py.toFixed(1)}" stroke="var(--ink-2)" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="30" cy="30" r="2.6" fill="var(--ink-2)"/>
+  </svg>`;
+}
+
+/* --- evolução financeira: barras de receitas e despesas + linha do resultado.
+   Um só eixo (tudo em MZN). Barras ≤ 24px, cantos de 4px só na ponta,
+   2px de intervalo; a coluna inteira de cada mês é a área de toque. --- */
+function evolucaoHTML(meses) {
+  const head = `<div class="card-t">${svgIc("barras")}<h3>Evolução Financeira</h3></div>`;
+  const legenda = `<div class="legenda" style="margin:0 0 8px">
+      <span><i style="background:var(--s1)"></i>Receitas</span>
+      <span><i style="background:var(--s2)"></i>Despesas</span>
+      <span><i style="background:var(--s7);height:3px;width:12px;border-radius:2px"></i>Resultado</span></div>`;
+  if (meses.length < 1) return `<div class="card">${head}
+    <div class="vazio-mini">Ainda sem receitas nem despesas lançadas no livro geral. Os investimentos e os
+      adiantamentos não entram aqui — não são operação.</div></div>`;
+
+  const W = 340, H = 196, padL = 44, padR = 6, padT = 8, padB = 22;
+  const vals = meses.flatMap(m => [m.receitas, m.despesas, m.resultado]);
+  const maxV = Math.max(0, ...vals), minV = Math.min(0, ...vals);
+  const passo = passoRedondo(Math.max(maxV - minV, 1), 4);
+  const topo = Math.ceil(maxV / passo) * passo || passo, base = Math.floor(minV / passo) * passo;
+  const plotH = H - padT - padB, plotW = W - padL - padR;
+  const y = v => padT + (topo - v) / (topo - base) * plotH;
+  const y0 = y(0);
+
+  let grelha = "";
+  for (let v = base; v <= topo + 1e-6; v += passo) {
+    grelha += `<line x1="${padL}" x2="${W - padR}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}"
+      stroke="${v === 0 ? "#2b3c5a" : "var(--hairline)"}" stroke-width="1"/>
+      <text x="${padL - 6}" y="${(y(v) + 3).toFixed(1)}" text-anchor="end">${eixoRot(v, passo)}</text>`;
+  }
+  const gw = plotW / meses.length;
+  const barW = Math.max(4, Math.min(24, (gw - 16) / 2));
+  const barra = (x, v, cor) => {
+    if (!v) return "";
+    const yt = y(Math.abs(v)), h = y0 - yt, r = Math.min(4, h);
+    return `<path d="M${x.toFixed(1)} ${y0.toFixed(1)}V${(yt + r).toFixed(1)}Q${x.toFixed(1)} ${yt.toFixed(1)} ${(x + r).toFixed(1)} ${yt.toFixed(1)}H${(x + barW - r).toFixed(1)}Q${(x + barW).toFixed(1)} ${yt.toFixed(1)} ${(x + barW).toFixed(1)} ${(yt + r).toFixed(1)}V${y0.toFixed(1)}Z" fill="${cor}"/>`;
+  };
+  let barras = "", alvos = "", rotulos = "";
+  const pts = [];
+  meses.forEach((m, i) => {
+    const cx = padL + gw * i + gw / 2;
+    barras += barra(cx - barW - 1, m.receitas, "var(--s1)") + barra(cx + 1, m.despesas, "var(--s2)");
+    pts.push([cx, y(m.resultado)]);
+    rotulos += `<text x="${cx.toFixed(1)}" y="${H - 6}" text-anchor="middle">${esc(m.rotulo)}</text>`;
+    alvos += `<rect class="marca" x="${(cx - gw / 2).toFixed(1)}" y="${padT}" width="${gw.toFixed(1)}" height="${plotH}" fill="transparent"
+      data-tip="${esc(m.rotulo)}&#10;Receitas: ${fmtMZN(m.receitas)} MZN&#10;Despesas: ${fmtMZN(m.despesas)} MZN&#10;Resultado: ${fmtMZN(m.resultado)} MZN"/>`;
+  });
+  const linha = pts.length > 1 ? `<path d="${pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join("")}"
+      fill="none" stroke="var(--s7)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>` : "";
+  const marcas = pts.map(p => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="4" fill="var(--s7)" stroke="var(--surface)" stroke-width="2"/>`).join("");
+
+  const tabela = `<details class="tabela-ver"><summary>Ver tabela</summary>
+    <table><thead><tr><th>Mês</th><th class="num">Receitas</th><th class="num">Despesas</th><th class="num">Resultado</th></tr></thead><tbody>
+    ${meses.map(m => `<tr><td>${esc(m.rotulo)}</td><td class="num">${fmtMZN(m.receitas)}</td><td class="num">${fmtMZN(m.despesas)}</td><td class="num">${fmtMZN(m.resultado)}</td></tr>`).join("")}
+    </tbody></table></details>`;
+
+  return `<div class="card">${head}${legenda}
+    <svg class="eixo" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Receitas, despesas e resultado por mês">
+      ${grelha}${barras}${linha}${marcas}${rotulos}${alvos}
+    </svg>${tabela}</div>`;
+}
+
+/* --- anel com o total ao centro e a legenda em tabela (≤ 6 fatias) --- */
+function anelHTML(titulo, icone, fatias, vazio, goto) {
+  const total = fatias.reduce((a, f) => a + f.valor, 0);
+  const head = `<div class="card-t">${svgIc(icone)}<h3>${esc(titulo)}</h3></div>`;
+  if (!total) return `<div class="card">${head}<div class="vazio-mini">${vazio}</div></div>`;
+  const R = 50, C = 2 * Math.PI * R, S = 132;
+  let off = 0;
+  const arcos = fatias.map(f => {
+    const frac = f.valor / total;
+    const len = Math.max(frac * C - (fatias.length > 1 ? 2 : 0), 0.8);   // 2px de intervalo
+    const a = `<circle class="marca" cx="${S / 2}" cy="${S / 2}" r="${R}" fill="none" stroke="${f.cor}" stroke-width="15"
+      stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}"
+      transform="rotate(-90 ${S / 2} ${S / 2})"
+      data-tip="${esc(f.nome)}&#10;${fmtMZN(f.valor)} MZN · ${fmtNumRaw((frac * 100).toFixed(1))}%"/>`;
+    off += frac * C;
+    return a;
+  }).join("");
+  return `<div class="card${goto ? " goto" : ""}"${goto ? ` data-goto="${goto}" style="cursor:pointer"` : ""}>${head}
+    <div style="display:flex;justify-content:center">
+      <svg viewBox="0 0 ${S} ${S}" width="140" height="140" role="img" aria-label="${esc(titulo)}">
+        ${arcos}
+        <text x="${S / 2}" y="${S / 2 + 2}" text-anchor="middle" font-size="17" font-weight="780" fill="var(--ink)">${fmtMZN(total)}</text>
+        <text x="${S / 2}" y="${S / 2 + 17}" text-anchor="middle" font-size="9.5" font-weight="650" fill="var(--ink-muted)">MZN</text>
+      </svg>
+    </div>
+    <table class="leg-tab"><tbody>
+      ${fatias.map(f => `<tr><td><i style="background:${f.cor}"></i>${esc(f.nome)}</td>
+        <td class="n p">${fmtNumRaw((f.valor / total * 100).toFixed(0))}%</td><td class="n">${fmtMZN(f.valor)}</td></tr>`).join("")}
+    </tbody></table>
+  </div>`;
+}
+
+/* cores das categorias: fixas por categoria (pela ordem de todo o histórico),
+   para não mudarem quando se troca o período */
+function coresCategorias(movs) {
+  const tot = new Map();
+  for (const m of movs) if (m.categoria) tot.set(m.categoria, (tot.get(m.categoria) || 0) + m.valor);
+  const ordem = [...tot.entries()].sort((a, b) => b[1] - a[1]).map(e => e[0]);
+  const mapa = new Map();
+  ordem.slice(0, 7).forEach((c, i) => mapa.set(c, CORES_CAT[i]));
+  return c => mapa.get(c) || "var(--ink-muted)";
+}
+function fatiasPorCategoria(movs, cor) {
+  const porCat = new Map();
+  for (const m of movs) {
+    const c = m.categoria || "Sem categoria";
+    porCat.set(c, (porCat.get(c) || 0) + m.valor);
+  }
+  const todas = [...porCat.entries()].map(([nome, valor]) => ({ nome, valor, cor: cor(nome) }))
+    .sort((a, b) => b.valor - a.valor);
+  const top = todas.slice(0, 5);
+  const resto = todas.slice(5).reduce((a, x) => a + x.valor, 0);
+  if (resto) top.push({ nome: "Outras", valor: resto, cor: "var(--ink-muted)" });
+  return top;
+}
+
+/* --- linha de tendência (uma série: sem legenda, o título diz o que é) --- */
+function tendenciaHTML(pontos, cor) {
+  if (pontos.length < 2) return "";
+  const W = 170, H = 62, p = 5;
+  const max = Math.max(...pontos.map(x => x.v), 1);
+  const xs = i => p + i * (W - 2 * p) / (pontos.length - 1);
+  const ys = v => H - p - v / max * (H - 2 * p - 4);
+  const d = pontos.map((x, i) => (i ? "L" : "M") + xs(i).toFixed(1) + " " + ys(x.v).toFixed(1)).join("");
+  const u = pontos.length - 1;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" role="img" aria-label="Viagens por mês" style="display:block;margin-top:6px">
+    <path d="${d}L${xs(u).toFixed(1)} ${H}L${xs(0).toFixed(1)} ${H}Z" fill="${cor}" opacity=".12"/>
+    <path d="${d}" fill="none" stroke="${cor}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+    ${pontos.map((x, i) => `<circle class="marca" cx="${xs(i).toFixed(1)}" cy="${ys(x.v).toFixed(1)}" r="${i === u ? 4 : 10}"
+      fill="${i === u ? cor : "transparent"}" ${i === u ? 'stroke="var(--surface)" stroke-width="2"' : ""}
+      data-tip="${esc(x.rot)}&#10;${x.v} viage${x.v === 1 ? "m" : "ns"}"/>`).join("")}
+  </svg>`;
+}
+
+/* ---- o painel ---- */
 function renderResumo(rows) {
   const geral = extractGeral(state.data["Movimentos Geral"]) || [];
   const td = tripsData();
   const socios = sociosContas() || [];
-  const investidores = extractMovs(investorRows()) || [];
+  const investidores = (investorRows() && extractMovs(investorRows())) || [];
+  const frota = extractViaturas(state.data["Viaturas"]);
   socios.forEach(s => socioColor(s.nome));
 
   const geralPeriodo = geral.filter(m => inPeriod(m.date, state.period));
   const viagens = td ? tripsInPeriod(td) : [];
   const lim = periodBounds(state.period);
 
-  /* contas do período e do período anterior (para as setas) */
   const conta = movs => {
     const receitas = movs.filter(ehReceita).reduce((a, m) => a + m.valor, 0);
     const despesas = movs.filter(ehDespesa).reduce((a, m) => a + m.valor, 0);
@@ -1039,206 +1351,264 @@ function renderResumo(rows) {
   const anterior = lim ? conta(geral.filter(m => entre(m.date, lim.iniAnt, lim.fimAnt))) : null;
   const viagensAnt = lim && td ? td.trips.filter(t => entre(t.date, lim.iniAnt, lim.fimAnt)) : null;
 
-  /* tesouraria: só o que passou pela caixa e pelo banco */
   const emCaixa = geral.filter(m => /caixa|banco/i.test(deaccent(m.meio)));
   const saldoTesouraria = emCaixa.reduce((a, m) => a + (m.entrada ? m.valor : -m.valor), 0);
   const totalInvestido = investidores.reduce((a, m) =>
     classeAdiant(m.tipo) ? a : a + (saidaParaSocio(m.tipo) ? -m.total : m.total), 0);
-  const temResultado = atual.receitas > 0 || atual.despesas > 0;
-
-  let html = periodBar();
-
-  /* ---------- 1. chips de indicadores ---------- */
-  const kpis = [];
-  if (emCaixa.length) kpis.push({ label: "Em caixa e banco", valor: fmtMZN(saldoTesouraria),
-    unidade: "MZN", cor: saldoTesouraria >= 0 ? "" : "var(--serious)", goto: "contas:correntes" });
-  if (temResultado) kpis.push({ label: "Resultado do período", valor: fmtMZN(atual.resultado),
-    unidade: "MZN", cor: atual.resultado >= 0 ? "var(--good-text)" : "var(--serious)",
-    trend: anterior ? trendHTML(tendencia(atual.resultado, anterior.resultado)) : "",
-    goto: "contas:correntes" });
-  if (atual.receitas) kpis.push({ label: "Receitas", valor: fmtMZN(atual.receitas), unidade: "MZN",
-    trend: anterior ? trendHTML(tendencia(atual.receitas, anterior.receitas)) : "" });
-  if (atual.despesas) kpis.push({ label: "Despesas", valor: fmtMZN(atual.despesas), unidade: "MZN",
-    trend: anterior ? trendHTML(tendencia(atual.despesas, anterior.despesas), false) : "" });
-  if (viagens.length) kpis.push({ label: "Viagens", valor: String(viagens.length),
-    trend: viagensAnt ? trendHTML(tendencia(viagens.length, viagensAnt.length)) : "",
-    goto: "viagens:viagens" });
-  if (!kpis.length && totalInvestido) kpis.push({ label: "Investido pelos sócios",
-    valor: fmtMZN(totalInvestido), unidade: "MZN", goto: "contas:investimentos" });
-  if (kpis.length) html += `<div class="kpis">${kpis.map(kpiHTML).join("")}</div>`;
-
-  /* ---------- 2. alertas ---------- */
-  const alertas = [];
-  const negativas = viagens.filter(t => { const m = tripMargin(t); return m != null && m < 0; });
-  if (negativas.length) alertas.push({ goto: "viagens:viagens",
-    txt: `<b>${negativas.length} viage${negativas.length > 1 ? "ns" : "m"}</b> com margem negativa — <b>${fmtMZN(negativas.reduce((a, t) => a - tripMargin(t), 0))} MZN</b> de prejuízo` });
-  if (emCaixa.length && saldoTesouraria < 0) alertas.push({ goto: "contas:correntes",
-    txt: `Tesouraria negativa — <b>${fmtMZN(saldoTesouraria)} MZN</b> em caixa e banco` });
-  const adiant = adiantamentosSocios();
-  if (adiant.sociosDevem > 0.5) alertas.push({ goto: "contas:investimentos:adiantamentos",
-    txt: `Adiantamentos por devolver à empresa — <b>${fmtMZN(adiant.sociosDevem)} MZN</b>` });
-  if (adiant.empresaDeve > 0.5) alertas.push({ goto: "contas:investimentos:adiantamentos",
-    txt: `A empresa deve <b>${fmtMZN(adiant.empresaDeve)} MZN</b> aos sócios em adiantamentos` });
   const emFalta = socios.filter(s => s.saldo != null && s.saldo < -0.5);
-  if (emFalta.length) alertas.push({ goto: "contas:investimentos",
-    txt: `<b>${emFalta.length} sócio${emFalta.length > 1 ? "s" : ""}</b> com contribuição em falta — <b>${fmtMZN(emFalta.reduce((a, s) => a - s.saldo, 0))} MZN</b>` });
+  const valorEmFalta = emFalta.reduce((a, s) => a - s.saldo, 0);
+  const adiant = adiantamentosSocios();
 
-  if (alertas.length) {
-    html += `<div class="card" style="border-left:4px solid var(--serious);padding-left:13px">` +
-      alertas.map((a, i) => `<div class="goto" data-goto="${a.goto}" style="display:flex;align-items:center;gap:8px;padding:6px 0;${i < alertas.length - 1 ? "border-bottom:1px solid var(--hairline);" : ""}cursor:pointer">
-        <span style="color:var(--serious);font-weight:800">!</span>
-        <span style="flex:1;font-size:13px;line-height:1.4">${a.txt}</span>
-        <span style="color:var(--ink-muted)">›</span>
-      </div>`).join("") + `</div>`;
-  } else if (socios.length || viagens.length) {
-    html += `<div class="card" style="display:flex;align-items:center;gap:8px">
-      <span class="status good" style="font-size:13px">✓ Tudo em ordem</span>
-      <span style="font-size:12px;color:var(--ink-muted)">— sem alertas neste período</span>
+  if (!geral.length && !viagens.length && !socios.length && !(td && td.trips.length)) {
+    return heroHTML(rotuloPeriodo([])) + emptyState("Ainda sem dados para o painel.",
+      "Assim que houver lançamentos nas folhas de contas e viagens, aparecem aqui resumidos.");
+  }
+
+  let html = heroHTML(rotuloPeriodo([...geral.map(m => m.date), ...(td ? td.trips.map(t => t.date) : [])]));
+
+  /* ---------- 1. receitas · despesas · resultado ---------- */
+  const margemPct = atual.receitas > 0 ? atual.resultado / atual.receitas * 100 : null;
+  html += `<div class="grelha g3">` +
+    kcHTML({ rotulo: "Receitas", icone: "receitas", cor: "var(--s1)", valor: fmtMZN(atual.receitas),
+      trend: anterior ? trendHTML(tendencia(atual.receitas, anterior.receitas)) : "", goto: "contas:correntes" }) +
+    kcHTML({ rotulo: "Despesas", icone: "despesas", cor: "var(--s2)", valor: fmtMZN(atual.despesas),
+      trend: anterior ? trendHTML(tendencia(atual.despesas, anterior.despesas), false) : "", goto: "contas:correntes" }) +
+    kcHTML({ rotulo: "Resultado", icone: "resultado", cor: "var(--s7)",
+      valor: `<span style="color:${atual.resultado > 0 ? "var(--good-text)" : atual.resultado < 0 ? "var(--serious)" : "var(--ink)"}">${atual.resultado > 0 ? "+" : ""}${fmtMZN(atual.resultado)}</span>`,
+      sub: `Margem: <b style="color:var(--ink)">${margemPct == null ? "—" : fmtNumRaw(margemPct.toFixed(1)) + "%"}</b>`,
+      goto: "contas:correntes" }) +
+  `</div>`;
+
+  /* ---------- 2. caixa · contribuições · viagens · frota ---------- */
+  const usoFrota = (() => {
+    if (!frota || !frota.items.length) return null;
+    const norm = x => String(x || "").toLowerCase().replace(/[\s\-_.]/g, "");
+    const usadas = new Set();
+    for (const t of viagens) for (const c of t.row) {
+      const n = norm(c);
+      if (n) for (const v of frota.items) if (norm(v.mat) === n) usadas.add(v.mat);
+    }
+    const iEst = findCol(frota.cols, /^estado/i, /situa[çc][ãa]o/i);
+    return { total: frota.items.length, usadas, iEst, pct: usadas.size / frota.items.length * 100 };
+  })();
+
+  html += `<div class="grelha g4">` +
+    ktHTML({ rotulo: "Em caixa e banco", icone: "carteira", goto: "contas:correntes",
+      corpo: `<div class="val"${saldoTesouraria < 0 ? ' style="color:var(--serious)"' : ""}>${fmtMZN(saldoTesouraria)}${MZN}</div>
+        ${emCaixa.length ? "" : `<div class="sub">sem movimentos de caixa ou banco</div>`}` }) +
+    ktHTML({ rotulo: "Contribuições em falta", icone: "pessoas", goto: "contas:investimentos:socios",
+      corpo: emFalta.length
+        ? `<div class="val" style="color:var(--serious)">${emFalta.length} sócio${emFalta.length > 1 ? "s" : ""}</div>
+           <div class="sub" style="display:flex;align-items:center">${fmtMZN(valorEmFalta)} MZN<span class="mais">›</span></div>`
+        : `<div class="val" style="color:var(--good-text)">Em dia</div><div class="sub">${socios.length ? "todos os sócios" : "sem sócios"}</div>` }) +
+    ktHTML({ rotulo: "Viagens no período", icone: "estrada", goto: "viagens:viagens",
+      corpo: `<div class="val">${viagens.length}${(() => {
+          const p = viagensAnt ? tendencia(viagens.length, viagensAnt.length) : null;
+          return p == null ? "" : ` <small style="color:${p >= 0 ? "var(--good-text)" : "var(--serious)"};font-weight:700">${p >= 0 ? "+" : "−"}${fmtNumRaw(Math.abs(p).toFixed(0))}%</small>`;
+        })()}</div>
+        <div class="sub">${fmtMZN(viagens.reduce((a, t) => a + (t.km || 0), 0))} km</div>` }) +
+    ktHTML({ rotulo: "Utilização da frota", icone: "conta", goto: "viaturas:viaturas",
+      corpo: usoFrota
+        ? `<div class="gauge"><div class="val">${fmtNumRaw(usoFrota.pct.toFixed(0))}%</div>${medidorHTML(usoFrota.pct)}</div>
+           <div class="sub">${usoFrota.usadas.size} de ${usoFrota.total} viaturas com viagens</div>`
+        : `<div class="val">—</div><div class="sub">sem folha de viaturas</div>` }) +
+  `</div>`;
+
+  /* ---------- 3. evolução financeira · despesas por categoria ---------- */
+  const corCat = coresCategorias(geral.filter(ehDespesa));
+  const despesasP = geralPeriodo.filter(ehDespesa);
+  const invP = geralPeriodo.filter(m => m.tipo === "Investimento");
+  const corInv = coresCategorias(geral.filter(m => m.tipo === "Investimento"));
+  /* sem despesas no período mas com investimento: o investimento ocupa o lugar
+     do anel vazio, em vez de ficar lá em baixo */
+  const invEmCima = !despesasP.length && invP.length > 0;
+  html += `<div class="grelha gc">` + evolucaoHTML(porMes(geral, 6)) +
+    (invEmCima
+      ? anelHTML("Investimento por Categoria", "moedas", fatiasPorCategoria(invP, corInv), "", "contas:correntes")
+      : anelHTML("Despesas por Categoria", "moedas", fatiasPorCategoria(despesasP, corCat),
+          "Sem despesas lançadas neste período.", "contas:correntes")) + `</div>`;
+
+  /* ---------- 4. frota · viagens ---------- */
+  let frotaHTML = "";
+  if (frota && frota.items.length) {
+    let partes;
+    if (usoFrota.iEst >= 0) {
+      const grupo = e => {
+        const s = deaccent(e);
+        if (/manut|oficina|avaria|repar/.test(s)) return 1;
+        if (/inativ|parad|vendid|abatid|fora/.test(s)) return 2;
+        return 0;
+      };
+      const n = [0, 0, 0];
+      frota.items.forEach(v => n[grupo((v.row[usoFrota.iEst] || ""))]++);
+      partes = [
+        { nome: "Em operação", n: n[0], cor: "var(--good)" },
+        { nome: "Em manutenção", n: n[1], cor: "var(--warning)" },
+        { nome: "Inativo", n: n[2], cor: "var(--ink-muted)" }];
+    } else {
+      partes = [
+        { nome: "Com viagens no período", n: usoFrota.usadas.size, cor: "var(--good)" },
+        { nome: "Sem viagens no período", n: usoFrota.total - usoFrota.usadas.size, cor: "var(--ink-muted)" }];
+    }
+    const tot = frota.items.length;
+    frotaHTML = `<div class="card goto" data-goto="viaturas:viaturas" style="cursor:pointer">
+      <div class="card-t">${svgIc("camiao")}<h3>Frota</h3></div>
+      <div style="font-size:24px;font-weight:780">${tot} <span style="font-size:14px;font-weight:600;color:var(--ink-2)">${tot === 1 ? "viatura" : "viaturas"}</span></div>
+      <div style="display:flex;gap:2px;height:8px;margin-top:10px">
+        ${partes.filter(p => p.n).map(p => `<i class="marca" style="flex:${p.n};background:${p.cor};border-radius:999px"
+          data-tip="${esc(p.nome)}&#10;${p.n} de ${tot}"></i>`).join("")}
+      </div>
+      <div class="estado-lista">${partes.map(p => `<div><i style="background:${p.cor}"></i>${esc(p.nome)}<b>${p.n}</b></div>`).join("")}</div>
     </div>`;
   }
-
-  /* ---------- 3. fluxo mensal ---------- */
-  const meses = porMes(geral, 6);
-  if (meses.length >= 2) html += fluxoMensalHTML(meses);
-
-  /* ---------- 4. despesas por categoria (anel) ---------- */
-  const saidas = geralPeriodo.filter(m => ehDespesa(m) && m.categoria);
-  let topCats = [];
-  if (saidas.length) {
-    const porCat = new Map();
-    for (const m of saidas) porCat.set(m.categoria, (porCat.get(m.categoria) || 0) + m.valor);
-    const todas = [...porCat.entries()].map(([nome, valor]) => ({ nome, valor }))
-      .sort((a, b) => b.valor - a.valor);
-    topCats = todas.slice(0, 5);
-    const resto = todas.slice(5).reduce((a, x) => a + x.valor, 0);
-    const fatias = topCats.map((c, i) => ({ ...c, cor: CORES_CAT[i] }));
-    if (resto) fatias.push({ nome: "Outras", valor: resto, cor: "var(--ink-muted)" });
-    html += donutHTML(fatias, "Despesas por categoria", "sem investimento");
-  }
-
-  /* ---------- 5. mapa de calor: categoria × mês ---------- */
-  if (topCats.length >= 2 && meses.length >= 2) {
-    const nomes = topCats.map(c => c.nome);
-    const matriz = {}; let maior = 0;
-    nomes.forEach(n => (matriz[n] = {}));
-    for (const m of geral) {
-      if (!ehDespesa(m) || !m.date) continue;
-      if (nomes.indexOf(m.categoria) < 0) continue;
-      const chave = m.date.getFullYear() * 12 + m.date.getMonth();
-      matriz[m.categoria][chave] = (matriz[m.categoria][chave] || 0) + m.valor;
-      maior = Math.max(maior, matriz[m.categoria][chave]);
+  let viagensHTML = "";
+  if (td && td.trips.length) {
+    const porM = new Map();
+    for (const t of td.trips) if (t.date) {
+      const k = t.date.getFullYear() * 12 + t.date.getMonth();
+      porM.set(k, (porM.get(k) || 0) + 1);
     }
-    html += heatmapHTML(nomes, meses, matriz, maior);
+    const chaves = [...porM.keys()].sort((a, b) => a - b);
+    const pontos = [];
+    if (chaves.length) for (let k = Math.max(chaves[0], chaves[chaves.length - 1] - 5); k <= chaves[chaves.length - 1]; k++) {
+      pontos.push({ v: porM.get(k) || 0, rot: MESES_CAP[k % 12] + " " + Math.floor(k / 12) });
+    }
+    const p = viagensAnt ? tendencia(viagens.length, viagensAnt.length) : null;
+    viagensHTML = `<div class="card goto" data-goto="viagens:viagens" style="cursor:pointer">
+      <div class="card-t">${svgIc("estrada")}<h3>Viagens &amp; Operação</h3></div>
+      <div style="font-size:24px;font-weight:780">${viagens.length} <span style="font-size:14px;font-weight:600;color:var(--ink-2)">viage${viagens.length === 1 ? "m" : "ns"}</span></div>
+      ${p == null ? `<div class="sub" style="font-size:12px;color:var(--ink-2);margin-top:4px">${fmtMZN(viagens.reduce((a, t) => a + (t.km || 0), 0))} km no período</div>`
+        : `<div style="font-size:12px;margin-top:4px;color:${p >= 0 ? "var(--good-text)" : "var(--serious)"};font-weight:700">${p >= 0 ? "+" : "−"}${fmtNumRaw(Math.abs(p).toFixed(0))}% <span style="color:var(--ink-2);font-weight:500">vs período anterior</span></div>`}
+      ${tendenciaHTML(pontos, "var(--s3)")}
+    </div>`;
   }
+  if (frotaHTML || viagensHTML) html += `<div class="grelha ${frotaHTML && viagensHTML ? "g2" : "gc"}">${frotaHTML}${viagensHTML}</div>`;
 
-  /* ---------- 6. operação ---------- */
-  if (viagens.length) {
-    const rec = viagens.reduce((a, t) => a + (t.receita || 0), 0);
-    const des = viagens.reduce((a, t) => a + (t.despesa || 0), 0);
-    const km = viagens.reduce((a, t) => a + (t.km || 0), 0);
-    const marg = td.hasReceita ? rec - des : null;
-    const itens = [{ label: "Viagens", valor: String(viagens.length) }];
-    if (km) itens.push({ label: "Km", valor: fmtMZN(km) });
-    if (marg != null) itens.push({ label: "Margem", valor: fmtMZN(marg),
-      cor: marg >= 0 ? "var(--good-text)" : "var(--serious)" });
-    if (marg != null && km) itens.push({ label: "Margem/km", valor: fmtNumRaw((marg / km).toFixed(2)) });
-
-    const comMargem = viagens.filter(t => tripMargin(t) != null)
-      .sort((a, b) => tripMargin(b) - tripMargin(a));
-    const destaque = comMargem.length >= 2
-      ? [{ t: comMargem[0], rot: "Melhor" }, { t: comMargem[comMargem.length - 1], rot: "Pior" }] : [];
-
-    html += `<div class="section-title">Operação</div>
-      <div class="card goto" data-goto="viagens:viagens" style="cursor:pointer">
-        ${statRow(itens)}
-        <div style="font-size:11.5px;color:var(--accent);font-weight:650;margin-top:10px">Ver viagens ›</div>
+  /* ---------- 5. a pagar / a receber · indicadores de gestão ---------- */
+  const km = viagens.reduce((a, t) => a + (t.km || 0), 0);
+  const codsP = new Set(viagens.map(t => t.cod));
+  const custoTrips = viagens.reduce((a, t) => a + (t.despesa || 0), 0);
+  const recTrips = viagens.reduce((a, t) => a + (t.receita || 0), 0);
+  const custo = custoTrips || geralPeriodo.filter(m => ehDespesa(m) && codsP.has(m.viagem)).reduce((a, m) => a + m.valor, 0);
+  const receita = recTrips || geralPeriodo.filter(m => ehReceita(m) && codsP.has(m.viagem)).reduce((a, m) => a + m.valor, 0);
+  const indicador = (rot, v, unidade) => `<div><div class="rot">${rot}</div>
+    <div class="val">${v == null ? "—" : v}${v != null && unidade ? ` <small>${unidade}</small>` : ""}</div></div>`;
+  const mrg = receita > 0 ? (receita - custo) / receita * 100 : null;
+  html += `<div class="grelha g2l">
+    <div class="card">
+      <div class="card-t">${svgIc("documento")}<h3>A Pagar / Receber</h3></div>
+      <div class="pr receber goto" data-goto="contas:investimentos:adiantamentos">
+        <span class="icone" style="--cor:var(--good)">${svgIc("receber")}</span>A receber
+        <b>${fmtMZN(adiant.sociosDevem)} <small style="color:var(--ink-muted)">MZN</small></b><span style="color:var(--ink-muted)">›</span></div>
+      <div class="pr pagar goto" data-goto="contas:investimentos:adiantamentos">
+        <span class="icone" style="--cor:var(--s2)">${svgIc("pagar")}</span>A pagar
+        <b>${fmtMZN(adiant.empresaDeve)} <small style="color:var(--ink-muted)">MZN</small></b><span style="color:var(--ink-muted)">›</span></div>
+      <div style="font-size:11px;color:var(--ink-muted);margin-top:8px">Adiantamentos entre sócios e empresa · a faturação entra aqui quando for ativada</div>
+    </div>
+    <div class="card">
+      <div class="card-t">${svgIc("barras")}<h3>Indicadores de Gestão</h3></div>
+      <div class="ind">
+        ${indicador("Margem", mrg == null ? null : fmtNumRaw(mrg.toFixed(1)) + "%")}
+        ${indicador("Custo por km", km && custo ? fmtNumRaw((custo / km).toFixed(2)) : null, "MZN")}
+        ${indicador("Receita por km", km && receita ? fmtNumRaw((receita / km).toFixed(2)) : null, "MZN")}
       </div>
-      ${destaque.length ? `<div class="card">` + destaque.map((d, i) => `
-        <div class="goto" data-viagem-cod="${esc(d.t.cod)}" style="display:flex;align-items:center;gap:10px;padding:8px 0;${i === 0 ? "border-bottom:1px solid var(--hairline)" : ""};cursor:pointer">
-          <span class="sr-kind" style="flex:none">${d.rot}</span>
-          <div style="flex:1;min-width:0">
-            <div style="font-size:13px;font-weight:650">${esc(d.t.cod)}${d.t.rota ? ` · ${esc(d.t.rota)}` : ""}</div>
-            ${d.t.cliente ? `<div style="font-size:11.5px;color:var(--ink-muted)">${esc(d.t.cliente)}</div>` : ""}
-          </div>
-          <b style="font-size:13px;white-space:nowrap;color:${tripMargin(d.t) >= 0 ? "var(--good-text)" : "var(--serious)"}">${fmtMZN(tripMargin(d.t))}</b>
-        </div>`).join("") + `</div>` : ""}`;
+      <div style="font-size:11px;color:var(--ink-muted);margin-top:10px;text-align:center">
+        ${km ? `${fmtMZN(km)} km em ${viagens.length} viage${viagens.length === 1 ? "m" : "ns"}` : "sem quilómetros no período"}${!receita ? " · sem receitas de viagens lançadas" : ""}</div>
+    </div>
+  </div>`;
+
+  /* ---------- 6. próximas ações ---------- */
+  const acoes = [];
+  if (emCaixa.length && saldoTesouraria < 0) acoes.push({ goto: "contas:correntes", ic: "alerta", cor: "var(--critical)",
+    txt: `Tesouraria negativa (${fmtMZN(saldoTesouraria)} MZN)`, selo: "Urgente", cls: "urgente" });
+  const negativas = viagens.filter(t => { const m = tripMargin(t); return m != null && m < 0; });
+  if (negativas.length) acoes.push({ goto: "viagens:viagens", ic: "alerta", cor: "var(--serious)",
+    txt: `Rever ${negativas.length} viage${negativas.length > 1 ? "ns" : "m"} com margem negativa (${fmtMZN(negativas.reduce((a, t) => a - tripMargin(t), 0))} MZN)`,
+    selo: "Atenção", cls: "atencao" });
+  if (emFalta.length) acoes.push({ goto: "contas:investimentos:socios", ic: "alerta", cor: "var(--serious)",
+    txt: `Regularizar contribuições dos sócios (${fmtMZN(valorEmFalta)} MZN)`, selo: "Pendente", cls: "atencao" });
+  if (adiant.sociosDevem > 0.5) acoes.push({ goto: "contas:investimentos:adiantamentos", ic: "relogio", cor: "var(--accent)",
+    txt: `Receber adiantamentos dos sócios (${fmtMZN(adiant.sociosDevem)} MZN)`, selo: "Pendente", cls: "" });
+  if (adiant.empresaDeve > 0.5) acoes.push({ goto: "contas:investimentos:adiantamentos", ic: "relogio", cor: "var(--accent)",
+    txt: `Devolver adiantamentos aos sócios (${fmtMZN(adiant.empresaDeve)} MZN)`, selo: "Pendente", cls: "" });
+  const ponto = document.getElementById("alertDot");
+  if (ponto) ponto.hidden = !acoes.length;
+  html += `<div class="card" id="acoes">
+    <div class="card-t">${svgIc("lista")}<h3>Próximas Ações</h3>${acoes.length ? `<span class="extra">${acoes.length}</span>` : ""}</div>
+    <div class="acoes">${acoes.length ? acoes.map(a => `<div class="acao goto" data-goto="${a.goto}">
+        <svg class="i" viewBox="0 0 24 24" fill="none" stroke="${a.cor}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${IC[a.ic]}</svg>
+        <span class="txt">${a.txt}</span><span class="selo ${a.cls}">${a.selo}</span>
+        <span class="seta">${svgIc("seta", 'style="width:16px;height:16px"')}</span></div>`).join("")
+      : `<div class="acao"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="var(--good)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${IC.ok}</svg>
+          <span class="txt">Tudo em ordem — sem ações pendentes.</span></div>`}
+    </div></div>`;
+
+  /* ---------- 7. investimento por categoria (fora do resultado) ---------- */
+  if (invP.length && !invEmCima) {
+    html += anelHTML("Investimento por Categoria", "moedas", fatiasPorCategoria(invP, corInv), "",
+      "contas:correntes");
   }
 
-  /* ---------- 7. custo das viagens: em que se gasta na estrada ---------- */
+  /* ---------- 8. custo das viagens ---------- */
   const daEstrada = geralPeriodo.filter(m => ehDespesa(m) && m.viagem && m.categoria);
   if (daEstrada.length >= 2) {
-    const porCat = new Map();
-    for (const m of daEstrada) porCat.set(m.categoria, (porCat.get(m.categoria) || 0) + m.valor);
-    const partes = [...porCat.entries()].map(([nome, valor]) => ({ nome, valor }))
-      .sort((a, b) => b.valor - a.valor).slice(0, 6)
-      .map((p, i) => ({ ...p, cor: CORES_CAT[i] }));
-    html += segbarHTML(partes, "Custo das viagens");
+    html += segbarHTML(fatiasPorCategoria(daEstrada, corCat), "Custo das viagens");
   }
 
-  /* ---------- 8. sócios ---------- */
+  /* ---------- 9. mapa de calor: categoria × mês ---------- */
+  const meses = porMes(geral, 6);
+  const topCats = fatiasPorCategoria(despesasP, corCat).filter(f => f.nome !== "Outras").map(f => f.nome);
+  if (topCats.length >= 2 && meses.length >= 2) {
+    const matriz = {}; let maior = 0;
+    topCats.forEach(n => (matriz[n] = {}));
+    for (const m of geral) {
+      if (!ehDespesa(m) || !m.date || topCats.indexOf(m.categoria) < 0) continue;
+      const k = m.date.getFullYear() * 12 + m.date.getMonth();
+      matriz[m.categoria][k] = (matriz[m.categoria][k] || 0) + m.valor;
+      maior = Math.max(maior, matriz[m.categoria][k]);
+    }
+    html += heatmapHTML(topCats, meses, matriz, maior);
+  }
+
+  /* ---------- 10. sócios ---------- */
   if (socios.length) {
-    html += `<div class="section-title">Sócios</div>
-      <div class="card">
-        ${totalInvestido ? `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px">
-          <span style="font-size:12px;color:var(--ink-2)">Investido pelos sócios</span>
-          <b style="font-size:16px;font-variant-numeric:tabular-nums">${fmtMZN(totalInvestido)} <small style="font-size:11px;color:var(--ink-muted)">MZN</small></b>
-        </div>` : ""}
+    html += `<div class="card">
+        <div class="card-t">${svgIc("pessoas")}<h3>Sócios</h3>
+          ${totalInvestido ? `<span class="extra">investido: <b style="color:var(--ink)">${fmtMZN(totalInvestido)} MZN</b></span>` : ""}</div>
         <div class="glance">` + socios.map(s => {
           const credor = s.saldo != null && s.saldo > 0.5;
           const emDia = s.saldo != null && Math.abs(s.saldo) <= 0.5;
           const cor = credor ? "var(--good-text)" : emDia ? "var(--ink)" : "var(--serious)";
-          return `<div class="goto glance-item" data-goto="contas:investimentos">
-            <div class="avatar" style="background:${socioColor(s.nome)};width:38px;height:38px;font-size:13px">${esc(s.nome.slice(0, 2).toUpperCase())}</div>
+          return `<div class="goto glance-item" data-goto="contas:investimentos:socios" style="cursor:pointer">
+            <div class="avatar" style="background:${socioColor(s.nome)};width:38px;height:38px;font-size:14px">${esc(s.nome.slice(0, 2).toUpperCase())}</div>
             <div class="g-name">${esc(s.nome)}</div>
             <div class="g-saldo" style="color:${cor}">${fmtMZN(s.saldo)}</div>
           </div>`;
         }).join("") + `</div>
         <div style="font-size:10.5px;color:var(--ink-muted);text-align:center;margin-top:8px">
-          Saldo em MZN · verde = a receber · laranja = falta contribuir</div>
+          Saldo de capital em MZN · positivo = a receber · negativo = falta contribuir</div>
       </div>`;
   }
 
-  /* ---------- 9. últimos movimentos ---------- */
+  /* ---------- 11. últimos movimentos ---------- */
   if (geral.length) {
-    html += `<div class="section-title">Últimos movimentos</div><div class="card">` +
+    html += `<div class="card"><div class="card-t">${svgIc("lista")}<h3>Últimos movimentos</h3></div>` +
       geral.slice(-4).reverse().map(m => `<div class="mov">
         <div class="m-main">
           <div class="m-item" style="font-size:13px">${esc(m.desc || m.categoria || "(sem descrição)")}</div>
-          <div class="m-date">${[m.data, m.categoria].filter(Boolean).map(esc).join(" · ")}</div>
+          <div class="m-date">${[m.data, m.tipo, m.categoria].filter(Boolean).map(esc).join(" · ")}</div>
         </div>
         <div class="m-side">
           <div class="m-val" style="font-size:13px;color:${m.entrada ? "var(--good-text)" : "var(--ink)"}">
             ${m.entrada ? "+" : "−"}${fmtMZN(m.valor)}</div>
         </div>
       </div>`).join("") +
-      `<div class="goto" data-goto="contas:correntes" style="text-align:center;padding:10px 0 2px;font-size:13px;font-weight:650;color:var(--accent);cursor:pointer">Ver todos os movimentos ›</div>
+      `<div class="goto" data-goto="contas:correntes" style="text-align:center;padding:10px 0 2px;font-size:13px;font-weight:650;color:var(--accent-text);cursor:pointer">Ver todos os movimentos ›</div>
     </div>`;
-  }
-
-  /* ---------- 10. indicadores próprios da folha Resumo ---------- */
-  const pares = [];
-  for (const r of (rows || [])) {
-    const cells = r.map(c => (c || "").trim()).filter(Boolean);
-    if (cells.length >= 2) {
-      const val = parseNum(cells[cells.length - 1]);
-      if (val != null && !/^\d/.test(cells[0])) pares.push([cells[0], val]);
-    }
-  }
-  if (pares.length) {
-    html += `<div class="section-title">Indicadores da folha Resumo</div><div class="card">` +
-      pares.map(([l, v], i) => `<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;${i < pares.length - 1 ? "border-bottom:1px solid var(--hairline);" : ""}font-size:13px">
-        <span style="color:var(--ink-2)">${esc(l)}</span><b style="font-variant-numeric:tabular-nums;white-space:nowrap">${fmtMZN(v)}</b>
-      </div>`).join("") + `</div>`;
-  }
-
-  if (!kpis.length && !geral.length && !viagens.length && !socios.length && !pares.length) {
-    return emptyState("Ainda sem dados para o dashboard.",
-      "Assim que houver lançamentos nas folhas de contas e viagens, aparecem aqui resumidos.");
   }
   return html;
 }
 
-/* --- Movimentos: o livro de contas, filtrável por sócio, tipo e categoria --- */
 let movFilter = "Todos";   // sócio
 let movTipo = "Todos";     // Investimento / Despesa / Suprimento / Recebimento
 let movCat = null;         // categoria escolhida na vista Categorias
@@ -1290,9 +1660,9 @@ function renderMovimentos(rows) {
         <span class="dot" style="background:${socioColor(p.por)}"></span>${esc(p.por)}${m.pagadores.length > 1 ? ` · ${fmtMZN(p.val)}` : ""}
       </span>`).join("");
     const marcas = [
-      tn ? `<span class="chip" style="font-size:10.5px;padding:3px 7px;${TIPO_COR[tn] ? `border-color:${TIPO_COR[tn]};color:${TIPO_COR[tn]};background:transparent` : ""}">${esc(tn)}</span>` : "",
+      tn ? `<span class="chip" style="font-size:10.5px;padding:3px 7px">${TIPO_COR[tn] ? `<span class="dot" style="background:${TIPO_COR[tn]}"></span>` : ""}${esc(tn)}</span>` : "",
       m.categoria ? `<span class="chip" style="font-size:10.5px;padding:3px 7px">${esc(m.categoria)}</span>` : "",
-      m.viagem ? `<span class="chip" data-viagem-cod="${esc(m.viagem)}" style="font-size:10.5px;padding:3px 7px;cursor:pointer;border-color:var(--accent);color:var(--accent)">${esc(m.viagem)} ›</span>` : "",
+      m.viagem ? `<span class="chip" data-viagem-cod="${esc(m.viagem)}" style="font-size:10.5px;padding:3px 7px;cursor:pointer;border-color:var(--accent);color:var(--accent-text)">${esc(m.viagem)} ›</span>` : "",
     ].filter(Boolean).join("");
     return `<div class="mov" style="flex-wrap:wrap">
       <div class="m-main">
@@ -1416,10 +1786,10 @@ function geralMovimentosHTML(movs, noPeriodo) {
 
   const list = shown.map(m => {
     const marcas = [
-      m.tipo ? `<span class="chip" style="font-size:10.5px;padding:3px 7px;${TIPO_COR[m.tipo] ? `border-color:${TIPO_COR[m.tipo]};color:${TIPO_COR[m.tipo]};background:transparent` : ""}">${esc(m.tipo)}</span>` : "",
+      m.tipo ? `<span class="chip" style="font-size:10.5px;padding:3px 7px">${TIPO_COR[m.tipo] ? `<span class="dot" style="background:${TIPO_COR[m.tipo]}"></span>` : ""}${esc(m.tipo)}</span>` : "",
       m.categoria ? `<span class="chip" style="font-size:10.5px;padding:3px 7px">${esc(m.categoria)}</span>` : "",
       m.meio ? `<span class="chip" style="font-size:10.5px;padding:3px 7px">${esc(m.meio)}</span>` : "",
-      m.viagem ? `<span class="chip" data-viagem-cod="${esc(m.viagem)}" style="font-size:10.5px;padding:3px 7px;cursor:pointer;border-color:var(--accent);color:var(--accent)">${esc(m.viagem)} ›</span>` : "",
+      m.viagem ? `<span class="chip" data-viagem-cod="${esc(m.viagem)}" style="font-size:10.5px;padding:3px 7px;cursor:pointer;border-color:var(--accent);color:var(--accent-text)">${esc(m.viagem)} ›</span>` : "",
     ].filter(Boolean).join("");
     return `<div class="mov" style="flex-wrap:wrap">
       <div class="m-main">
@@ -1707,8 +2077,8 @@ function renderAdiantamentos(rows) {
       </div>
       <div class="m-side"><div class="m-val">${fmtMZN(m.total)} ${mzn}</div></div>
       <div style="flex-basis:100%;display:flex;flex-wrap:wrap;gap:5px;margin-top:7px">
-        <span class="chip" style="font-size:10.5px;padding:3px 7px;border-color:${TIPO_COR[tn]};color:${TIPO_COR[tn]};background:transparent">${esc(tn)}</span>
-        ${m.viagem ? `<span class="chip" data-viagem-cod="${esc(m.viagem)}" style="font-size:10.5px;padding:3px 7px;cursor:pointer;border-color:var(--accent);color:var(--accent)">${esc(m.viagem)} ›</span>` : ""}
+        <span class="chip" style="font-size:10.5px;padding:3px 7px"><span class="dot" style="background:${TIPO_COR[tn]}"></span>${esc(tn)}</span>
+        ${m.viagem ? `<span class="chip" data-viagem-cod="${esc(m.viagem)}" style="font-size:10.5px;padding:3px 7px;cursor:pointer;border-color:var(--accent);color:var(--accent-text)">${esc(m.viagem)} ›</span>` : ""}
         ${nomes}
       </div>
     </div>`;
@@ -2107,7 +2477,7 @@ function tripRowHTML(t, keyCols) {
   return `<div class="mov" data-viagem-cod="${esc(t.cod)}" style="cursor:pointer;align-items:center">
       <div class="m-main">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          ${t.cod ? `<span class="chip" style="background:var(--accent);color:#fff;border-color:transparent;font-size:12px;padding:5px 10px;font-weight:700">${esc(t.cod)}</span>` : ""}
+          ${t.cod ? `<span class="chip" style="background:#1c5cab;color:#fff;border-color:transparent;font-size:12px;padding:5px 10px;font-weight:700">${esc(t.cod)}</span>` : ""}
           ${t.dataTxt ? `<span style="font-size:11.5px;color:var(--ink-muted)">${esc(t.dataTxt)}</span>` : ""}
           ${margem != null ? `<span class="status ${margem >= 0 ? "good" : "warn"}" style="font-size:11.5px;margin-left:auto">${margem >= 0 ? "+" : ""}${fmtMZN(margem)} MZN</span>` : ""}
         </div>
@@ -2298,8 +2668,8 @@ function viagemDetalheHTML(td) {
   return `${backBtn("data-viagens-back", "Voltar às viagens")}
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px">
-        ${t.cod ? `<span class="chip" style="background:var(--accent);color:#fff;border-color:transparent;font-size:14px;padding:7px 13px;font-weight:750">${esc(t.cod)}</span>` : "<span></span>"}
-        <button data-abast class="chip" style="cursor:pointer;font-size:13px;font-weight:650;padding:8px 14px;border-color:var(--accent);color:var(--accent)">⛽ Abastecimentos</button>
+        ${t.cod ? `<span class="chip" style="background:#1c5cab;color:#fff;border-color:transparent;font-size:14px;padding:7px 13px;font-weight:750">${esc(t.cod)}</span>` : "<span></span>"}
+        <button data-abast class="chip" style="cursor:pointer;font-size:13px;font-weight:650;padding:8px 14px;border-color:var(--accent);color:var(--accent-text)">⛽ Abastecimentos</button>
       </div>
       ${margem != null || t.despesa ? `<div style="display:flex;gap:16px;flex-wrap:wrap;padding:10px 0 4px;border-bottom:1px solid var(--hairline)">
         ${t.receita != null ? `<div><div style="font-size:11px;color:var(--ink-muted)">Receita</div><b style="font-size:15px">${fmtMZN(t.receita)}</b></div>` : ""}
@@ -2817,12 +3187,17 @@ searchResults.addEventListener("click", e => {
 document.addEventListener("keydown", e => {
   if (e.key === "Escape" && !searchOverlay.hidden) closeSearch();
 });
+/* período escolhido no topo do painel */
+document.addEventListener("change", e => {
+  const sel = e.target.closest("[data-period-select]");
+  if (sel) { state.period = sel.value; repaintActive(); }
+});
 
 /* abre a ficha de um motorista / cliente / viatura */
 function openEntity(key, nome) {
   entityNav[key] = nome;
   const target = key === "viatura" ? ["viaturas", "viaturas"]
-    : key === "cliente" ? ["viagens", "clientes"] : ["viagens", "motoristas"];
+    : key === "cliente" ? ["pessoas", "clientes"] : ["pessoas", "motoristas"];
   ensureGroupLoaded(target[0]);
   gotoView(target[0], target[1]);
   repaintView(target[1]);
@@ -2959,6 +3334,11 @@ async function refreshAll(force) {
 }
 
 refreshBtn.addEventListener("click", () => refreshAll(true));
+/* sino: leva às próximas ações do painel */
+document.getElementById("alertBtn").addEventListener("click", () => {
+  gotoView("resumo");
+  setTimeout(() => document.getElementById("acoes")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+});
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) refreshAll(false); // reabrir a app → dados frescos
 });
