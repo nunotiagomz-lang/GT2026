@@ -232,6 +232,13 @@ Cada viagem junta a sua linha da folha `Viagens` com todos os movimentos do
 - **Recibos do motorista** — as despesas que precisam de recibo (combustível,
   manutenção, portagens, estadias; as diárias não) com o estado da coluna
   `Recibo`: entregue ou por entregar.
+- **Conta do motorista** — `Adiantamento ao motorista` − despesas com **Meio
+  Motorista** justificadas (com recibo entregue, ou diárias) − `Devolução do
+  motorista`. A ficha mostra adiantado / justificado / devolvido e o saldo; a
+  lista marca as viagens com contas por acertar, e as Próximas Ações avisam
+  depois do regresso («Acertar contas com motoristas» ou «Pagar aos
+  motoristas», se gastaram mais do que levaram). Adiantamentos e devoluções
+  ficam fora do resultado (não são despesa) mas entram na tesouraria.
 
 A **ficha da viagem** mostra isso tudo, mais **todos os campos da folha**
 (agrupados em identificação, valores, rota e datas, equipa e viatura,

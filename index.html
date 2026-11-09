@@ -816,9 +816,17 @@ function classeAdiant(tipo) {
   if (/^despesa (paga )?(pelo|do) socio/.test(s)) return "despesa";
   return null;
 }
+/* dinheiro adiantado ao motorista para a viagem, e o que ele devolve:
+   não é despesa (as despesas são o que ele paga com esse dinheiro) */
+function classeMotorista(tipo) {
+  const t = deaccent(tipo).replace(/\s+/g, " ").trim();
+  if (/^adiantamento (ao|para o) motorista/.test(t)) return "ad";
+  if (/^(devolucao|reembolso) (do|pelo) motorista/.test(t)) return "dev";
+  return null;
+}
 /* financiamento: entra ou sai dinheiro, mas não é operação */
 function ehFinanciamento(tipo) {
-  return tipo === "Suprimento" || !!classeAdiant(tipo) || saidaParaSocio(tipo);
+  return tipo === "Suprimento" || !!classeAdiant(tipo) || !!classeMotorista(tipo) || saidaParaSocio(tipo);
 }
 const ehReceita = m => m.entrada && !ehFinanciamento(m.tipo);
 const ehDespesa = m => !m.entrada && m.tipo !== "Investimento" && !ehFinanciamento(m.tipo);
@@ -1550,6 +1558,16 @@ function renderResumo(rows) {
   if (recibosPorEntregar.length) acoes.push({ goto: "viagens:viagens", ic: "alerta", cor: "var(--warning)",
     txt: `${recibosPorEntregar.length} recibo${recibosPorEntregar.length > 1 ? "s" : ""} do motorista por entregar (${fmtMZN(recibosPorEntregar.reduce((a, m) => a + m.valor, 0))} MZN)`,
     selo: "Pendente", cls: "atencao" });
+  const hojeD = new Date(); hojeD.setHours(0, 0, 0, 0);
+  const regressadas = todas.filter(t => t.motor && t.motor.ativo && (!t.regresso || t.regresso <= hojeD));
+  const porAcertar = regressadas.filter(t => t.motor.saldoFinal > 0.5);
+  const aPagarMot = regressadas.filter(t => t.motor.saldoFinal < -0.5);
+  if (porAcertar.length) acoes.push({ goto: "viagens:viagens", ic: "relogio", cor: "var(--s5)",
+    txt: `Acertar contas com motoristas: ${porAcertar.length} viage${porAcertar.length > 1 ? "ns" : "m"} (${fmtMZN(porAcertar.reduce((a, t) => a + t.motor.saldoFinal, 0))} MZN por justificar ou devolver)`,
+    selo: "Pendente", cls: "atencao" });
+  if (aPagarMot.length) acoes.push({ goto: "viagens:viagens", ic: "relogio", cor: "var(--serious)",
+    txt: `Pagar aos motoristas ${fmtMZN(aPagarMot.reduce((a, t) => a - t.motor.saldoFinal, 0))} MZN (gastaram mais do que o adiantado)`,
+    selo: "Pendente", cls: "" });
   const fats = faturasComEstado() || [];
   const vencidasF = fats.filter(f => f.estado === "vencida");
   if (vencidasF.length) acoes.unshift({ goto: "faturacao:faturas:receber", ic: "alerta", cor: "var(--critical)",
@@ -2257,6 +2275,7 @@ function tripsData() {
     /* valor acordado com o cliente — na folha chama-se «Valor Rate» */
     combinado: findCol(C, /valor\s*(combinado|(do\s*|da\s*)?rate)|^rate|\brate\b|tarifa|pre[çc]o\s*(acordado|combinado)/i),
     fatura:    findCol(C, /^(factura|fatura)/i),
+    regresso:  findCol(C, /^regresso/i, /^chegada/i),
     receita:   findCol(C, /receita|frete|faturad/i, /valor\s*(da\s*)?(viagem|servi|frete)/i),
     despesa:   findCol(C, /despesas?\s*total/i, /^despesas?/i),
     saldoMot:  findCol(C, /saldo\s*final\s*motorista/i, /saldo\s*motorista/i),
@@ -2279,6 +2298,7 @@ function tripsData() {
     km:        num(t.row, ix.km),
     combinado: num(t.row, ix.combinado),
     faturaCol: get(t.row, ix.fatura),
+    regresso:  parseDate(get(t.row, ix.regresso)),
     receitaCol: num(t.row, ix.receita),
     despesaCol: num(t.row, ix.despesa),
     saldoMot:  num(t.row, ix.saldoMot),
@@ -2333,6 +2353,22 @@ function ligarAoLivroGeral(trips) {
     const comRecibo = desp.filter(m => precisaRecibo(m) && m.recibo);
     t.recibosEntregues = comRecibo.filter(m => /entregue/i.test(m.recibo));
     t.recibosPendentes = comRecibo.filter(m => /por\s*entregar|pendente|^n[ãa]o/i.test(deaccent(m.recibo)));
+    /* conta do motorista: o que lhe foi adiantado, o que justificou
+       (diárias + despesas com recibo entregue), o que devolveu */
+    const mot = { adiantado: 0, gasto: 0, justificado: 0, porJustificar: 0, devolvido: 0, despesas: [] };
+    for (const m of movs) {
+      const cm = classeMotorista(m.tipo);
+      if (cm === "ad") mot.adiantado += m.valor;
+      else if (cm === "dev") mot.devolvido += m.valor;
+      else if (ehDespesa(m) && /^motorista/i.test(m.meio)) {
+        mot.gasto += m.valor; mot.despesas.push(m);
+        if (/por\s*entregar/i.test(deaccent(m.recibo))) mot.porJustificar += m.valor; else mot.justificado += m.valor;
+      }
+    }
+    mot.saldo = mot.adiantado - mot.justificado;
+    mot.saldoFinal = mot.saldo - mot.devolvido;
+    mot.ativo = mot.adiantado > 0 || mot.gasto > 0 || mot.devolvido > 0;
+    t.motor = mot;
   }
 }
 const ESTADO_PAG = {
@@ -2478,7 +2514,9 @@ function extractGeral(rows) {
     const sTxt = deaccent(get(r, ix.sentido));
     /* entrada = dinheiro que chega; saída = dinheiro que sai */
     const cl = classeAdiant(tipo);
+    const cm = classeMotorista(tipo);
     const entrada = sTxt ? /entrada|receb|credito|\+/.test(sTxt)
+                         : cm ? cm === "dev"
                          : cl ? ADIANT_DO_SOCIO[cl]
                          : (tipo === "Suprimento" || tipo === "Recebimento");
     movs.push({
@@ -2586,7 +2624,8 @@ function tripRowHTML(t, keyCols) {
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px">${seloPagamento(t)}
           ${t.faturaNum ? `<span class="selo-pag" style="--cor:var(--s7)"><i></i>Fatura ${esc(t.faturaNum)}</span>` : ""}
-          ${nRec ? `<span class="selo-pag" style="--cor:var(--warning)"><i></i>${nRec} recibo${nRec > 1 ? "s" : ""} por entregar</span>` : ""}</div>
+          ${nRec ? `<span class="selo-pag" style="--cor:var(--warning)"><i></i>${nRec} recibo${nRec > 1 ? "s" : ""} por entregar</span>` : ""}
+          ${t.motor && t.motor.ativo && Math.abs(t.motor.saldoFinal) > 0.5 ? `<span class="selo-pag" style="--cor:${t.motor.saldoFinal > 0 ? "var(--s5)" : "var(--serious)"}"><i></i>${t.motor.saldoFinal > 0 ? `Motorista: ${fmtMZN(t.motor.saldoFinal)} por acertar` : `Empresa deve ${fmtMZN(-t.motor.saldoFinal)} ao motorista`}</span>` : ""}</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;margin-top:8px">
           ${keyCols.map(c => { const v = (t.row[c.i] || "").trim(); return v ? `
             <div style="font-size:12px;min-width:0"><span style="color:var(--ink-muted)">${esc(c.name)}</span><br><b>${fmtCell(v)}</b></div>` : ""; }).join("")}
@@ -2845,6 +2884,28 @@ function viagemDetalheHTML(td) {
       Recibos por entregar: ${t.recibosPendentes.length}<b>${fmtMZN(t.recibosPendentes.reduce((a, m) => a + m.valor, 0))} <small style="color:var(--ink-muted)">MZN</small></b></div>`
       : t.recibosEntregues.length ? `<div style="margin-top:10px;font-size:12.5px;color:var(--good-text)">✓ Todos os recibos entregues (${t.recibosEntregues.length})</div>` : ""}
   </div>`;
+
+  /* ---- conta do motorista ---- */
+  const mt = t.motor;
+  if (mt && mt.ativo) {
+    const sf = mt.saldoFinal;
+    html += `<div class="card">
+      <div class="card-t">${svgIc("pessoas")}<h3>Conta do motorista</h3>${t.motorista ? `<span class="extra">${esc(t.motorista)}</span>` : ""}</div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">
+        ${num("Adiantado", fmtMZN(mt.adiantado) + mzn)}
+        ${num("Justificado", fmtMZN(mt.justificado) + mzn, mt.justificado ? "var(--good-text)" : "", mt.porJustificar ? `sem recibo: ${fmtMZN(mt.porJustificar)}` : "")}
+        ${num("Devolvido", fmtMZN(mt.devolvido) + mzn)}
+      </div>
+      <div class="pr ${Math.abs(sf) < 0.5 ? "receber" : "pagar"}" style="cursor:default;margin-top:12px">
+        <span class="icone" style="--cor:${Math.abs(sf) < 0.5 ? "var(--good)" : sf > 0 ? "var(--s5)" : "var(--serious)"}">${svgIc(Math.abs(sf) < 0.5 ? "ok" : "relogio")}</span>
+        ${Math.abs(sf) < 0.5 ? "Contas acertadas" : sf > 0 ? "Por justificar ou devolver" : "A empresa deve ao motorista"}
+        <b>${fmtMZN(Math.abs(sf))} <small style="color:var(--ink-muted)">MZN</small></b></div>
+      ${mt.despesas.length ? `<table class="leg-tab" style="margin-top:10px"><tbody>${mt.despesas.map(m => `<tr>
+        <td>${esc(m.categoria || "Despesa")}${m.data ? ` <span style="color:var(--ink-muted)">· ${esc(m.data)}</span>` : ""}</td>
+        <td class="n">${fmtMZN(m.valor)}</td>
+        <td class="n" style="font-size:11.5px;color:${/por\s*entregar/i.test(deaccent(m.recibo)) ? "var(--warning)" : "var(--ink-muted)"}">${/por\s*entregar/i.test(deaccent(m.recibo)) ? "sem recibo" : /entregue/i.test(m.recibo) ? "✓ recibo" : "—"}</td></tr>`).join("")}</tbody></table>` : ""}
+    </div>`;
+  }
 
   /* ---- todos os campos da folha, agrupados ---- */
   const usados = new Set();
