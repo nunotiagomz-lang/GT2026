@@ -28,9 +28,12 @@ Corre no Google Apps Script, dentro da conta Google da empresa.
   Assim, quem abre a folha no telemóvel sabe logo de que viatura e de que
   percurso se trata, sem ter de ir à outra planilha.
 
-  **Valor combinado** — o valor acordado com o cliente. O campo aparece sempre
-  no formulário; a coluna `Valor Combinado (MZN)` é criada no fim da folha
-  `Viagens` na primeira viagem que o tiver. Os **recebimentos** lançados em
+  **Valor combinado** — o valor acordado com o cliente, na coluna **`Valor
+  Rate`** da folha `Viagens` (também são reconhecidas `Valor Combinado`, `Rate`
+  e `Tarifa`). Aparece logo a seguir ao Cliente, em destaque; os campos do
+  motorista (diárias, adiantamentos, despesas, saldos) ficam numa secção
+  dobrável no fim. Se a folha não tiver nenhuma destas colunas, a coluna
+  `Valor Combinado (MZN)` é criada no fim na primeira viagem que o tiver. Os **recebimentos** lançados em
   Contas com o VF da viagem vão abatendo: a app mostra *Por receber → Parcial →
   Concluído*, com o pendente, e o formulário Contas mostra-o ao escolher a viagem
   num recebimento («combinado 50 000 · já recebido 20 000 · falta 30 000»).

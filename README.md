@@ -224,7 +224,7 @@ da viagem.
 Cada viagem junta a sua linha da folha `Viagens` com todos os movimentos do
 `Movimentos Geral` que têm o mesmo **VF**:
 
-- **Valor combinado** (coluna `Valor Combinado (MZN)`) − **recebimentos** com o
+- **Valor combinado** (coluna `Valor Rate`; também `Valor Combinado`, `Rate`, `Tarifa`) − **recebimentos** com o
   VF = **pendente**. Estado: *Por receber* → *Parcial* → **Concluído** quando está
   tudo pago. Sem valor combinado, mostra só o que já se recebeu.
 - **Custos** = despesas do livro com o VF (se não houver, a coluna `Despesas
