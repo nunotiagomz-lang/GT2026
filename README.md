@@ -24,7 +24,7 @@ sub-separadores no topo mostram as folhas do Excel dessa área.
 | Frota | — | `Viaturas` (+ `Viagens`) | Frota com consumo esperado → ficha da viatura e as suas viagens |
 | Pessoas | Motoristas | `Viagens` (derivado) | Ficha por motorista: viagens, km, margem, saldo |
 | Pessoas | Clientes | `Viagens` (derivado) | Ficha por cliente: viagens, faturado, margem |
-| Faturação | — | *(em breve)* | — |
+| Faturação | — | `Faturas` (+ `Viagens`, `Movimentos Geral`) | Faturas · Por receber (antiguidade) · Por faturar · Clientes |
 
 No cabeçalho: **pesquisa** (viagens, motoristas, viaturas, clientes), **sino**
 (leva às Próximas Ações; tem um ponto vermelho quando há alguma) e **atualizar**.
@@ -190,6 +190,34 @@ ela que se ligam as viagens à viatura. O mesmo para `Província`, que é aceite
 escrita com qualquer acento (`Província`, `Provìncia`). O **trajecto** sai de
 uma coluna própria (`Trajecto`, `Rota`, `Percurso`) se existir; se não, de
 `Destino` + `Província` — ex.: «Maxixe, Inhambane».
+
+### Faturação
+
+As faturas são **emitidas noutro lado** (livro ou programa do contabilista) e
+**registadas** aqui, no back office, separador Faturação — **uma viagem por
+fatura**, valores **sem IVA** (o IVA não é contabilizado nesta app; os
+recebimentos lançam-se também sem IVA, para baterem certo).
+
+Folha `Faturas` (criada pelo back office na primeira fatura):
+`Nº Fatura · Data · Cliente · VF · Valor (MZN) · Vencimento · Nota`.
+Ao registar, o nº vai também para a coluna `Factura` da viagem e, se a viagem
+não tiver valor combinado, fica com o valor da fatura.
+
+**O estado de cada fatura não se marca à mão** — vem dos recebimentos lançados
+com o VF da viagem: *Paga*, *Parcial*, *Por receber* ou **Vencida** (passado o
+vencimento com dinheiro em falta).
+
+Na app, a área Faturação tem:
+
+- **Faturas** do período, com o estado de cada uma;
+- **Por receber**, com a **antiguidade** contada a partir do vencimento — a
+  vencer, 1–30, 31–60 e mais de 60 dias;
+- **Por faturar** — viagens ainda sem fatura;
+- **Clientes** — faturado, recebido, em aberto e vencido por cliente.
+
+No painel, as faturas vencidas entram nas Próximas Ações como **Urgente**, e as
+viagens com valor por faturar como pendentes. Tocar numa fatura abre a ficha
+da viagem.
 
 ### Viagens: pagamento, custos e recibos
 
