@@ -32,6 +32,10 @@
   .check { display: flex; gap: 8px; align-items: center; margin-top: 12px; font-size: 13px; color: var(--ink); font-weight: 600; }
   .check input { width: auto; }
   .bloco-socio { border-left: 3px solid var(--accent); padding-left: 12px; margin-top: 10px; }
+  .destaque { border: 1px solid var(--accent); border-radius: 12px; padding: 2px 12px 10px; margin-top: 12px; }
+  .destaque label { color: var(--ink); font-size: 13px; }
+  details.opcional { margin-top: 16px; border-top: 1px solid var(--hairline); padding-top: 10px; }
+  details.opcional summary { font-size: 13px; font-weight: 650; color: var(--ink-2); cursor: pointer; padding: 6px 0; }
   .recibo { display: flex; gap: 10px; align-items: center; padding: 11px 0; border-bottom: 1px solid var(--hairline); }
   .recibo:last-child { border-bottom: none; }
   .recibo .t { flex: 1; min-width: 0; font-size: 13px; }
@@ -311,48 +315,72 @@ function somarAbastecimento() {
 
 /* Constrói o formulário a partir das colunas reais da folha Viagens:
    acrescentas uma coluna no Excel e ela aparece aqui sozinha. */
+/* Campos do motorista (transferências, diárias, despesas, saldo) e a
+   Factura (preenchida pelo separador Faturação) vão para uma secção
+   dobrável: são muitos, e escondiam o resto — o valor combinado chegou a
+   ser o 31.º campo, três ecrãs abaixo. */
+var RE_CAMPO_OPCIONAL = /di[áa]ria|transf|despesa|saldo|justific|^dias|^factura|^fatura/i;
+
 function construirViagem(cfg) {
   CONFIG = cfg;
   var listas = cfg.listas || {};
-  var html = cfg.colunas.map(function (nome) {
-    var id = idDoCampo(nome);
-    var n = nome.toLowerCase();
-    var lista = /^(viatura|matr)/.test(n) ? listas.viatura
-              : /motorista|condutor/.test(n) ? listas.motorista
-              : /cliente/.test(n) ? listas.cliente : null;
-
-    if (/^vf$|c.digo/.test(n)) {
-      return '<label for="' + id + '">' + nome + '</label>' +
-        '<input id="' + id + '" type="text" value="' + cfg.proximoVF + '">' +
-        '<div class="hint">Sugerido automaticamente: a viagem fica VF' + cfg.proximoVF + '.</div>';
-    }
-    if (lista && lista.length) {
-      return '<label for="' + id + '">' + nome + '</label>' +
-        '<input id="' + id + '" type="text" list="l_' + id + '" placeholder="Escolhe ou escreve">' +
-        '<datalist id="l_' + id + '">' +
-          lista.map(function (v) { return '<option value="' + v.replace(/"/g, '&quot;') + '">'; }).join('') +
-        '</datalist>';
-    }
-    if (/data|partida|chegada/.test(n)) {
-      return '<label for="' + id + '">' + nome + '</label><input id="' + id + '" type="date">';
-    }
-    if (/valor\s*combinado/.test(n)) {
-      return '<label for="' + id + '">' + nome + '</label>' +
-             '<input id="' + id + '" type="text" inputmode="decimal" data-num="1" placeholder="0">' +
-             '<div class="hint">O valor acordado com o cliente. Os recebimentos lançados em Contas com este VF ' +
-             'vão abatendo — a app mostra o pendente até a viagem ficar paga.</div>';
-    }
-    if (/km|litros|valor|receita|despesa|saldo|pre.o|quantidade|req/.test(n)) {
-      /* data-num marca os campos que são convertidos de "1 234,5" para número
-         antes de irem para a folha — sem isto o Sheets recebia texto */
-      return '<label for="' + id + '">' + nome + '</label>' +
-             '<input id="' + id + '" type="text" inputmode="decimal" data-num="1">';
-    }
-    return '<label for="' + id + '">' + nome + '</label><input id="' + id + '" type="text">';
-  }).join('');
-
+  var campos = cfg.colunas.map(function (nome) { return { nome: nome, html: campoViagem(nome, cfg, listas) }; });
+  var eCombinado = function (c) { return /valor\s*combinado/i.test(c.nome); };
+  var combinado = campos.filter(eCombinado);
+  var principais = campos.filter(function (c) { return !eCombinado(c) && !RE_CAMPO_OPCIONAL.test(c.nome); });
+  var opcionais = campos.filter(function (c) { return !eCombinado(c) && RE_CAMPO_OPCIONAL.test(c.nome); });
+  /* o valor combinado logo a seguir ao cliente (ou ao VF), em destaque */
+  if (combinado.length) {
+    var k = -1;
+    principais.forEach(function (c, i) { if (/cliente/i.test(c.nome)) k = i; });
+    if (k < 0) principais.forEach(function (c, i) { if (/^vf$|c.digo/i.test(c.nome)) k = i; });
+    principais.splice(k + 1, 0, { nome: combinado[0].nome, html: '<div class="destaque">' + combinado[0].html + '</div>' });
+  }
+  var html = principais.map(function (c) { return c.html; }).join('') +
+    (opcionais.length
+      ? '<details class="opcional"><summary>Transferências, diárias e despesas do motorista · opcional (' +
+        opcionais.length + ')</summary>' + opcionais.map(function (c) { return c.html; }).join('') + '</details>'
+      : '');
   document.getElementById('camposViagem').innerHTML = html;
   document.getElementById('btnViagem').disabled = false;
+}
+
+/* um campo do formulário da viagem, conforme o nome da coluna */
+function campoViagem(nome, cfg, listas) {
+  var id = idDoCampo(nome);
+  var n = nome.toLowerCase();
+  var lista = /^(viatura|matr)/.test(n) ? listas.viatura
+            : /motorista|condutor/.test(n) ? listas.motorista
+            : /cliente/.test(n) ? listas.cliente : null;
+
+  if (/^vf$|c.digo/.test(n)) {
+    return '<label for="' + id + '">' + nome + '</label>' +
+      '<input id="' + id + '" type="text" value="' + cfg.proximoVF + '">' +
+      '<div class="hint">Sugerido automaticamente: a viagem fica VF' + cfg.proximoVF + '.</div>';
+  }
+  if (lista && lista.length) {
+    return '<label for="' + id + '">' + nome + '</label>' +
+      '<input id="' + id + '" type="text" list="l_' + id + '" placeholder="Escolhe ou escreve">' +
+      '<datalist id="l_' + id + '">' +
+        lista.map(function (v) { return '<option value="' + v.replace(/"/g, '&quot;') + '">'; }).join('') +
+      '</datalist>';
+  }
+  if (/data|partida|chegada|regresso/.test(n)) {
+    return '<label for="' + id + '">' + nome + '</label><input id="' + id + '" type="date">';
+  }
+  if (/valor\s*combinado/.test(n)) {
+    return '<label for="' + id + '">' + nome + '</label>' +
+           '<input id="' + id + '" type="text" inputmode="decimal" data-num="1" placeholder="0">' +
+           '<div class="hint">O valor acordado com o cliente. Os recebimentos lançados em Contas com este VF ' +
+           'vão abatendo — a app mostra o pendente até a viagem ficar paga.</div>';
+  }
+  if (/km|litros|valor|receita|despesa|saldo|pre.o|quantidade|req|di[áa]ria|transf|^dias|justific/.test(n)) {
+    /* data-num marca os campos que são convertidos de "1 234,5" para número
+       antes de irem para a folha — sem isto o Sheets recebia texto */
+    return '<label for="' + id + '">' + nome + '</label>' +
+           '<input id="' + id + '" type="text" inputmode="decimal" data-num="1">';
+  }
+  return '<label for="' + id + '">' + nome + '</label><input id="' + id + '" type="text">';
 }
 
 /* datas para o Sheets em dd/mm/aaaa (é assim que a app de consulta as lê) */
