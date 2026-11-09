@@ -553,7 +553,7 @@ const NAV = [
   /* (os ids dos grupos ficam os antigos: atalhos guardados continuam a funcionar) */
   { id: "viagens", label: "Operações",
     icon: '<circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/><path d="M6 17V7a2 2 0 0 1 2-2h5v12"/><path d="M13 9h4l3 4v4h-2"/><path d="M8 19h8"/>',
-    needs: ["Viaturas", "Movimentos Geral"],   // consumo esperado; recebimentos, custos e recibos
+    needs: ["Viaturas", "Movimentos Geral", "Faturas"],   // consumo esperado; recebimentos, custos e recibos
     views: [
       { id: "viagens", sheet: "Viagens", label: "Viagens", render: "viagens", expect: /^vf$|c[óo]digo/i },
     ] },
@@ -575,23 +575,28 @@ const NAV = [
     ] },
   { id: "viaturas", label: "Frota",
     icon: '<rect x="3" y="8" width="12" height="8" rx="1.5"/><path d="M15 11h3.5l2.5 3v2h-2"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/>',
-    needs: ["Viagens", "Movimentos Geral"],    // viagens de cada viatura
+    needs: ["Viagens", "Movimentos Geral", "Faturas"],    // viagens de cada viatura
     views: [
       { id: "viaturas", sheet: "Viaturas", label: "Viaturas", render: "viaturas", expect: /matr[íi]cula|viatura/i },
     ] },
   /* Pessoas: fichas derivadas das viagens */
   { id: "pessoas", label: "Pessoas",
     icon: '<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="17" cy="9" r="2.5"/><path d="M15.5 14.2c2.4.1 4.3 1.7 4.9 4.8"/>',
-    needs: ["Viaturas", "Movimentos Geral"],
+    needs: ["Viaturas", "Movimentos Geral", "Faturas"],
     views: [
       { id: "motoristas", sheet: "Viagens", label: "Motoristas", render: "motoristas", expect: /^vf$|c[óo]digo/i },
       { id: "clientes",   sheet: "Viagens", label: "Clientes",   render: "clientes",   expect: /^vf$|c[óo]digo/i },
     ] },
-  /* Áreas futuras: soon:true mostra "Em breve" e não carrega dados.
-     Para ativar, remover soon e preencher views com as folhas do Excel:
-     views: [{ id: "faturas", sheet: "Faturas", label: "Faturas", render: "auto" }] */
-  { id: "faturacao", label: "Faturação", soon: true, views: [],
-    icon: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>' },
+  /* Faturação: as faturas são emitidas noutro lado e REGISTADAS aqui (uma
+     viagem por fatura, valores sem IVA). Sem `expect`: a vista valida a folha
+     ela própria e, se ainda não existir, mostra as viagens por faturar. */
+  { id: "faturacao", label: "Faturação",
+    icon: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>',
+    needs: ["Viagens", "Movimentos Geral", "Viaturas"],
+    views: [
+      { id: "faturas", sheet: "Faturas", label: "Faturação", render: "faturas" },
+    ] },
+  /* Áreas futuras: soon:true mostra "Em breve" e não carrega dados. */
 ];
 const ALL_VIEWS = NAV.flatMap(g => g.views);
 /* folhas de que cada área precisa: as das suas vistas + as que cruza (needs) */
@@ -600,7 +605,7 @@ function groupSheets(g) {
 }
 /* o Resumo cruza dados de várias áreas */
 const RESUMO_SHEETS = ["Resumo", "Movimentos dos Investidores", "Movimentos Geral",
-                       "Sócios - Contas Correntes", "Viagens", "Viaturas"];
+                       "Sócios - Contas Correntes", "Viagens", "Viaturas", "Faturas"];
 
 /* Cores fixas por sócio (ordem fixa — nunca reciclar) */
 const SOCIO_COLORS = ["var(--s1)", "var(--s2)", "var(--s3)", "var(--s4)",
@@ -1545,6 +1550,15 @@ function renderResumo(rows) {
   if (recibosPorEntregar.length) acoes.push({ goto: "viagens:viagens", ic: "alerta", cor: "var(--warning)",
     txt: `${recibosPorEntregar.length} recibo${recibosPorEntregar.length > 1 ? "s" : ""} do motorista por entregar (${fmtMZN(recibosPorEntregar.reduce((a, m) => a + m.valor, 0))} MZN)`,
     selo: "Pendente", cls: "atencao" });
+  const fats = faturasComEstado() || [];
+  const vencidasF = fats.filter(f => f.estado === "vencida");
+  if (vencidasF.length) acoes.unshift({ goto: "faturacao:faturas:receber", ic: "alerta", cor: "var(--critical)",
+    txt: `Cobrar ${vencidasF.length} fatura${vencidasF.length > 1 ? "s" : ""} vencida${vencidasF.length > 1 ? "s" : ""} (${fmtMZN(vencidasF.reduce((a, f) => a + f.pendente, 0))} MZN)`,
+    selo: "Urgente", cls: "urgente" });
+  const porFaturar = todas.filter(t => !t.faturaNum && (t.combinado || t.recebido));
+  if (porFaturar.length) acoes.push({ goto: "faturacao:faturas:faturar", ic: "documento", cor: "var(--accent)",
+    txt: `Faturar ${porFaturar.length} viage${porFaturar.length > 1 ? "ns" : "m"} (${fmtMZN(porFaturar.reduce((a, t) => a + (t.combinado || 0), 0))} MZN)`,
+    selo: "Pendente", cls: "" });
   if (adiant.sociosDevem > 0.5) acoes.push({ goto: "contas:investimentos:adiantamentos", ic: "relogio", cor: "var(--accent)",
     txt: `Receber adiantamentos dos sócios (${fmtMZN(adiant.sociosDevem)} MZN)`, selo: "Pendente", cls: "" });
   if (adiant.empresaDeve > 0.5) acoes.push({ goto: "contas:investimentos:adiantamentos", ic: "relogio", cor: "var(--accent)",
@@ -1713,7 +1727,7 @@ function renderMovimentos(rows) {
 /* =====================================================================
    CONTAS — duas vistas: Investimentos (sócios) e Movimentos Correntes
    ===================================================================== */
-const contasNav = { investimentos: "socios", correntes: "movimentos" };
+const contasNav = { investimentos: "socios", correntes: "movimentos", faturas: "faturas" };
 
 /* seletor interno de uma vista (pílulas) */
 function pillBar(grupo, opcoes, ativa) {
@@ -2241,6 +2255,7 @@ function tripsData() {
     provincia: findCol(C, /^prov[íìi]ncia/i),
     km:        findCol(C, /^km$/i, /km\s*(percorrid|total|viagem)/i, /quil[óo]metr/i),
     combinado: findCol(C, /valor\s*combinado|^rate|tarifa|pre[çc]o\s*(acordado|combinado)/i),
+    fatura:    findCol(C, /^(factura|fatura)/i),
     receita:   findCol(C, /receita|frete|faturad/i, /valor\s*(da\s*)?(viagem|servi|frete)/i),
     despesa:   findCol(C, /despesas?\s*total/i, /^despesas?/i),
     saldoMot:  findCol(C, /saldo\s*final\s*motorista/i, /saldo\s*motorista/i),
@@ -2262,6 +2277,7 @@ function tripsData() {
     estado:    get(t.row, ix.estado),
     km:        num(t.row, ix.km),
     combinado: num(t.row, ix.combinado),
+    faturaCol: get(t.row, ix.fatura),
     receitaCol: num(t.row, ix.receita),
     despesaCol: num(t.row, ix.despesa),
     saldoMot:  num(t.row, ix.saldoMot),
@@ -2285,6 +2301,7 @@ function precisaRecibo(m) {
 }
 function ligarAoLivroGeral(trips) {
   const geral = extractGeral(state.data["Movimentos Geral"]) || [];
+  const faturas = new Map((extractFaturas(state.data["Faturas"]) || []).map(f => [f.vf, f]));
   const porVF = new Map();
   for (const m of geral) if (m.viagem) {
     if (!porVF.has(m.viagem)) porVF.set(m.viagem, []);
@@ -2300,6 +2317,11 @@ function ligarAoLivroGeral(trips) {
     t.custos = desp;
     const custoLivro = desp.reduce((a, m) => a + m.valor, 0);
     t.despesa = custoLivro || t.despesaCol;
+    /* fatura: da folha Faturas, ou só o nº na coluna Factura da viagem.
+       Sem valor combinado, a viagem fica com o valor da fatura. */
+    t.fatura = faturas.get(tripCode(t.cod)) || null;
+    t.faturaNum = t.fatura ? t.fatura.numero : (t.faturaCol || "");
+    if (t.combinado == null && t.fatura) t.combinado = t.fatura.valor;
     t.receita = t.combinado ?? t.receitaCol ?? (t.recebido || null);
     t.pendente = t.combinado != null ? Math.max(0, t.combinado - t.recebido) : null;
     t.estadoPag = t.combinado == null
@@ -2562,6 +2584,7 @@ function tripRowHTML(t, keyCols) {
           ${margem != null ? `<span class="status ${margem >= 0 ? "good" : "warn"}" style="font-size:11.5px;margin-left:auto">${margem >= 0 ? "+" : ""}${fmtMZN(margem)} MZN</span>` : ""}
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px">${seloPagamento(t)}
+          ${t.faturaNum ? `<span class="selo-pag" style="--cor:var(--s7)"><i></i>Fatura ${esc(t.faturaNum)}</span>` : ""}
           ${nRec ? `<span class="selo-pag" style="--cor:var(--warning)"><i></i>${nRec} recibo${nRec > 1 ? "s" : ""} por entregar</span>` : ""}</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;margin-top:8px">
           ${keyCols.map(c => { const v = (t.row[c.i] || "").trim(); return v ? `
@@ -2778,6 +2801,9 @@ function viagemDetalheHTML(td) {
     </div>
     ${pct != null ? `<div class="bar" style="margin-top:12px" role="img" aria-label="${Math.round(pct)}% recebido"><i style="width:${pct}%;background:${pct >= 99.9 ? "var(--good)" : "var(--accent)"}"></i></div>
       <div class="bar-legend"><span>${fmtNumRaw(pct.toFixed(0))}% recebido</span><span>${ESTADO_PAG[t.estadoPag].rot}</span></div>` : ""}
+    <div style="font-size:12.5px;color:var(--ink-2);margin-top:10px">${t.faturaNum
+      ? `Fatura <b style="color:var(--ink)">${esc(t.faturaNum)}</b>${t.fatura && t.fatura.vencTxt ? ` · vence ${esc(t.fatura.vencTxt)}` : ""}${t.fatura && t.fatura.valor !== t.combinado ? ` · ${fmtMZN(t.fatura.valor)} MZN` : ""}`
+      : `Ainda sem fatura registada${t.combinado ? " — regista-a no back office, separador Faturação" : ""}.`} <span style="color:var(--ink-muted)">Valores sem IVA.</span></div>
     ${t.combinado == null ? `<div class="vazio-mini">Sem valor combinado. Lança-o na viagem (back office, campo «Valor Combinado»)
       para a app acompanhar o pendente até ficar paga.</div>` : ""}
     ${t.recebimentos.length ? `<div style="margin-top:10px">${t.recebimentos.map(m => `<div class="mov" style="padding:8px 0">
@@ -3080,6 +3106,168 @@ function errorState(tabId) {
 }
 
 /* =====================================================================
+   FATURAÇÃO — faturas emitidas noutro lado e registadas aqui.
+   Uma viagem por fatura; valores sem IVA. O estado de cada fatura vem dos
+   recebimentos com o VF da viagem (não se marca nada à mão).
+   ===================================================================== */
+function extractFaturas(rows) {
+  if (!rows) return null;
+  /* a folha só conta se tiver Nº Fatura e VF no cabeçalho — quando a folha
+     não existe, o Google devolve a primeira folha do ficheiro */
+  let h = -1;
+  for (let i = 0; i < Math.min(rows.length, 6); i++) {
+    const c = rows[i].map(x => String(x || "").trim());
+    if (c.some(x => /n[º°o]?\.?\s*(fatura|factura)|^(fatura|factura)$/i.test(x)) &&
+        c.some(x => /^(vf|viagem)$/i.test(x))) { h = i; break; }
+  }
+  if (h < 0) return null;
+  const cols = rows[h].map((c, i) => ({ name: (c || "").trim(), i })).filter(c => c.name);
+  const ix = {
+    num: findCol(cols, /n[º°o]?\.?\s*(fatura|factura)/i, /^(fatura|factura)$/i),
+    data: findCol(cols, /^data/i), cli: findCol(cols, /^cliente/i), vf: findCol(cols, /^(vf|viagem)$/i),
+    valor: findCol(cols, /^valor/i, /montante|total/i), venc: findCol(cols, /^vencimento/i), nota: findCol(cols, /^nota/i),
+  };
+  const get = (r, i) => i >= 0 ? String(r[i] || "").trim() : "";
+  const out = [];
+  for (let i = h + 1; i < rows.length; i++) {
+    const r = rows[i];
+    const numero = get(r, ix.num);
+    if (!numero) continue;
+    out.push({ numero, dataTxt: get(r, ix.data), date: parseDate(get(r, ix.data)), cliente: get(r, ix.cli),
+      vf: tripCode(get(r, ix.vf)), valor: parseNum(get(r, ix.valor)) || 0,
+      vencTxt: get(r, ix.venc), venc: parseDate(get(r, ix.venc)), nota: get(r, ix.nota) });
+  }
+  return out;
+}
+
+/* faturas com o estado calculado a partir dos recebimentos da viagem */
+function faturasComEstado() {
+  const lista = extractFaturas(state.data["Faturas"]);
+  if (!lista) return null;
+  const td = tripsData();
+  const viagens = new Map((td ? td.trips : []).map(t => [tripCode(t.cod), t]));
+  const geral = extractGeral(state.data["Movimentos Geral"]) || [];
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  return lista.map(f => {
+    const t = viagens.get(f.vf);
+    const recebido = t ? t.recebido
+      : geral.filter(m => m.viagem === f.vf && m.entrada && /receb/i.test(m.tipo)).reduce((a, m) => a + m.valor, 0);
+    const pendente = Math.max(0, f.valor - recebido);
+    const atraso = f.venc && pendente > 0.5 ? Math.floor((hoje - f.venc) / 864e5) : null;
+    const estado = pendente <= 0.5 ? "paga" : atraso != null && atraso > 0 ? "vencida" : recebido > 0 ? "parcial" : "receber";
+    return { ...f, viagem: t || null, recebido: Math.min(recebido, f.valor), pendente, atraso, estado,
+      cliente: f.cliente || (t && t.cliente) || "" };
+  });
+}
+const ESTADO_FAT = {
+  paga:    { rot: "Paga",        cor: "var(--good)" },
+  parcial: { rot: "Parcial",     cor: "var(--warning)" },
+  receber: { rot: "Por receber", cor: "var(--accent)" },
+  vencida: { rot: "Vencida",     cor: "var(--critical)" },
+};
+function seloFatura(f) {
+  const e = ESTADO_FAT[f.estado];
+  return `<span class="selo-pag" style="--cor:${e.cor}"><i></i>${e.rot}${f.estado === "vencida" ? ` há ${f.atraso} dia${f.atraso === 1 ? "" : "s"}` : ""}</span>`;
+}
+
+function faturaLinhaHTML(f) {
+  return `<div class="mov" ${f.viagem ? `data-viagem-cod="${esc(f.viagem.cod)}" style="cursor:pointer;flex-wrap:wrap"` : `style="flex-wrap:wrap"`}>
+    <div class="m-main">
+      <div class="m-item">${esc(f.numero)} <span style="font-weight:500;color:var(--ink-2)">· ${esc(f.cliente || "—")}</span></div>
+      <div class="m-desc">${esc(f.vf || "sem viagem")}${f.dataTxt ? " · emitida " + esc(f.dataTxt) : ""}${f.vencTxt ? " · vence " + esc(f.vencTxt) : ""}</div>
+    </div>
+    <div class="m-side"><div class="m-val">${fmtMZN(f.valor)} <small style="font-weight:600;color:var(--ink-muted)">MZN</small></div>
+      ${f.pendente > 0.5 && f.recebido > 0 ? `<div style="font-size:11px;color:var(--ink-muted);margin-top:2px">falta ${fmtMZN(f.pendente)}</div>` : ""}</div>
+    <div style="flex-basis:100%;margin-top:6px">${seloFatura(f)}</div>
+  </div>`;
+}
+
+function renderFaturas() {
+  const sub = contasNav.faturas;
+  const bar = pillBar("faturas", [
+    { id: "faturas", label: "Faturas" }, { id: "receber", label: "Por receber" },
+    { id: "faturar", label: "Por faturar" }, { id: "clientes", label: "Clientes" },
+  ], sub);
+  const lista = faturasComEstado();
+  const td = tripsData();
+  const semFatura = td ? td.trips.filter(t => !t.faturaNum) : [];
+  const mzn = '<small style="font-size:11px;color:var(--ink-muted);font-weight:600"> MZN</small>';
+
+  if (sub === "faturar") {
+    return bar + (semFatura.length
+      ? `<div class="card" style="display:flex;justify-content:space-between;align-items:baseline">
+          <span style="font-size:12.5px;color:var(--ink-2)">${semFatura.length} viage${semFatura.length === 1 ? "m" : "ns"} sem fatura</span>
+          <b style="font-size:16px">${fmtMZN(semFatura.reduce((a, t) => a + (t.combinado || 0), 0))}${mzn}</b></div>
+        <div class="card">${semFatura.map(t => tripRowHTML(t, [])).join("")}</div>
+        <p style="font-size:11px;color:var(--ink-muted);text-align:center;margin:2px 8px 8px">Regista a fatura no back office, separador Faturação.</p>`
+      : emptyState("Todas as viagens estão faturadas."));
+  }
+  if (!lista) {
+    return bar + emptyState("Ainda não há faturas registadas.",
+      "Quando registares a primeira fatura no back office (separador Faturação), a folha «Faturas» é criada e aparece aqui. Entretanto, vê as viagens por faturar." );
+  }
+
+  const noPeriodo = lista.filter(f => inPeriod(f.date, state.period));
+  const soma = (l, k) => l.reduce((a, f) => a + f[k], 0);
+  const abertas = lista.filter(f => f.pendente > 0.5);
+  const vencidas = abertas.filter(f => f.estado === "vencida");
+  const topo = `<div class="grelha g4">
+      ${[["Faturado", soma(noPeriodo, "valor"), "", `${noPeriodo.length} fatura${noPeriodo.length === 1 ? "" : "s"} no período`],
+         ["Recebido", soma(noPeriodo, "recebido"), "var(--good-text)", "das faturas do período"],
+         ["Por receber", soma(abertas, "pendente"), abertas.length ? "var(--ink)" : "", `${abertas.length} em aberto`],
+         ["Vencido", soma(vencidas, "pendente"), vencidas.length ? "var(--serious)" : "", `${vencidas.length} vencida${vencidas.length === 1 ? "" : "s"}`]]
+        .map(([r, v, c, sub2]) => `<div class="card kt"><div class="rot">${r}</div>
+          <div class="val"${c ? ` style="color:${c}"` : ""}>${fmtMZN(v)}${MZN}</div><div class="sub">${sub2}</div></div>`).join("")}
+    </div>`;
+
+  if (sub === "receber") {
+    if (!abertas.length) return bar + topo + emptyState("Nada por receber. ✓");
+    /* antiguidade: dias depois do vencimento */
+    const faixas = [
+      { nome: "A vencer",   f: x => x.atraso == null || x.atraso <= 0, cor: "var(--accent)" },
+      { nome: "1–30 dias",  f: x => x.atraso > 0 && x.atraso <= 30,    cor: "var(--warning)" },
+      { nome: "31–60 dias", f: x => x.atraso > 30 && x.atraso <= 60,   cor: "var(--serious)" },
+      { nome: "+60 dias",   f: x => x.atraso > 60,                     cor: "var(--critical)" },
+    ].map(g => ({ ...g, itens: abertas.filter(g.f) })).map(g => ({ ...g, valor: soma(g.itens, "pendente") }));
+    const total = soma(abertas, "pendente");
+    return bar + topo + `<div class="card">
+        <div class="card-t">${svgIc("relogio")}<h3>Antiguidade do que falta receber</h3></div>
+        <div style="display:flex;gap:2px;height:12px;border-radius:6px;overflow:hidden">
+          ${faixas.filter(g => g.valor).map(g => `<i class="marca" style="flex:${g.valor};background:${g.cor}"
+            data-tip="${g.nome}&#10;${fmtMZN(g.valor)} MZN · ${g.itens.length} fatura${g.itens.length === 1 ? "" : "s"}"></i>`).join("")}
+        </div>
+        <table class="leg-tab"><tbody>${faixas.map(g => `<tr><td><i style="background:${g.cor}"></i>${g.nome}</td>
+          <td class="n p">${g.itens.length}</td><td class="n">${fmtMZN(g.valor)}</td></tr>`).join("")}</tbody></table>
+        <div style="font-size:11px;color:var(--ink-muted);margin-top:6px">Total em aberto: ${fmtMZN(total)} MZN · contado a partir do vencimento</div>
+      </div>` +
+      faixas.filter(g => g.itens.length).map(g => `<div class="section-title">${g.nome}</div>
+        <div class="card">${g.itens.sort((a, b) => (b.atraso || 0) - (a.atraso || 0)).map(faturaLinhaHTML).join("")}</div>`).join("");
+  }
+  if (sub === "clientes") {
+    const por = new Map();
+    for (const f of lista) {
+      const k = f.cliente || "Sem cliente";
+      if (!por.has(k)) por.set(k, { nome: k, n: 0, valor: 0, recebido: 0, pendente: 0, vencido: 0 });
+      const e = por.get(k);
+      e.n++; e.valor += f.valor; e.recebido += f.recebido; e.pendente += f.pendente;
+      if (f.estado === "vencida") e.vencido += f.pendente;
+    }
+    const cl = [...por.values()].sort((a, b) => b.pendente - a.pendente || b.valor - a.valor);
+    return bar + topo + `<div class="card">${cl.map(c => `<div class="mov" style="flex-wrap:wrap">
+        <div class="m-main"><div class="m-item">${esc(c.nome)}</div>
+          <div class="m-desc">${c.n} fatura${c.n === 1 ? "" : "s"} · faturado ${fmtMZN(c.valor)} · recebido ${fmtMZN(c.recebido)}</div></div>
+        <div class="m-side"><div class="m-val" style="color:${c.vencido ? "var(--serious)" : c.pendente ? "var(--ink)" : "var(--good-text)"}">${c.pendente ? fmtMZN(c.pendente) : "✓"}</div>
+          <div style="font-size:11px;color:var(--ink-muted)">${c.vencido ? fmtMZN(c.vencido) + " vencido" : c.pendente ? "em aberto" : "tudo pago"}</div></div>
+      </div>`).join("")}</div>`;
+  }
+  return bar + periodBar() + topo + (noPeriodo.length
+    ? `<div class="card">${noPeriodo.slice().reverse().map(faturaLinhaHTML).join("")}</div>`
+    : emptyState("Sem faturas neste período.")) +
+    `<p style="font-size:11px;color:var(--ink-muted);text-align:center;margin:2px 8px 8px;line-height:1.5">
+      Valores sem IVA. O estado vem dos recebimentos lançados com o VF da viagem.</p>`;
+}
+
+/* =====================================================================
    APP — navegação + carregamento
    ===================================================================== */
 const RENDERERS = {
@@ -3087,7 +3275,7 @@ const RENDERERS = {
   socios: renderSocios, acertos: renderAcertos, viagens: renderViagens,
   motoristas: renderMotoristas, clientes: renderClientes, viaturas: renderViaturas,
   categorias: renderCategorias, investimentos: renderInvestimentos,
-  correntes: renderCorrentes, auto: renderAuto
+  correntes: renderCorrentes, faturas: renderFaturas, auto: renderAuto
 };
 const state = {
   activeGroup: NAV[0].id,
@@ -3162,6 +3350,10 @@ mainEl.addEventListener("click", e => {
     const [g, v, pilula] = jump.dataset.goto.split(":");
     if (pilula && contasNav[v] !== undefined) contasNav[v] = pilula;
     gotoView(g, v);
+    ensureGroupLoaded(g);
+    /* a folha pode já estar carregada (pelo painel): redesenha já com a
+       pílula pedida, senão abria na que estava escolhida antes */
+    if (pilula) repaintView(v);
     return;
   }
   const per = e.target.closest("[data-periods] button[data-period]");

@@ -67,6 +67,13 @@ function precisaRecibo_(categoria) {
   return /combust|manuten|portage|estadia|alojament|hotel|pernoit|parque|oficina|pneu/.test(c);
 }
 
+/* Faturação: só se REGISTAM aqui as faturas emitidas noutro lado (livro ou
+   programa do contabilista). Uma viagem por fatura. Valores SEM IVA — o IVA
+   não é contabilizado nesta app. */
+var FOLHA_FATURAS = 'Faturas';
+var COLUNAS_FATURAS = ['Nº Fatura', 'Data', 'Cliente', 'VF', 'Valor (MZN)', 'Vencimento', 'Nota'];
+var PRAZO_PAGAMENTO_DIAS = 30;     // vencimento sugerido
+
 /* Categorias sugeridas mesmo antes de existirem no histórico. */
 var CATEGORIAS_BASE = ['Combustível', 'Portagens', 'Manutenção', 'Estadias', 'Diárias', 'Parqueamento'];
 
@@ -997,6 +1004,158 @@ function marcarReciboEntregue(linha, conferir) {
     }
     sh.getRange(linha, iR + 1).setValue(RECIBO_ENTREGUE);
     return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* ------------------------------------------------------------------
+   Faturação
+   ------------------------------------------------------------------ */
+
+/** Folha Faturas; criada com o cabeçalho na primeira fatura. */
+function folhaFaturas_(criar) {
+  var ss = SpreadsheetApp.openById(PLANO_ID);
+  var sh = ss.getSheetByName(FOLHA_FATURAS);
+  if (sh || !criar) return sh;
+  sh = ss.insertSheet(FOLHA_FATURAS);
+  sh.appendRow(COLUNAS_FATURAS);
+  sh.getRange(1, 1, 1, COLUNAS_FATURAS.length).setFontWeight('bold');
+  sh.setFrozenRows(1);
+  return sh;
+}
+
+/** Faturas já registadas: { numeros: [...], porVF: { "2": "FT 12/2026" } } */
+function faturasRegistadas_() {
+  var out = { numeros: [], porVF: {} };
+  var sh = folhaFaturas_(false);
+  if (!sh || sh.getLastRow() < 2) return out;
+  var cab = cabecalho_(sh);
+  var iN = indiceDe_(cab.cols, [/n[º°o]?\.?\s*(fatura|factura)|^(fatura|factura)/i]);
+  var iV = indiceDe_(cab.cols, [/^(vf|viagem)$/i]);
+  if (iN < 0 || sh.getLastRow() <= cab.linha) return out;
+  sh.getRange(cab.linha + 1, 1, sh.getLastRow() - cab.linha, cab.cols.length).getValues()
+    .forEach(function (r) {
+      var n = String(r[iN]).trim();
+      if (!n) return;
+      out.numeros.push(n);
+      var vf = iV >= 0 ? String(r[iV]).replace(/\D/g, '') : '';
+      if (vf) out.porVF[vf] = n;
+    });
+  return out;
+}
+
+/**
+ * Para o formulário Faturação: as viagens, com cliente, valor combinado e a
+ * fatura que já tiverem (pela folha Faturas ou pela coluna Factura da viagem).
+ */
+function obterConfiguracaoFaturas() {
+  verificarAcesso_();
+  var reg = faturasRegistadas_();
+  var sh = folha_(PLANO_ID, FOLHA_VIAGENS);
+  var cab = cabecalho_(sh);
+  var ix = {
+    vf: indiceDe_(cab.cols, [/^vf$/i, /c[óo]digo/i]),
+    cli: indiceDe_(cab.cols, [/^cliente/i, /cliente/i]),
+    comb: indiceDe_(cab.cols, [RE_COMBINADO]),
+    fat: indiceDe_(cab.cols, [/^(factura|fatura)/i]),
+    data: indiceDe_(cab.cols, [/^partida$/i, /^data$/i])
+  };
+  var viagens = [];
+  if (ix.vf >= 0 && sh.getLastRow() > cab.linha) {
+    sh.getRange(cab.linha + 1, 1, sh.getLastRow() - cab.linha, cab.cols.length).getValues()
+      .forEach(function (r) {
+        var vf = String(r[ix.vf]).replace(/\D/g, '');
+        if (!vf) return;
+        var d = ix.data >= 0 ? r[ix.data] : '';
+        viagens.push({
+          vf: vf,
+          cliente: ix.cli >= 0 ? String(r[ix.cli]).trim() : '',
+          combinado: ix.comb >= 0 ? num_(r[ix.comb]) : 0,
+          data: d instanceof Date ? Utilities.formatDate(d, 'Africa/Maputo', 'dd/MM/yyyy') : String(d || ''),
+          fatura: reg.porVF[vf] || (ix.fat >= 0 ? String(r[ix.fat]).trim() : '')
+        });
+      });
+  }
+  return { viagens: viagens.reverse(), prazoDias: PRAZO_PAGAMENTO_DIAS, ultimas: reg.numeros.slice(-3) };
+}
+
+/**
+ * Regista uma fatura (emitida noutro lado) de UMA viagem.
+ * `dados`: { numero, data, vencimento, viagem, cliente, valor, nota }
+ * Escreve na folha Faturas, põe o nº na coluna Factura da viagem e, se a
+ * viagem ainda não tiver valor combinado, passa a ter o valor da fatura.
+ */
+function guardarFatura(dados) {
+  verificarAcesso_();
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var numero = String(dados.numero || '').trim();
+    var vf = String(dados.viagem || '').replace(/\D/g, '');
+    var valor = num_(dados.valor);
+    if (!numero) throw new Error('Indica o número da fatura.');
+    if (!vf) throw new Error('Escolhe a viagem.');
+    if (!(valor > 0)) throw new Error('Indica o valor da fatura (sem IVA).');
+
+    var reg = faturasRegistadas_();
+    var norm = function (x) { return String(x).toLowerCase().replace(/\s+/g, ''); };
+    if (reg.numeros.some(function (n) { return norm(n) === norm(numero); })) {
+      throw new Error('A fatura ' + numero + ' já está registada.');
+    }
+    if (reg.porVF[vf]) throw new Error('A VF' + vf + ' já tem a fatura ' + reg.porVF[vf] + ' (uma viagem por fatura).');
+
+    /* a viagem tem de existir; e não pode ter já outra fatura na coluna Factura */
+    var shV = folha_(PLANO_ID, FOLHA_VIAGENS);
+    var cabV = cabecalho_(shV);
+    var iVF = indiceDe_(cabV.cols, [/^vf$/i, /c[óo]digo/i]);
+    var linhaV = -1;
+    if (iVF >= 0 && shV.getLastRow() > cabV.linha) {
+      var vals = shV.getRange(cabV.linha + 1, 1, shV.getLastRow() - cabV.linha, cabV.cols.length).getValues();
+      for (var i = 0; i < vals.length; i++) {
+        if (String(vals[i][iVF]).replace(/\D/g, '') === vf) { linhaV = cabV.linha + 1 + i; break; }
+      }
+    }
+    if (linhaV < 0) throw new Error('Não encontrei a VF' + vf + ' na folha Viagens.');
+    var iFat = indiceDe_(cabV.cols, [/^(factura|fatura)/i]);
+    if (iFat >= 0) {
+      var ja = String(shV.getRange(linhaV, iFat + 1).getValue()).trim();
+      if (ja && norm(ja) !== norm(numero)) {
+        throw new Error('A VF' + vf + ' já tem a fatura ' + ja + ' na folha Viagens (uma viagem por fatura).');
+      }
+    }
+
+    /* 1) folha Faturas */
+    var sh = folhaFaturas_(true);
+    var cab = cabecalho_(sh);
+    var linha = [];
+    for (var k = 0; k < cab.cols.length; k++) linha.push('');
+    function por(padroes, v) {
+      var j = indiceDe_(cab.cols, padroes);
+      if (j >= 0 && v !== '' && v != null) linha[j] = v;
+    }
+    por([/n[º°o]?\.?\s*(fatura|factura)|^(fatura|factura)/i], numero);
+    por([/^data$/i], dados.data || '');
+    por([/^cliente/i], dados.cliente || '');
+    por([/^(vf|viagem)$/i], vf);
+    por([/^valor/i], Math.round(valor * 100) / 100);
+    por([/^vencimento/i], dados.vencimento || '');
+    por([/^nota/i], dados.nota || '');
+    sh.appendRow(linha);
+
+    /* 2) a viagem fica com o nº da fatura (e com o valor, se não o tinha) */
+    var escritas = [FOLHA_FATURAS];
+    if (iFat < 0) { cabV = garantirColuna_(shV, 'Factura', [/^(factura|fatura)/i]).cab; iFat = indiceDe_(cabV.cols, [/^(factura|fatura)/i]); }
+    shV.getRange(linhaV, iFat + 1).setValue(numero);
+    var iC = indiceDe_(cabV.cols, [RE_COMBINADO]);
+    var combinadoPosto = false;
+    if (iC < 0 || !num_(shV.getRange(linhaV, iC + 1).getValue())) {
+      if (iC < 0) { cabV = garantirColuna_(shV, COL_COMBINADO, [RE_COMBINADO]).cab; iC = indiceDe_(cabV.cols, [RE_COMBINADO]); }
+      shV.getRange(linhaV, iC + 1).setValue(Math.round(valor * 100) / 100);
+      combinadoPosto = true;
+    }
+    escritas.push(FOLHA_VIAGENS);
+    return { ok: true, numero: numero, viagem: 'VF' + vf, folhas: escritas, combinadoPosto: combinadoPosto };
   } finally {
     lock.releaseLock();
   }

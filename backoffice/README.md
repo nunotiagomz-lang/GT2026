@@ -70,6 +70,15 @@ Corre no Google Apps Script, dentro da conta Google da empresa.
   **Despesa de uma viagem que precisa de recibo** (combustível, manutenção,
   portagens, estadias, parqueamento): aparece a caixa *Recibo entregue pelo
   motorista*. As **diárias não têm recibo** e não a mostram.
+- **Faturação** — regista a fatura **já emitida** (no livro ou no programa do
+  contabilista) de **uma viagem**: escolhes a viagem (as já faturadas aparecem
+  bloqueadas), e o cliente e o valor vêm preenchidos; escreves o **nº da
+  fatura**; o vencimento é sugerido a 30 dias. Valores **sem IVA**.
+
+  Grava na folha `Faturas` (criada na primeira vez) e põe o nº na coluna
+  `Factura` da viagem. Recusa um nº já registado e uma segunda fatura para a
+  mesma viagem. O estado (paga, parcial, vencida) é a app que calcula, pelos
+  recebimentos com o VF.
 - **Recibos** — a lista das despesas de viagens com o recibo **por entregar**,
   com o total. Quando o motorista entregar, carregas em **Entregue**. Antes de
   marcar, o formulário confere a linha (descrição e valor): se a folha tiver

@@ -82,6 +82,7 @@
   <button id="tabMov" onclick="mostrar('mov')">Contas</button>
   <button id="tabInv" onclick="mostrar('inv')">Sócios</button>
   <button id="tabRec" onclick="mostrar('rec')">Recibos</button>
+  <button id="tabFat" onclick="mostrar('fat')">Faturação</button>
 </div>
 
 <div id="painelViagem">
@@ -183,6 +184,32 @@
   <div class="msg" id="msgMov"></div>
 </div>
 
+<div id="painelFat" style="display:none">
+  <div class="card">
+    <div class="hint" style="margin:0 0 4px">Regista aqui a fatura <b>já emitida</b> (no livro ou no programa do
+      contabilista). Uma viagem por fatura. Valores <b>sem IVA</b> — e os recebimentos dessa viagem
+      lançam-se também sem IVA, para baterem certo.</div>
+    <label for="ftViagem">Viagem</label>
+    <select id="ftViagem" onchange="escolherViagemFatura()"><option>A carregar…</option></select>
+    <div class="hint" id="ftViagemHint"></div>
+    <label for="ftNumero">Nº da fatura</label>
+    <input id="ftNumero" type="text" placeholder="Ex.: FT 12/2026" autocomplete="off">
+    <div class="hint" id="ftUltimas"></div>
+    <label for="ftData">Data da fatura</label>
+    <input id="ftData" type="date" onchange="sugerirVencimento()">
+    <label for="ftCliente">Cliente</label>
+    <input id="ftCliente" type="text">
+    <label for="ftValor">Valor sem IVA (MZN)</label>
+    <input id="ftValor" type="text" inputmode="decimal" placeholder="0">
+    <label for="ftVenc">Vencimento</label>
+    <input id="ftVenc" type="date">
+    <label for="ftNota">Nota (opcional)</label>
+    <input id="ftNota" type="text">
+  </div>
+  <button class="primary" onclick="gravarFatura()">Registar fatura</button>
+  <div class="msg" id="msgFat"></div>
+</div>
+
 <div id="painelRec" style="display:none">
   <div class="card">
     <div class="titulo">Recibos por entregar</div>
@@ -232,13 +259,14 @@
 var CONFIG = null;
 
 function mostrar(qual) {
-  ['viagem', 'abast', 'mov', 'inv', 'rec'].forEach(function (q) {
-    var painel = { viagem: 'painelViagem', abast: 'painelAbast', mov: 'painelMov', inv: 'painelInv', rec: 'painelRec' }[q];
-    var aba = { viagem: 'tabViagem', abast: 'tabAbast', mov: 'tabMov', inv: 'tabInv', rec: 'tabRec' }[q];
+  ['viagem', 'abast', 'mov', 'inv', 'rec', 'fat'].forEach(function (q) {
+    var painel = { viagem: 'painelViagem', abast: 'painelAbast', mov: 'painelMov', inv: 'painelInv', rec: 'painelRec', fat: 'painelFat' }[q];
+    var aba = { viagem: 'tabViagem', abast: 'tabAbast', mov: 'tabMov', inv: 'tabInv', rec: 'tabRec', fat: 'tabFat' }[q];
     document.getElementById(painel).style.display = q === qual ? '' : 'none';
     document.getElementById(aba).classList.toggle('on', q === qual);
   });
   if (qual === 'rec') carregarRecibos();
+  if (qual === 'fat') carregarFaturacao();
 }
 
 /* valor escolhido num grupo de botões de rádio */
@@ -659,7 +687,7 @@ function atualizarDica() {
   document.getElementById('mvViagemHint').textContent = !vf || !r ? ''
     : tipo === 'Recebimento'
       ? (r.combinado
-          ? 'Combinado ' + moeda(r.combinado) + ' MZN · já recebido ' + moeda(r.recebido) + ' · ' +
+          ? 'Sem IVA: combinado ' + moeda(r.combinado) + ' MZN · já recebido ' + moeda(r.recebido) + ' · ' +
             (r.combinado - r.recebido > 0.5 ? 'falta ' + moeda(r.combinado - r.recebido) + ' MZN' : 'paga ✓')
           : 'Esta viagem não tem valor combinado — já recebido ' + moeda(r.recebido) + ' MZN.')
       : '';
@@ -695,6 +723,70 @@ function gravarMovimento() {
       mensagem('msgMov', 'Não foi possível guardar: ' + err.message, true);
     })
     .guardarMovimento(dados);
+}
+
+/* ---- separador Faturação: registar a fatura de uma viagem ---- */
+var CFG_FAT = null;
+function carregarFaturacao() {
+  google.script.run
+    .withSuccessHandler(function (cfg) {
+      CFG_FAT = cfg;
+      var por = cfg.viagens.filter(function (v) { return !v.fatura; });
+      var ja = cfg.viagens.filter(function (v) { return v.fatura; });
+      var linha = function (v) {
+        return 'VF' + v.vf + (v.cliente ? ' · ' + v.cliente : '') + (v.combinado ? ' · ' + moeda(v.combinado) + ' MZN' : '');
+      };
+      document.getElementById('ftViagem').innerHTML =
+        '<option value="">— escolher —</option>' +
+        (por.length ? '<optgroup label="Por faturar">' + por.map(function (v) {
+          return '<option value="' + v.vf + '">' + linha(v) + '</option>'; }).join('') + '</optgroup>' : '') +
+        (ja.length ? '<optgroup label="Já faturadas">' + ja.map(function (v) {
+          return '<option value="' + v.vf + '" disabled>' + linha(v) + ' — ' + v.fatura + '</option>'; }).join('') + '</optgroup>' : '');
+      document.getElementById('ftUltimas').textContent = cfg.ultimas.length
+        ? 'Últimas registadas: ' + cfg.ultimas.join(', ') : '';
+      escolherViagemFatura();
+    })
+    .withFailureHandler(function (err) { mensagem('msgFat', 'Erro ao ler as viagens: ' + err.message, true); })
+    .obterConfiguracaoFaturas();
+}
+function escolherViagemFatura() {
+  var vf = document.getElementById('ftViagem').value;
+  var v = CFG_FAT && CFG_FAT.viagens.filter(function (x) { return x.vf === vf; })[0];
+  document.getElementById('ftCliente').value = v ? v.cliente : '';
+  document.getElementById('ftValor').value = v && v.combinado ? String(v.combinado).replace('.', ',') : '';
+  document.getElementById('ftViagemHint').textContent = !v ? ''
+    : (v.data ? 'Partida ' + v.data + ' · ' : '') +
+      (v.combinado ? 'valor combinado ' + moeda(v.combinado) + ' MZN' : 'sem valor combinado — a viagem fica com o valor desta fatura');
+  sugerirVencimento();
+}
+function sugerirVencimento() {
+  var d = document.getElementById('ftData').value;
+  if (!d || !CFG_FAT) return;
+  var v = new Date(d + 'T12:00:00'); v.setDate(v.getDate() + CFG_FAT.prazoDias);
+  document.getElementById('ftVenc').value = v.toISOString().slice(0, 10);
+}
+function gravarFatura() {
+  var dados = {
+    viagem: document.getElementById('ftViagem').value,
+    numero: document.getElementById('ftNumero').value.trim(),
+    data: formatarData(document.getElementById('ftData').value),
+    cliente: document.getElementById('ftCliente').value,
+    valor: valorNum('ftValor'),
+    vencimento: formatarData(document.getElementById('ftVenc').value),
+    nota: document.getElementById('ftNota').value
+  };
+  if (!dados.viagem) { mensagem('msgFat', 'Escolhe a viagem.', true); return; }
+  if (!dados.numero) { mensagem('msgFat', 'Indica o número da fatura.', true); return; }
+  if (!dados.valor) { mensagem('msgFat', 'Indica o valor sem IVA.', true); return; }
+  google.script.run
+    .withSuccessHandler(function (res) {
+      mensagem('msgFat', '✓ Fatura ' + res.numero + ' registada para a ' + res.viagem + '.' +
+        (res.combinadoPosto ? ' A viagem não tinha valor combinado: ficou com o valor da fatura.' : ''), false);
+      ['ftNumero', 'ftNota'].forEach(function (id) { document.getElementById(id).value = ''; });
+      carregarFaturacao();
+    })
+    .withFailureHandler(function (err) { mensagem('msgFat', 'Não foi possível registar: ' + err.message, true); })
+    .guardarFatura(dados);
 }
 
 /* ---- separador Recibos: o que o motorista ainda tem de entregar ---- */
@@ -774,6 +866,7 @@ var hoje = new Date().toISOString().slice(0, 10);
 document.getElementById('abData').value = hoje;
 document.getElementById('mvData').value = hoje;
 document.getElementById('ivData').value = hoje;
+document.getElementById('ftData').value = hoje;
 recarregar();
 </script>
 </body>
