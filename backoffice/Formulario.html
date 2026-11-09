@@ -319,13 +319,15 @@ function somarAbastecimento() {
    Factura (preenchida pelo separador Faturação) vão para uma secção
    dobrável: são muitos, e escondiam o resto — o valor combinado chegou a
    ser o 31.º campo, três ecrãs abaixo. */
-var RE_CAMPO_OPCIONAL = /di[áa]ria|transf|despesa|saldo|justific|^dias|^factura|^fatura/i;
+var RE_CAMPO_OPCIONAL = /di[áa]ria|transf|despesa|saldo|justific|adiantament|devolvid|^dias|^factura|^fatura/i;
+/* o valor acordado com o cliente — na folha chama-se «Valor Rate» */
+var RE_COMBINADO = /valor\s*(combinado|(do\s*|da\s*)?rate)|^rate|\brate\b|tarifa|pre[çc]o\s*(acordado|combinado)/i;
 
 function construirViagem(cfg) {
   CONFIG = cfg;
   var listas = cfg.listas || {};
   var campos = cfg.colunas.map(function (nome) { return { nome: nome, html: campoViagem(nome, cfg, listas) }; });
-  var eCombinado = function (c) { return /valor\s*combinado/i.test(c.nome); };
+  var eCombinado = function (c) { return RE_COMBINADO.test(c.nome); };
   var combinado = campos.filter(eCombinado);
   var principais = campos.filter(function (c) { return !eCombinado(c) && !RE_CAMPO_OPCIONAL.test(c.nome); });
   var opcionais = campos.filter(function (c) { return !eCombinado(c) && RE_CAMPO_OPCIONAL.test(c.nome); });
@@ -350,8 +352,8 @@ function campoViagem(nome, cfg, listas) {
   var id = idDoCampo(nome);
   var n = nome.toLowerCase();
   var lista = /^(viatura|matr)/.test(n) ? listas.viatura
-            : /motorista|condutor/.test(n) ? listas.motorista
-            : /cliente/.test(n) ? listas.cliente : null;
+            : /^(motorista|condutor)/.test(n) ? listas.motorista
+            : /^cliente/.test(n) ? listas.cliente : null;
 
   if (/^vf$|c.digo/.test(n)) {
     return '<label for="' + id + '">' + nome + '</label>' +
@@ -368,7 +370,7 @@ function campoViagem(nome, cfg, listas) {
   if (/data|partida|chegada|regresso/.test(n)) {
     return '<label for="' + id + '">' + nome + '</label><input id="' + id + '" type="date">';
   }
-  if (/valor\s*combinado/.test(n)) {
+  if (RE_COMBINADO.test(nome)) {
     return '<label for="' + id + '">' + nome + '</label>' +
            '<input id="' + id + '" type="text" inputmode="decimal" data-num="1" placeholder="0">' +
            '<div class="hint">O valor acordado com o cliente. Os recebimentos lançados em Contas com este VF ' +

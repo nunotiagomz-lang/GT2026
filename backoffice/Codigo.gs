@@ -54,7 +54,8 @@ var FICA_INVESTIMENTO = 'Investimento';
 /* Valor acordado com o cliente para a viagem. A coluna é criada na folha
    Viagens na primeira viagem que o tiver. */
 var COL_COMBINADO = 'Valor Combinado (MZN)';
-var RE_COMBINADO = /valor\s*combinado|^rate|tarifa|pre[çc]o\s*(acordado|combinado)/i;
+/* «Valor Rate» é o nome usado na folha Viagens; os outros ficam como alternativa */
+var RE_COMBINADO = /valor\s*(combinado|(do\s*|da\s*)?rate)|^rate|\brate\b|tarifa|pre[çc]o\s*(acordado|combinado)/i;
 
 /* Recibos que o motorista tem de entregar para justificar as despesas da
    viagem. As diárias não têm recibo. */

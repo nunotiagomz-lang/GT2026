@@ -2254,7 +2254,8 @@ function tripsData() {
                           /prov[íìi]ncia/i, /rota|percurso|destino/i),
     provincia: findCol(C, /^prov[íìi]ncia/i),
     km:        findCol(C, /^km$/i, /km\s*(percorrid|total|viagem)/i, /quil[óo]metr/i),
-    combinado: findCol(C, /valor\s*combinado|^rate|tarifa|pre[çc]o\s*(acordado|combinado)/i),
+    /* valor acordado com o cliente — na folha chama-se «Valor Rate» */
+    combinado: findCol(C, /valor\s*(combinado|(do\s*|da\s*)?rate)|^rate|\brate\b|tarifa|pre[çc]o\s*(acordado|combinado)/i),
     fatura:    findCol(C, /^(factura|fatura)/i),
     receita:   findCol(C, /receita|frete|faturad/i, /valor\s*(da\s*)?(viagem|servi|frete)/i),
     despesa:   findCol(C, /despesas?\s*total/i, /^despesas?/i),
@@ -2765,11 +2766,12 @@ function backBtn(attr, label) {
 /* Ficha completa de uma viagem: pagamento, custos e recibos (do livro geral),
    todos os campos da folha agrupados, e os movimentos ligados ao VF. */
 const GRUPOS_VIAGEM = [
-  { t: "Identificação",       re: /^(factura|fatura|vf$|c[óo]digo|req|tipo\s*viagem|condi[çc])/i },
-  { t: "Valores",             re: /valor|combinado|receita|rate|tarifa|frete/i },
+  { t: "Identificação",       re: /^(factura|fatura|vf$|c[óo]digo|req|categoria|tipo\s*(de\s*)?viagem|condi[çc])/i },
+  { t: "Valores",             re: /valor|combinado|receita|\brate\b|tarifa|frete/i },
+  { t: "Motorista: adiantamentos, diárias e justificação",
+                              re: /di[áa]ria|transf|despesa|saldo|justific|adiantament|devolvid|portage|combust/i },
   { t: "Rota e datas",        re: /destino|origem|prov|trajec|rota|percurso|partida|regresso|chegada|^km|dias|data/i },
   { t: "Equipa e viatura",    re: /cliente|motorista|ajudante|viatura|trailer|matr|reboque/i },
-  { t: "Motorista: transferências e justificação", re: /di[áa]ria|transf|despesa|saldo|justific|portage|combust/i },
 ];
 function viagemDetalheHTML(td) {
   const t = td.trips.find(x => x.cod === viagemNav.sel);
