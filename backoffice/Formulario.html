@@ -19,7 +19,24 @@
          background: var(--page); color: var(--ink); padding: 16px; max-width: 640px; margin: 0 auto; }
   h1 { font-size: 18px; margin-bottom: 2px; }
   .sub { font-size: 12.5px; color: var(--ink-2); margin-bottom: 16px; }
-  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--hairline); margin-bottom: 16px; }
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--hairline); margin-bottom: 16px;
+          overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs button { flex: none; }
+  .escolha { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+  .escolha label { flex: 1 1 140px; margin: 0; display: flex; gap: 8px; align-items: flex-start;
+    border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; cursor: pointer;
+    font-size: 13px; color: var(--ink); font-weight: 600; }
+  .escolha label small { display: block; font-weight: 400; color: var(--ink-2); font-size: 11.5px; margin-top: 2px; }
+  .escolha input { margin-top: 2px; }
+  .check { display: flex; gap: 8px; align-items: center; margin-top: 12px; font-size: 13px; color: var(--ink); font-weight: 600; }
+  .check input { width: auto; }
+  .bloco-socio { border-left: 3px solid var(--accent); padding-left: 12px; margin-top: 10px; }
+  .recibo { display: flex; gap: 10px; align-items: center; padding: 11px 0; border-bottom: 1px solid var(--hairline); }
+  .recibo:last-child { border-bottom: none; }
+  .recibo .t { flex: 1; min-width: 0; font-size: 13px; }
+  .recibo .t small { display: block; color: var(--ink-2); font-size: 11.5px; margin-top: 2px; }
+  .recibo button { flex: none; width: auto; padding: 8px 12px; font-size: 12.5px; }
   .tabs button { border: none; background: none; font-family: inherit; font-size: 14px; font-weight: 650;
     color: var(--ink-muted); padding: 10px 14px; cursor: pointer;
     border-bottom: 2.5px solid transparent; margin-bottom: -1px; }
@@ -64,6 +81,7 @@
   <button id="tabAbast" onclick="mostrar('abast')">Abastecimento</button>
   <button id="tabMov" onclick="mostrar('mov')">Contas</button>
   <button id="tabInv" onclick="mostrar('inv')">Sócios</button>
+  <button id="tabRec" onclick="mostrar('rec')">Recibos</button>
 </div>
 
 <div id="painelViagem">
@@ -90,17 +108,26 @@
     <div class="total" id="abTotal"><span>Total</span><span>0 MZN</span></div>
     <label for="abKm">Km no conta-quilómetros</label>
     <input id="abKm" type="text" inputmode="decimal" placeholder="0">
-    <label for="abQuem">Pago Por</label>
-    <input id="abQuem" type="text" list="lPagadores" placeholder="Posto, empresa ou sócio"
-           oninput="dicaAbastSocio()">
-    <label for="abMeio">Meio</label>
+    <label for="abMeio">Como foi pago</label>
     <select id="abMeio" onchange="dicaAbastSocio()">
-      <option value="">— por indicar —</option>
-      <option value="Caixa">Caixa</option>
-      <option value="Banco">Banco</option>
-      <option value="Sócio">Sócio</option>
+      <option value="">— escolher —</option>
+      <option value="Caixa">Caixa da empresa</option>
+      <option value="Banco">Banco da empresa</option>
+      <option value="Sócio">Por um sócio, do bolso dele</option>
     </select>
+    <div id="abBlocoSocio" class="bloco-socio" style="display:none">
+      <label for="abSocio">Qual sócio pagou</label>
+      <select id="abSocio" onchange="dicaAbastSocio()"></select>
+      <label>Fica como</label>
+      <div class="escolha">
+        <label><input type="radio" name="abFica" value="Adiantamento" checked onchange="dicaAbastSocio()">
+          <span>Adiantamento<small>a empresa devolve-lhe, ou abate ao que ele levou</small></span></label>
+        <label><input type="radio" name="abFica" value="Investimento" onchange="dicaAbastSocio()">
+          <span>Investimento<small>fica como capital e conta para as quotas</small></span></label>
+      </div>
+    </div>
     <div class="hint" id="abSocioHint"></div>
+    <label class="check"><input type="checkbox" id="abRecibo"> Recibo entregue pelo motorista</label>
     <div class="hint">Nos litros e no preço podes usar casas decimais com vírgula
       (ex.: <b>240,5</b> e <b>82,5</b>). O valor total é calculado automaticamente (litros × preço),
       e o abastecimento entra sozinho como <b>despesa de combustível</b> no livro geral —
@@ -118,7 +145,7 @@
     <select id="mvTipo" onchange="atualizarDica()"></select>
     <div class="hint" id="mvTipoHint"></div>
     <label for="mvCategoria">Categoria</label>
-    <input id="mvCategoria" type="text" list="lCategorias" placeholder="Ex.: Combustível">
+    <input id="mvCategoria" type="text" list="lCategorias" placeholder="Ex.: Combustível" oninput="atualizarDica()">
     <datalist id="lCategorias"></datalist>
     <label for="mvDescricao">Descrição</label>
     <input id="mvDescricao" type="text" placeholder="Ex.: Portagem Maputo - Tete">
@@ -136,13 +163,34 @@
       <option value="Banco">Banco</option>
       <option value="Sócio">Sócio</option>
     </select>
+    <div id="mvBlocoFica" class="bloco-socio" style="display:none">
+      <label>Esta despesa paga pelo sócio fica como</label>
+      <div class="escolha">
+        <label><input type="radio" name="mvFica" value="Adiantamento" checked onchange="atualizarDica()">
+          <span>Adiantamento<small>a empresa devolve-lhe, ou abate ao que ele levou</small></span></label>
+        <label><input type="radio" name="mvFica" value="Investimento" onchange="atualizarDica()">
+          <span>Investimento<small>fica como capital e conta para as quotas</small></span></label>
+      </div>
+    </div>
     <label for="mvViagem">Viagem (opcional)</label>
-    <select id="mvViagem"><option value="">— sem viagem —</option></select>
+    <select id="mvViagem" onchange="atualizarDica()"><option value="">— sem viagem —</option></select>
+    <div class="hint" id="mvViagemHint"></div>
+    <label class="check" id="mvReciboBloco" style="display:none"><input type="checkbox" id="mvRecibo"> Recibo entregue pelo motorista</label>
     <label for="mvNota">Nota (opcional)</label>
     <input id="mvNota" type="text" placeholder="Ex.: nº do documento">
   </div>
   <button class="primary" onclick="gravarMovimento()">Guardar lançamento</button>
   <div class="msg" id="msgMov"></div>
+</div>
+
+<div id="painelRec" style="display:none">
+  <div class="card">
+    <div class="titulo">Recibos por entregar</div>
+    <div class="hint" style="margin-top:0">Despesas de viagens que precisam de recibo — combustível, manutenção,
+      portagens, estadias (as diárias não têm). Quando o motorista entregar, marca aqui.</div>
+    <div id="listaRecibos"><div class="loading">A carregar…</div></div>
+  </div>
+  <div class="msg" id="msgRec"></div>
 </div>
 
 <div id="painelInv" style="display:none">
@@ -184,13 +232,33 @@
 var CONFIG = null;
 
 function mostrar(qual) {
-  ['viagem', 'abast', 'mov', 'inv'].forEach(function (q) {
-    var painel = { viagem: 'painelViagem', abast: 'painelAbast', mov: 'painelMov', inv: 'painelInv' }[q];
-    var aba = { viagem: 'tabViagem', abast: 'tabAbast', mov: 'tabMov', inv: 'tabInv' }[q];
+  ['viagem', 'abast', 'mov', 'inv', 'rec'].forEach(function (q) {
+    var painel = { viagem: 'painelViagem', abast: 'painelAbast', mov: 'painelMov', inv: 'painelInv', rec: 'painelRec' }[q];
+    var aba = { viagem: 'tabViagem', abast: 'tabAbast', mov: 'tabMov', inv: 'tabInv', rec: 'tabRec' }[q];
     document.getElementById(painel).style.display = q === qual ? '' : 'none';
     document.getElementById(aba).classList.toggle('on', q === qual);
   });
+  if (qual === 'rec') carregarRecibos();
 }
+
+/* valor escolhido num grupo de botões de rádio */
+function escolhido(nome) {
+  var el = document.querySelector('input[name="' + nome + '"]:checked');
+  return el ? el.value : '';
+}
+
+/* categorias que precisam de recibo do motorista (as diárias não têm) */
+function precisaRecibo(categoria) {
+  var c = String(categoria || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (/diari/.test(c)) return false;
+  return /combust|manuten|portage|estadia|alojament|hotel|pernoit|parque|oficina|pneu/.test(c);
+}
+
+/* combinado / recebido / pendente de cada viagem (para o formulário Contas) */
+var RESUMO_VF = {};
+function moeda(v) { return Math.round(v).toLocaleString('pt-PT'); }
+/* "A, B e C" */
+function juntarPT(acc, x, i, arr) { return !i ? x : acc + (i === arr.length - 1 ? ' e ' : ', ') + x; }
 
 function idDoCampo(nome) { return 'c_' + nome.replace(/[^a-zA-Z0-9]/g, '_'); }
 
@@ -221,7 +289,7 @@ function construirViagem(cfg) {
   var html = cfg.colunas.map(function (nome) {
     var id = idDoCampo(nome);
     var n = nome.toLowerCase();
-    var lista = /viatura|matr/.test(n) ? listas.viatura
+    var lista = /^(viatura|matr)/.test(n) ? listas.viatura
               : /motorista|condutor/.test(n) ? listas.motorista
               : /cliente/.test(n) ? listas.cliente : null;
 
@@ -239,6 +307,12 @@ function construirViagem(cfg) {
     }
     if (/data|partida|chegada/.test(n)) {
       return '<label for="' + id + '">' + nome + '</label><input id="' + id + '" type="date">';
+    }
+    if (/valor\s*combinado/.test(n)) {
+      return '<label for="' + id + '">' + nome + '</label>' +
+             '<input id="' + id + '" type="text" inputmode="decimal" data-num="1" placeholder="0">' +
+             '<div class="hint">O valor acordado com o cliente. Os recebimentos lançados em Contas com este VF ' +
+             'vão abatendo — a app mostra o pendente até a viagem ficar paga.</div>';
     }
     if (/km|litros|valor|receita|despesa|saldo|pre.o|quantidade|req/.test(n)) {
       /* data-num marca os campos que são convertidos de "1 234,5" para número
@@ -302,14 +376,14 @@ function gravarAbastecimento() {
     litros: valorNum('abLitros'),
     preco: valorNum('abPreco'),
     km: valorNum('abKm'),
-    quem: document.getElementById('abQuem').value,
-    meio: document.getElementById('abMeio').value
+    meio: document.getElementById('abMeio').value,
+    socio: document.getElementById('abSocio').value,
+    fica: escolhido('abFica'),
+    reciboEntregue: document.getElementById('abRecibo').checked
   };
   if (!dados.litros) { mensagem('msgAbast', 'Indica os litros.', true); return; }
-  if (dados.meio === 'Sócio' && CFG_MOV && !(CFG_MOV.socios || []).some(function (s) {
-        return s.toLowerCase() === String(dados.quem).trim().toLowerCase(); })) {
-    mensagem('msgAbast', 'Com Meio = Sócio, escreve em «Pago Por» o sócio que pagou.', true); return;
-  }
+  if (!dados.meio) { mensagem('msgAbast', 'Indica como foi pago: caixa, banco ou um sócio.', true); return; }
+  if (dados.meio === 'Sócio' && !dados.socio) { mensagem('msgAbast', 'Escolhe qual dos sócios pagou.', true); return; }
 
   google.script.run
     .withSuccessHandler(function (res) {
@@ -318,13 +392,16 @@ function gravarAbastecimento() {
           ', mas não entrou no livro geral: ' + res.aviso, true);
       } else {
         mensagem('msgAbast', '✓ ' + (res.total ? res.total.toLocaleString('pt-PT') + ' MZN guardados em: '
-          : 'Guardado em: ') + res.folhas.join(' e ') + '.', false);
+          : 'Guardado em: ') + res.folhas.reduce(juntarPT, '') + '.' +
+          (res.socio ? ' Na conta de ' + res.socio + ' como ' + res.fica.toLowerCase() + '.' : ''), false);
       }
       /* limpa tudo o que é do abastecimento que acabou de entrar: nada de
          valores antigos a seguirem caladamente para o lançamento seguinte */
-      ['abBomba', 'abLocal', 'abLitros', 'abPreco', 'abKm'].forEach(function (id) {
+      ['abBomba', 'abLocal', 'abLitros', 'abPreco', 'abKm', 'abMeio'].forEach(function (id) {
         document.getElementById(id).value = '';
       });
+      document.getElementById('abRecibo').checked = false;
+      dicaAbastSocio();
       somarAbastecimento();
       recarregar();
     })
@@ -362,6 +439,9 @@ function construirMovimento(cfg) {
     sugestoes(limpa(cfg.socios).concat([cfg.pagadorEmpresa]).concat(cfg.pagadores || []));
   /* bombas já usadas: saem de quem recebeu os pagamentos de combustível */
   document.getElementById('lBombas').innerHTML = sugestoes(cfg.bombas || []);
+  var selS = document.getElementById('abSocio'), antesS = selS.value;
+  selS.innerHTML = '<option value="">— escolher —</option>' + opcoes(cfg.socios);
+  if (antesS) selS.value = antesS;
   atualizarDica();
   construirInvestimento(cfg);
 }
@@ -458,16 +538,21 @@ function atualizarDicaInv() {
   });
 }
 
-/* abastecimento pago do bolso de um sócio */
+/* abastecimento: como foi pago e o que acontece em cada caso */
 function dicaAbastSocio() {
   var meio = document.getElementById('abMeio').value;
-  var quem = document.getElementById('abQuem').value.trim();
-  var socio = CFG_MOV && (CFG_MOV.socios || []).filter(function (s) {
-    return s.toLowerCase() === quem.toLowerCase();
-  })[0];
-  document.getElementById('abSocioHint').textContent = meio !== 'Sócio' ? ''
-    : socio ? 'Pago do bolso de ' + socio + ': conta a favor dele nos adiantamentos (abate ao que levou da empresa, ou a empresa fica a dever-lhe).'
-            : 'Com Meio = Sócio, escreve em «Pago Por» o sócio que pagou.';
+  document.getElementById('abBlocoSocio').style.display = meio === 'Sócio' ? '' : 'none';
+  var socio = document.getElementById('abSocio').value;
+  var fica = escolhido('abFica');
+  document.getElementById('abSocioHint').textContent =
+      meio === 'Caixa' || meio === 'Banco'
+        ? 'Despesa normal da empresa: sai da ' + (meio === 'Caixa' ? 'caixa' : 'conta do banco') + ' e entra como despesa de combustível.'
+    : meio !== 'Sócio' ? ''
+    : !socio ? 'Escolhe qual dos sócios pagou.'
+    : fica === 'Investimento'
+      ? 'Despesa de combustível no livro geral, e ' + socio + ' fica com este valor como capital investido (conta para as quotas).'
+      : 'Despesa de combustível no livro geral, e a empresa fica a dever este valor a ' + socio +
+        ' (ou abate ao que ele tinha levado de adiantamento).';
 }
 
 function gravarInvestimento() {
@@ -493,7 +578,7 @@ function gravarInvestimento() {
           res.aviso, true);
       } else {
         mensagem('msgInv', '✓ ' + res.total.toLocaleString('pt-PT') +
-          ' MZN guardados em: ' + res.folhas.join(' e ') + '.' +
+          ' MZN guardados em: ' + res.folhas.reduce(juntarPT, '') + '.' +
           (res.colunaTipoCriada ? ' (Acrescentei a coluna «Tipo» ao livro dos investidores.)' : '') +
           (res.avisos && res.avisos.length ? ' Atenção: ' + res.avisos.join(' ') : ''),
           !!(res.avisos && res.avisos.length));
@@ -554,6 +639,30 @@ function atualizarDica() {
       : doBolso
         ? 'Para o dinheiro de um sócio contar na conta dele, usa o separador Sócios.'
         : 'Vai só para o livro Movimentos Geral.';
+
+  /* despesa paga do bolso de um sócio: adiantamento ou investimento */
+  document.getElementById('mvBlocoFica').style.display = doBolso && tipo === 'Despesa' ? '' : 'none';
+  if (doBolso && tipo === 'Despesa' && !semColuna) {
+    document.getElementById('mvQuemHint').textContent = escolhido('mvFica') === 'Investimento'
+      ? 'Despesa no livro geral, e ' + socio + ' fica com este valor como capital investido (conta para as quotas).'
+      : 'Despesa no livro geral, e a empresa fica a dever este valor a ' + socio + ' (ou abate ao que ele tinha levado).';
+  }
+
+  /* despesa de uma viagem que precisa de recibo do motorista */
+  var vf = document.getElementById('mvViagem').value;
+  var cat = document.getElementById('mvCategoria').value;
+  document.getElementById('mvReciboBloco').style.display =
+    tipo === 'Despesa' && vf && precisaRecibo(cat) ? '' : 'none';
+
+  /* recebimento de uma viagem: quanto falta receber */
+  var r = RESUMO_VF[String(vf).replace(/\D/g, '')];
+  document.getElementById('mvViagemHint').textContent = !vf || !r ? ''
+    : tipo === 'Recebimento'
+      ? (r.combinado
+          ? 'Combinado ' + moeda(r.combinado) + ' MZN · já recebido ' + moeda(r.recebido) + ' · ' +
+            (r.combinado - r.recebido > 0.5 ? 'falta ' + moeda(r.combinado - r.recebido) + ' MZN' : 'paga ✓')
+          : 'Esta viagem não tem valor combinado — já recebido ' + moeda(r.recebido) + ' MZN.')
+      : '';
 }
 
 function gravarMovimento() {
@@ -566,17 +675,20 @@ function gravarMovimento() {
     quem: document.getElementById('mvQuem').value,
     meio: document.getElementById('mvMeio').value,
     viagem: document.getElementById('mvViagem').value,
-    nota: document.getElementById('mvNota').value
+    nota: document.getElementById('mvNota').value,
+    fica: escolhido('mvFica'),
+    reciboEntregue: document.getElementById('mvRecibo').checked
   };
   if (!dados.valor) { mensagem('msgMov', 'Indica o valor.', true); return; }
 
   google.script.run
     .withSuccessHandler(function (res) {
       if (res.aviso) mensagem('msgMov', '✓ Guardado, mas: ' + res.aviso, true);
-      else mensagem('msgMov', '✓ Lançamento guardado em: ' + res.folhas.join(' e ') + '.', false);
+      else mensagem('msgMov', '✓ Lançamento guardado em: ' + res.folhas.reduce(juntarPT, '') + '.', false);
       ['mvDescricao', 'mvValor', 'mvNota'].forEach(function (id) {
         document.getElementById(id).value = '';
       });
+      document.getElementById('mvRecibo').checked = false;
       recarregar();
     })
     .withFailureHandler(function (err) {
@@ -585,7 +697,51 @@ function gravarMovimento() {
     .guardarMovimento(dados);
 }
 
+/* ---- separador Recibos: o que o motorista ainda tem de entregar ---- */
+var RECIBOS = [];
+function carregarRecibos() {
+  document.getElementById('listaRecibos').innerHTML = '<div class="loading">A carregar…</div>';
+  google.script.run
+    .withSuccessHandler(function (lista) {
+      RECIBOS = lista || [];
+      var el = document.getElementById('listaRecibos');
+      if (!RECIBOS.length) { el.innerHTML = '<div class="loading">✓ Nenhum recibo por entregar.</div>'; return; }
+      var total = RECIBOS.reduce(function (a, r) { return a + r.valor; }, 0);
+      el.innerHTML = '<div class="hint" style="margin:0 0 6px">' + RECIBOS.length + ' por entregar · ' + moeda(total) + ' MZN</div>' +
+        RECIBOS.map(function (r, i) {
+          return '<div class="recibo"><div class="t"><b>' + (r.viagem ? 'VF' + r.viagem + ' · ' : '') +
+            (r.categoria || 'Despesa') + '</b> · ' + moeda(r.valor) + ' MZN<small>' + r.data +
+            (r.descricao ? ' · ' + r.descricao : '') + '</small></div>' +
+            '<button class="primary" onclick="marcarRecibo(' + i + ', this)">Entregue</button></div>';
+        }).join('');
+    })
+    .withFailureHandler(function (err) {
+      document.getElementById('listaRecibos').innerHTML = '<div class="loading">Erro: ' + err.message + '</div>';
+    })
+    .listarRecibosPendentes();
+}
+function marcarRecibo(i, btn) {
+  var r = RECIBOS[i];
+  btn.disabled = true; btn.textContent = '…';
+  google.script.run
+    .withSuccessHandler(function () {
+      mensagem('msgRec', '✓ Recibo marcado como entregue: ' + (r.viagem ? 'VF' + r.viagem + ' · ' : '') +
+        r.categoria + ' · ' + moeda(r.valor) + ' MZN.', false);
+      carregarRecibos();
+    })
+    .withFailureHandler(function (err) {
+      btn.disabled = false; btn.textContent = 'Entregue';
+      mensagem('msgRec', 'Não foi possível marcar: ' + err.message, true);
+    })
+    .marcarReciboEntregue(r.linha, { descricao: r.descricao, valor: r.valor });
+}
+
 function recarregar() {
+  google.script.run
+    .withSuccessHandler(function (r) { RESUMO_VF = r || {}; atualizarDica(); })
+    .withFailureHandler(function () {})
+    .resumoViagens();
+
   google.script.run
     .withSuccessHandler(construirMovimento)
     .withFailureHandler(function (err) {

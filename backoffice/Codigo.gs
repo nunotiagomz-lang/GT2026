@@ -45,6 +45,31 @@ var TIPO_DESPESA_SOCIO = 'Despesa paga pelo sócio';
 
 var TIPOS_INVESTIDORES = TIPOS_CAPITAL.concat(TIPOS_ADIANTAMENTO);
 
+/* Despesa paga do bolso de um sócio: fica como uma destas duas coisas.
+   Adiantamento → a empresa devolve-lhe (ou abate ao que ele tinha levado).
+   Investimento → fica como capital e conta para as quotas. */
+var FICA_ADIANTAMENTO = 'Adiantamento';
+var FICA_INVESTIMENTO = 'Investimento';
+
+/* Valor acordado com o cliente para a viagem. A coluna é criada na folha
+   Viagens na primeira viagem que o tiver. */
+var COL_COMBINADO = 'Valor Combinado (MZN)';
+var RE_COMBINADO = /valor\s*combinado|^rate|tarifa|pre[çc]o\s*(acordado|combinado)/i;
+
+/* Recibos que o motorista tem de entregar para justificar as despesas da
+   viagem. As diárias não têm recibo. */
+var COL_RECIBO = 'Recibo';
+var RECIBO_ENTREGUE = 'Entregue';
+var RECIBO_PENDENTE = 'Por entregar';
+function precisaRecibo_(categoria) {
+  var c = semAcentos_(categoria);
+  if (/diari/.test(c)) return false;
+  return /combust|manuten|portage|estadia|alojament|hotel|pernoit|parque|oficina|pneu/.test(c);
+}
+
+/* Categorias sugeridas mesmo antes de existirem no histórico. */
+var CATEGORIAS_BASE = ['Combustível', 'Portagens', 'Manutenção', 'Estadias', 'Diárias', 'Parqueamento'];
+
 /* Quem pode lançar dados. Lista vazia = qualquer pessoa com o link
    (só faz sentido se a app for publicada apenas para a organização). */
 var EMAILS_AUTORIZADOS = [
@@ -95,24 +120,25 @@ function cabecalho_(sh) {
 }
 
 /**
- * Cabeçalho de uma folha de abastecimentos. Aqui não serve a regra do
- * cabecalho_ ("primeira linha com 2 células"), porque essa apanharia o bloco
- * de título da viagem ("Viagem | VF56"). O cabeçalho é a linha com MAIS
- * células preenchidas das primeiras — a mesma regra que a app de consulta usa.
+ * Cabeçalho de uma folha de abastecimentos, encontrado pelos NOMES das
+ * colunas (Data, Litros, Preço, Valor, Km, Local, Bomba). Nem a regra do
+ * cabecalho_ (primeira linha com 2 células — apanharia «Viagem | VF56» do
+ * bloco de título) nem «a linha mais cheia» servem: um abastecimento com um
+ * valor solto numa coluna sem título ficava mais cheio do que o cabeçalho, e
+ * o lançamento seguinte era gravado como uma linha vazia.
+ * A mesma regra está na app (linhaCabecalhoAbast em index.html).
  */
+var RE_CAB_ABAST = /^(data|local|bomba|posto|litros?|pre[çc]o|valor|montante|total|km|kms|quil[óo]metr|od[óo]metro|conta)/i;
 function cabecalhoAbast_(sh) {
-  var n = Math.min(10, sh.getLastRow() || 1);
+  var n = Math.min(12, sh.getLastRow() || 1);
   var valores = sh.getRange(1, 1, n, sh.getLastColumn() || 1).getValues();
-  var melhor = -1, quantas = 0;
   for (var i = 0; i < valores.length; i++) {
-    var preenchidas = valores[i].filter(function (c) { return String(c).trim(); }).length;
-    if (preenchidas > quantas) { quantas = preenchidas; melhor = i; }
+    var conhecidas = valores[i].filter(function (c) { return RE_CAB_ABAST.test(String(c).trim()); }).length;
+    if (conhecidas >= 3) {
+      return { linha: i + 1, cols: valores[i].map(function (c) { return String(c).trim(); }) };
+    }
   }
-  if (melhor < 0 || quantas < 3) return { linha: 1, cols: [] };
-  return {
-    linha: melhor + 1,
-    cols: valores[melhor].map(function (c) { return String(c).trim(); })
-  };
+  return { linha: 1, cols: [] };
 }
 
 /** Número à portuguesa: aceita "82,5", "1 234,56" e também o ponto. */
@@ -177,7 +203,7 @@ function obterConfiguracao() {
 
   var iVF   = indiceDe_(cab.cols, [/^vf$/i, /c[óo]digo/i]);
   var iMot  = indiceDe_(cab.cols, [/motorista|condutor/i]);
-  var iVia  = indiceDe_(cab.cols, [/viatura|matr[íi]cula/i]);
+  var iVia  = indiceDe_(cab.cols, [/^matr[íi]cula/i, /^viatura/i, /viatura|matr[íi]cula/i]);
   var iCli  = indiceDe_(cab.cols, [/cliente/i]);
 
   /* próximo número VF */
@@ -215,8 +241,14 @@ function obterConfiguracao() {
     return out.sort();
   }
 
+  /* o valor combinado aparece no formulário mesmo antes de a coluna existir:
+     é criada na primeira viagem que o tiver */
+  var colunas = cab.cols.filter(function (c) { return c; });
+  if (indiceDe_(colunas, [RE_COMBINADO]) < 0) colunas.push(COL_COMBINADO);
+
   return {
-    colunas: cab.cols.filter(function (c) { return c; }),
+    colunas: colunas,
+    colunaCombinado: colunas[indiceDe_(colunas, [RE_COMBINADO])],
     proximoVF: maxVF + 1,
     listas: {
       viatura: viaturas.length ? viaturas : distintos(iVia),
@@ -237,6 +269,10 @@ function guardarViagem(valores) {
   try {
     var sh = folha_(PLANO_ID, FOLHA_VIAGENS);
     var cab = cabecalho_(sh);
+    /* valor combinado preenchido e a coluna ainda não existe: cria-a no fim */
+    if (num_(valores[COL_COMBINADO]) && indiceDe_(cab.cols, [RE_COMBINADO]) < 0) {
+      cab = garantirColuna_(sh, COL_COMBINADO, [RE_COMBINADO]).cab;
+    }
     var iVF = indiceDe_(cab.cols, [/^vf$/i, /c[óo]digo/i]);
 
     /* recalcula o código no momento da gravação (o ecrã pode estar desatualizado) */
@@ -374,12 +410,13 @@ function guardarAbastecimento(codigo, dados) {
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    /* pago do bolso de um sócio: valida ANTES de escrever o que quer que seja */
-    var socioPagou = null;
-    if (dados.meio === 'Sócio') {
-      socioPagou = socioChamado_(dados.quem);
-      if (!socioPagou) throw new Error('Com Meio = Sócio, em «Pago Por» tem de estar o sócio que pagou.');
+    /* como foi pago — valida ANTES de escrever o que quer que seja:
+       Caixa / Banco → despesa normal da empresa;
+       Sócio         → despesa + conta do sócio (adiantamento ou investimento) */
+    if (!/^(Caixa|Banco|Sócio)$/.test(dados.meio || '')) {
+      throw new Error('Indica como foi pago: Caixa, Banco ou Sócio.');
     }
+    var pago = pagamentoDoSocio_(dados);
     var nomeFolha = 'VF' + String(codigo).replace(/\D/g, '');
     criarFolhaAbastecimentos_(nomeFolha);
     var sh = folha_(ABAST_ID, nomeFolha);
@@ -424,24 +461,27 @@ function guardarAbastecimento(codigo, dados) {
         categoria: CATEGORIA_COMBUSTIVEL,
         descricao: 'Abastecimento' + (onde ? ' ' + onde : '') + ' · ' + nomeFolha,
         valor: total,
-        meio: dados.meio || '',
-        quem: dados.quem || dados.bomba || '',
+        meio: dados.meio,
+        quem: pago ? pago.socio : (dados.bomba || dados.quem || ''),
         viagem: nomeFolha,
-        nota: litros ? litros + ' L' + (preco ? ' a ' + preco + ' MZN/L' : '') : ''
+        nota: litros ? litros + ' L' + (preco ? ' a ' + preco + ' MZN/L' : '') : '',
+        /* combustível de uma viagem: o motorista tem de entregar o recibo */
+        recibo: dados.reciboEntregue ? RECIBO_ENTREGUE : RECIBO_PENDENTE
       });
       if (!aviso) escritas.push(FOLHA_GERAL);
 
-      /* e conta a favor do sócio nos adiantamentos */
-      if (socioPagou) {
-        var avisoS = registarDespesaDoSocio_(socioPagou, {
+      /* pago por um sócio: vai também para a conta dele */
+      if (pago) {
+        var avisoS = registarDespesaDoSocio_(pago.socio, {
           data: dados.data, categoria: CATEGORIA_COMBUSTIVEL, valor: total, viagem: nomeFolha,
-          descricao: 'Abastecimento' + (onde ? ' ' + onde : '') + ' · ' + nomeFolha
+          descricao: 'Abastecimento' + (onde ? ' ' + onde : '') + ' · ' + nomeFolha, fica: pago.fica
         });
-        if (avisoS) aviso = (aviso ? aviso + ' · ' : '') + 'Adiantamentos: ' + avisoS;
+        if (avisoS) aviso = (aviso ? aviso + ' · ' : '') + 'Conta de ' + pago.socio + ': ' + avisoS;
         else escritas.push(FOLHA_MOVS);
       }
     }
-    return { ok: true, folha: nomeFolha, total: total, folhas: escritas, aviso: aviso };
+    return { ok: true, folha: nomeFolha, total: total, folhas: escritas, aviso: aviso,
+             fica: pago ? pago.fica : null, socio: pago ? pago.socio : null };
   } finally {
     lock.releaseLock();
   }
@@ -519,6 +559,9 @@ function obterConfiguracaoMovimentos() {
     juntarCategorias(shI);
   } catch (e) { /* livro dos investidores ainda não existe */ }
 
+  CATEGORIAS_BASE.forEach(function (c) {
+    if (!categorias.some(function (x) { return semAcentos_(x) === semAcentos_(c); })) categorias.push(c);
+  });
   categorias.sort();
   /* na lista de escolha, os sócios primeiro; depois o resto do histórico */
   var outros = pagadores.filter(function (v) {
@@ -575,7 +618,30 @@ function escreverGeral_(dados) {
   por([/pago\s*por|respons|contraparte|fornecedor/i], dados.quem || '');
   por([/^(vf|viagem)$/i], dados.viagem ? String(dados.viagem).replace(/\D/g, '') : '');
   por([/nota|observ/i], dados.nota || '');
+  if (dados.recibo) {
+    var g = garantirColuna_(sh, COL_RECIBO, [/^recibo/i]);
+    while (linha.length < g.cab.cols.length) linha.push('');
+    linha[indiceDe_(g.cab.cols, [/^recibo/i])] = dados.recibo;
+  }
   sh.appendRow(linha);
+}
+
+/** Estado do recibo de uma despesa (vazio quando não se aplica). */
+function estadoRecibo_(dados) {
+  if (dados.tipo !== 'Despesa' || !dados.viagem || !precisaRecibo_(dados.categoria)) return '';
+  return dados.reciboEntregue ? RECIBO_ENTREGUE : RECIBO_PENDENTE;
+}
+
+/**
+ * Despesa paga do bolso de um sócio: quem foi e como fica. Lança um erro
+ * claro se faltar o sócio — antes de se escrever o que quer que seja.
+ */
+function pagamentoDoSocio_(dados) {
+  if (dados.meio !== 'Sócio') return null;
+  var socio = socioChamado_(dados.socio || dados.quem);
+  if (!socio) throw new Error('Pago por um sócio: escolhe qual dos sócios pagou.');
+  var fica = dados.fica === FICA_INVESTIMENTO ? FICA_INVESTIMENTO : FICA_ADIANTAMENTO;
+  return { socio: socio, fica: fica };
 }
 
 /**
@@ -590,20 +656,21 @@ function guardarMovimento(dados) {
     if (!num_(dados.valor)) throw new Error('Indica um valor.');
     if (!String(dados.quem || '').trim()) throw new Error('Indica quem pagou ou recebeu.');
 
-    /* despesa paga do bolso de um sócio: entra também nos adiantamentos dele */
-    var socio = null;
-    if (dados.tipo === 'Despesa' && dados.meio === 'Sócio') {
-      socio = socioChamado_(dados.quem);
-      if (!socio) throw new Error('Com Meio = Sócio, em «Pago Por» tem de estar o sócio que pagou.');
-    }
+    /* despesa paga do bolso de um sócio: vai também para a conta dele,
+       como adiantamento (a empresa devolve) ou como investimento (capital) */
+    var pago = dados.tipo === 'Despesa' ? pagamentoDoSocio_(dados) : null;
+    if (pago) dados.quem = dados.quem || pago.socio;
+    dados.recibo = estadoRecibo_(dados);
     escreverGeral_(dados);
     var folhas = [FOLHA_GERAL], aviso = null;
-    if (socio) {
-      aviso = registarDespesaDoSocio_(socio, dados);
+    if (pago) {
+      aviso = registarDespesaDoSocio_(pago.socio, {
+        data: dados.data, categoria: dados.categoria, descricao: dados.descricao,
+        valor: dados.valor, viagem: dados.viagem, fica: pago.fica });
       if (!aviso) folhas.push(FOLHA_MOVS);
-      else aviso = 'Entrou no livro geral, mas não nos adiantamentos de ' + socio + ': ' + aviso;
+      else aviso = 'Entrou no livro geral, mas não na conta de ' + pago.socio + ': ' + aviso;
     }
-    return { ok: true, folhas: folhas, aviso: aviso };
+    return { ok: true, folhas: folhas, aviso: aviso, fica: pago ? pago.fica : null };
   } finally {
     lock.releaseLock();
   }
@@ -733,12 +800,19 @@ function sentidoDe_(tipo) {
  * A coluna é acrescentada no FIM do cabeçalho, para não deslocar fórmulas.
  * As linhas antigas, sem tipo, continuam a contar como Investimento.
  */
-function garantirColunaTipo_(sh) {
+function garantirColunaTipo_(sh) { return garantirColuna_(sh, 'Tipo', [/^tipo$/i]); }
+
+/**
+ * Garante que a folha tem a coluna `nome` (procurada pelos `padroes`).
+ * Se faltar, é acrescentada no FIM do cabeçalho — nunca no meio, para não
+ * deslocar fórmulas. Devolve o cabeçalho atualizado.
+ */
+function garantirColuna_(sh, nome, padroes) {
   var cab = cabecalho_(sh);
-  if (indiceDe_(cab.cols, [/^tipo$/i]) >= 0) return { cab: cab, criada: false };
+  if (indiceDe_(cab.cols, padroes) >= 0) return { cab: cab, criada: false };
   var ultima = 0;
   for (var i = 0; i < cab.cols.length; i++) if (cab.cols[i]) ultima = i + 1;
-  sh.getRange(cab.linha, ultima + 1).setValue('Tipo');
+  sh.getRange(cab.linha, ultima + 1).setValue(nome);
   return { cab: cabecalho_(sh), criada: true };
 }
 
@@ -811,8 +885,11 @@ function saldosAdiantamentos_() {
  */
 function registarDespesaDoSocio_(socio, d) {
   try {
+    var tipo = d.fica === FICA_INVESTIMENTO ? 'Investimento' : TIPO_DESPESA_SOCIO;
     var sh = folhaEntre_(PLANO_ID, [FOLHA_MOVS, FOLHA_MOVS_ALT]);
-    var cab = garantirColunaTipo_(sh).cab;
+    /* a coluna Tipo só é obrigatória quando não é investimento: uma linha sem
+       tipo neste livro sempre contou como investimento */
+    var cab = tipo === 'Investimento' ? cabecalho_(sh) : garantirColunaTipo_(sh).cab;
     var col = colunaDoSocio_(cab.cols, socio);
     if (col < 0) return '«' + socio + '» não tem coluna na folha ' + sh.getName() + '.';
     var linha = [];
@@ -824,13 +901,105 @@ function registarDespesaDoSocio_(socio, d) {
     por([/^data$/i], d.data || '');
     por([/^item$/i], d.categoria || TIPO_DESPESA_SOCIO);
     por([/descri/i, /nota/i], d.descricao || '');
-    por([/^tipo$/i], TIPO_DESPESA_SOCIO);
+    por([/^tipo$/i], tipo);
     por([/categoria/i], d.categoria || '');
     por([/^(vf|viagem)$/i], d.viagem ? String(d.viagem).replace(/\D/g, '') : '');
     linha[col] = Math.round(num_(d.valor) * 100) / 100;
     sh.appendRow(linha);
     return null;
   } catch (e) { return e.message || String(e); }
+}
+
+/**
+ * Por viagem: valor combinado e quanto já se recebeu (recebimentos do livro
+ * geral com o mesmo VF). Usado pelo formulário para mostrar o pendente.
+ * Devolve { "2": { combinado: 50000, recebido: 20000 }, ... }
+ */
+function resumoViagens() {
+  verificarAcesso_();
+  var out = {};
+  var sh = folha_(PLANO_ID, FOLHA_VIAGENS);
+  var cab = cabecalho_(sh);
+  var iVF = indiceDe_(cab.cols, [/^vf$/i, /c[óo]digo/i]);
+  var iC = indiceDe_(cab.cols, [RE_COMBINADO]);
+  if (iVF >= 0 && sh.getLastRow() > cab.linha) {
+    sh.getRange(cab.linha + 1, 1, sh.getLastRow() - cab.linha, cab.cols.length).getValues()
+      .forEach(function (r) {
+        var n = String(r[iVF]).replace(/\D/g, '');
+        if (n) out[n] = { combinado: iC >= 0 ? num_(r[iC]) : 0, recebido: 0 };
+      });
+  }
+  try {
+    var shG = folha_(PLANO_ID, FOLHA_GERAL);
+    var cg = cabecalho_(shG);
+    var iT = indiceDe_(cg.cols, [/^tipo$/i]), iV = indiceDe_(cg.cols, [/^(vf|viagem)$/i]);
+    var iVal = indiceDe_(cg.cols, [/^valor/i, /montante/i]);
+    if (iT >= 0 && iV >= 0 && iVal >= 0 && shG.getLastRow() > cg.linha) {
+      shG.getRange(cg.linha + 1, 1, shG.getLastRow() - cg.linha, cg.cols.length).getValues()
+        .forEach(function (r) {
+          if (!/^receb/i.test(String(r[iT]).trim())) return;
+          var n = String(r[iV]).replace(/\D/g, '');
+          if (!n) return;
+          if (!out[n]) out[n] = { combinado: 0, recebido: 0 };
+          out[n].recebido += num_(r[iVal]);
+        });
+    }
+  } catch (e) { /* livro geral ainda não existe */ }
+  return out;
+}
+
+/** Despesas de viagens com o recibo por entregar (separador Recibos). */
+function listarRecibosPendentes() {
+  verificarAcesso_();
+  var sh = folha_(PLANO_ID, FOLHA_GERAL);
+  var cab = cabecalho_(sh);
+  var iR = indiceDe_(cab.cols, [/^recibo/i]);
+  if (iR < 0 || sh.getLastRow() <= cab.linha) return [];
+  var ix = {
+    data: indiceDe_(cab.cols, [/^data$/i]), cat: indiceDe_(cab.cols, [/categoria/i]),
+    desc: indiceDe_(cab.cols, [/descri/i]), val: indiceDe_(cab.cols, [/^valor/i, /montante/i]),
+    vf: indiceDe_(cab.cols, [/^(vf|viagem)$/i])
+  };
+  var dados = sh.getRange(cab.linha + 1, 1, sh.getLastRow() - cab.linha, cab.cols.length).getValues();
+  var out = [];
+  dados.forEach(function (r, k) {
+    if (String(r[iR]).trim() !== RECIBO_PENDENTE) return;
+    var d = r[ix.data];
+    out.push({
+      linha: cab.linha + 1 + k,
+      data: d instanceof Date ? Utilities.formatDate(d, 'Africa/Maputo', 'dd/MM/yyyy') : String(d),
+      categoria: String(r[ix.cat] || ''), descricao: String(r[ix.desc] || ''),
+      valor: num_(r[ix.val]), viagem: ix.vf >= 0 ? String(r[ix.vf]).replace(/\D/g, '') : ''
+    });
+  });
+  return out;
+}
+
+/**
+ * Marca o recibo de uma despesa como entregue. A linha é conferida (descrição
+ * e valor) antes de mexer: se a folha tiver mudado entretanto, não toca em nada.
+ */
+function marcarReciboEntregue(linha, conferir) {
+  verificarAcesso_();
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var sh = folha_(PLANO_ID, FOLHA_GERAL);
+    var cab = cabecalho_(sh);
+    var iR = indiceDe_(cab.cols, [/^recibo/i]);
+    var iD = indiceDe_(cab.cols, [/descri/i]), iV = indiceDe_(cab.cols, [/^valor/i, /montante/i]);
+    if (iR < 0 || linha <= cab.linha) throw new Error('Linha inválida.');
+    var r = sh.getRange(linha, 1, 1, cab.cols.length).getValues()[0];
+    if (String(r[iD] || '') !== String(conferir.descricao || '') ||
+        Math.abs(num_(r[iV]) - num_(conferir.valor)) > 0.01 ||
+        String(r[iR]).trim() !== RECIBO_PENDENTE) {
+      throw new Error('Esta linha mudou na folha entretanto — recarrega a lista e tenta outra vez.');
+    }
+    sh.getRange(linha, iR + 1).setValue(RECIBO_ENTREGUE);
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /** Códigos de viagem existentes, para o formulário de abastecimentos. */
