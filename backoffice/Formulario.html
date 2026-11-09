@@ -85,6 +85,7 @@
   <button id="tabAbast" onclick="mostrar('abast')">Abastecimento</button>
   <button id="tabMov" onclick="mostrar('mov')">Contas</button>
   <button id="tabInv" onclick="mostrar('inv')">Sócios</button>
+  <button id="tabMot" onclick="mostrar('mot')">Motorista</button>
   <button id="tabRec" onclick="mostrar('rec')">Recibos</button>
   <button id="tabFat" onclick="mostrar('fat')">Faturação</button>
 </div>
@@ -119,6 +120,7 @@
       <option value="Caixa">Caixa da empresa</option>
       <option value="Banco">Banco da empresa</option>
       <option value="Sócio">Por um sócio, do bolso dele</option>
+      <option value="Motorista">Pelo motorista, do adiantamento</option>
     </select>
     <div id="abBlocoSocio" class="bloco-socio" style="display:none">
       <label for="abSocio">Qual sócio pagou</label>
@@ -214,6 +216,76 @@
   <div class="msg" id="msgFat"></div>
 </div>
 
+<div id="painelMot" style="display:none">
+  <div class="card">
+    <label for="moViagem">Viagem</label>
+    <select id="moViagem" onchange="carregarContaMotorista()"><option value="">— escolher —</option></select>
+    <div id="moConta" class="hint"></div>
+    <label>Movimento</label>
+    <div class="escolha">
+      <label><input type="radio" name="moTipo" value="adiantamento" checked onchange="ajustarMotorista()">
+        <span>Adiantamento<small>dinheiro entregue ao motorista</small></span></label>
+      <label><input type="radio" name="moTipo" value="despesa" onchange="ajustarMotorista()">
+        <span>Despesa<small>paga por ele com o adiantamento</small></span></label>
+      <label><input type="radio" name="moTipo" value="devolucao" onchange="ajustarMotorista()">
+        <span>Devolução<small>o que sobrou volta</small></span></label>
+    </div>
+    <label for="moData">Data</label>
+    <input id="moData" type="date">
+    <label for="moValor">Valor (MZN)</label>
+    <input id="moValor" type="text" inputmode="decimal" placeholder="0">
+
+    <div id="moBlocoAd">
+      <label for="moMeio">De onde saiu o dinheiro</label>
+      <select id="moMeio" onchange="ajustarMotorista()">
+        <option value="">— escolher —</option>
+        <option value="Caixa">Caixa da empresa</option>
+        <option value="Banco">Banco da empresa</option>
+        <option value="Sócio">De um sócio, do bolso dele</option>
+      </select>
+      <div id="moBlocoSocio" class="bloco-socio" style="display:none">
+        <label for="moSocio">Qual sócio</label>
+        <select id="moSocio"></select>
+        <label>Fica como</label>
+        <div class="escolha">
+          <label><input type="radio" name="moFica" value="Adiantamento" checked>
+            <span>Adiantamento<small>a empresa devolve-lhe</small></span></label>
+          <label><input type="radio" name="moFica" value="Investimento">
+            <span>Investimento<small>capital, conta para as quotas</small></span></label>
+        </div>
+      </div>
+    </div>
+
+    <div id="moBlocoDesp" style="display:none">
+      <label for="moCategoria">Categoria</label>
+      <select id="moCategoria" onchange="ajustarMotorista()">
+        <option value="Portagens">Portagens</option>
+        <option value="Diárias">Diárias</option>
+        <option value="Despesas extras">Despesas extras</option>
+        <option value="Estadias">Estadias</option>
+        <option value="Parqueamento">Parqueamento</option>
+        <option value="Combustível">Combustível (sem litros — para litros usa Abastecimento)</option>
+        <option value="Manutenção">Manutenção</option>
+      </select>
+      <label for="moDescricao">Descrição (opcional)</label>
+      <input id="moDescricao" type="text" placeholder="Ex.: Portagem Maputo">
+      <label class="check" id="moReciboBloco"><input type="checkbox" id="moRecibo"> Recibo entregue pelo motorista</label>
+    </div>
+
+    <div id="moBlocoDev" style="display:none">
+      <label for="moPara">Para onde voltou</label>
+      <select id="moPara">
+        <option value="">— escolher —</option>
+        <option value="Caixa">Caixa da empresa</option>
+        <option value="Banco">Banco da empresa</option>
+      </select>
+    </div>
+    <div class="hint" id="moDica"></div>
+  </div>
+  <button class="primary" onclick="gravarMotorista()">Guardar</button>
+  <div class="msg" id="msgMot"></div>
+</div>
+
 <div id="painelRec" style="display:none">
   <div class="card">
     <div class="titulo">Recibos por entregar</div>
@@ -263,14 +335,15 @@
 var CONFIG = null;
 
 function mostrar(qual) {
-  ['viagem', 'abast', 'mov', 'inv', 'rec', 'fat'].forEach(function (q) {
-    var painel = { viagem: 'painelViagem', abast: 'painelAbast', mov: 'painelMov', inv: 'painelInv', rec: 'painelRec', fat: 'painelFat' }[q];
-    var aba = { viagem: 'tabViagem', abast: 'tabAbast', mov: 'tabMov', inv: 'tabInv', rec: 'tabRec', fat: 'tabFat' }[q];
+  ['viagem', 'abast', 'mov', 'inv', 'mot', 'rec', 'fat'].forEach(function (q) {
+    var painel = { viagem: 'painelViagem', abast: 'painelAbast', mov: 'painelMov', inv: 'painelInv', mot: 'painelMot', rec: 'painelRec', fat: 'painelFat' }[q];
+    var aba = { viagem: 'tabViagem', abast: 'tabAbast', mov: 'tabMov', inv: 'tabInv', mot: 'tabMot', rec: 'tabRec', fat: 'tabFat' }[q];
     document.getElementById(painel).style.display = q === qual ? '' : 'none';
     document.getElementById(aba).classList.toggle('on', q === qual);
   });
   if (qual === 'rec') carregarRecibos();
   if (qual === 'fat') carregarFaturacao();
+  if (qual === 'mot') { ajustarMotorista(); carregarContaMotorista(); }
 }
 
 /* valor escolhido num grupo de botões de rádio */
@@ -284,6 +357,10 @@ function precisaRecibo(categoria) {
   var c = String(categoria || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   if (/diari/.test(c)) return false;
   return /combust|manuten|portage|estadia|alojament|hotel|pernoit|parque|oficina|pneu/.test(c);
+}
+/* o que o motorista paga do adiantamento: tudo precisa de recibo menos as diárias */
+function precisaReciboMotorista(categoria) {
+  return !/diari/.test(String(categoria || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase());
 }
 
 /* combinado / recebido / pendente de cada viagem (para o formulário Contas) */
@@ -440,7 +517,7 @@ function gravarAbastecimento() {
     reciboEntregue: document.getElementById('abRecibo').checked
   };
   if (!dados.litros) { mensagem('msgAbast', 'Indica os litros.', true); return; }
-  if (!dados.meio) { mensagem('msgAbast', 'Indica como foi pago: caixa, banco ou um sócio.', true); return; }
+  if (!dados.meio) { mensagem('msgAbast', 'Indica como foi pago: caixa, banco, um sócio ou o motorista.', true); return; }
   if (dados.meio === 'Sócio' && !dados.socio) { mensagem('msgAbast', 'Escolhe qual dos sócios pagou.', true); return; }
 
   google.script.run
@@ -497,9 +574,11 @@ function construirMovimento(cfg) {
     sugestoes(limpa(cfg.socios).concat([cfg.pagadorEmpresa]).concat(cfg.pagadores || []));
   /* bombas já usadas: saem de quem recebeu os pagamentos de combustível */
   document.getElementById('lBombas').innerHTML = sugestoes(cfg.bombas || []);
-  var selS = document.getElementById('abSocio'), antesS = selS.value;
-  selS.innerHTML = '<option value="">— escolher —</option>' + opcoes(cfg.socios);
-  if (antesS) selS.value = antesS;
+  ['abSocio', 'moSocio'].forEach(function (id) {
+    var sel = document.getElementById(id), antes = sel.value;
+    sel.innerHTML = '<option value="">— escolher —</option>' + opcoes(cfg.socios);
+    if (antes) sel.value = antes;
+  });
   atualizarDica();
   construirInvestimento(cfg);
 }
@@ -605,6 +684,8 @@ function dicaAbastSocio() {
   document.getElementById('abSocioHint').textContent =
       meio === 'Caixa' || meio === 'Banco'
         ? 'Despesa normal da empresa: sai da ' + (meio === 'Caixa' ? 'caixa' : 'conta do banco') + ' e entra como despesa de combustível.'
+    : meio === 'Motorista'
+      ? 'Pago com o dinheiro adiantado ao motorista: despesa de combustível, e abate ao que ele tem de justificar quando entregar o recibo.'
     : meio !== 'Sócio' ? ''
     : !socio ? 'Escolhe qual dos sócios pagou.'
     : fica === 'Investimento'
@@ -755,6 +836,72 @@ function gravarMovimento() {
     .guardarMovimento(dados);
 }
 
+/* ---- separador Motorista: adiantamentos, despesas e devoluções ---- */
+function textoConta(c) {
+  if (!c) return '';
+  var sf = c.saldoFinal;
+  return (c.motorista ? c.motorista + ' · ' : '') + 'adiantado ' + moeda(c.adiantado) + ' · justificado ' + moeda(c.justificado) +
+    (c.porJustificar ? ' · sem recibo ' + moeda(c.porJustificar) : '') + ' · devolvido ' + moeda(c.devolvido) + ' → ' +
+    (Math.abs(sf) < 0.5 ? 'contas acertadas ✓' : sf > 0 ? 'tem de justificar ou devolver ' + moeda(sf) + ' MZN'
+                                                       : 'a empresa deve-lhe ' + moeda(-sf) + ' MZN');
+}
+function carregarContaMotorista() {
+  var vf = document.getElementById('moViagem').value;
+  var el = document.getElementById('moConta');
+  if (!vf) { el.textContent = ''; return; }
+  el.textContent = 'A ler a conta do motorista…';
+  google.script.run
+    .withSuccessHandler(function (c) { el.textContent = textoConta(c); })
+    .withFailureHandler(function (err) { el.textContent = 'Erro: ' + err.message; })
+    .obterContaMotorista(vf);
+}
+function ajustarMotorista() {
+  var t = escolhido('moTipo');
+  document.getElementById('moBlocoAd').style.display = t === 'adiantamento' ? '' : 'none';
+  document.getElementById('moBlocoDesp').style.display = t === 'despesa' ? '' : 'none';
+  document.getElementById('moBlocoDev').style.display = t === 'devolucao' ? '' : 'none';
+  document.getElementById('moBlocoSocio').style.display =
+    t === 'adiantamento' && document.getElementById('moMeio').value === 'Sócio' ? '' : 'none';
+  var cat = document.getElementById('moCategoria').value;
+  document.getElementById('moReciboBloco').style.display = precisaReciboMotorista(cat) ? '' : 'none';
+  document.getElementById('moDica').textContent =
+    t === 'adiantamento' ? 'Não é despesa: o dinheiro fica à guarda do motorista até ele o justificar ou devolver. Podes lançar vários adiantamentos na mesma viagem.'
+    : t === 'despesa' ? (precisaReciboMotorista(cat) ? 'Conta como despesa da viagem. Sem recibo, fica por justificar até o motorista o entregar.'
+                                            : 'Conta como despesa da viagem e fica logo justificada (não precisa de recibo).')
+    : 'O que sobrou do adiantamento volta à empresa e abate ao que o motorista tem de justificar.';
+}
+function gravarMotorista() {
+  var t = escolhido('moTipo');
+  var dados = {
+    movimento: t,
+    viagem: document.getElementById('moViagem').value,
+    data: formatarData(document.getElementById('moData').value),
+    valor: valorNum('moValor'),
+    meio: t === 'adiantamento' ? document.getElementById('moMeio').value
+        : t === 'devolucao' ? document.getElementById('moPara').value : 'Motorista',
+    socio: document.getElementById('moSocio').value,
+    fica: escolhido('moFica'),
+    categoria: document.getElementById('moCategoria').value,
+    descricao: document.getElementById('moDescricao').value,
+    reciboEntregue: document.getElementById('moRecibo').checked
+  };
+  if (!dados.viagem) { mensagem('msgMot', 'Escolhe a viagem.', true); return; }
+  if (!dados.valor) { mensagem('msgMot', 'Indica o valor.', true); return; }
+  if (t === 'adiantamento' && !dados.meio) { mensagem('msgMot', 'Indica de onde saiu o dinheiro.', true); return; }
+  if (t === 'adiantamento' && dados.meio === 'Sócio' && !dados.socio) { mensagem('msgMot', 'Escolhe qual dos sócios pagou.', true); return; }
+  if (t === 'devolucao' && !dados.meio) { mensagem('msgMot', 'Indica para onde voltou o dinheiro.', true); return; }
+  google.script.run
+    .withSuccessHandler(function (res) {
+      mensagem('msgMot', (res.aviso ? '✓ Guardado, mas: ' + res.aviso : '✓ Guardado em: ' + res.folhas.reduce(juntarPT, '') + '.') +
+        ' ' + textoConta(res.conta), !!res.aviso);
+      ['moValor', 'moDescricao'].forEach(function (id) { document.getElementById(id).value = ''; });
+      document.getElementById('moRecibo').checked = false;
+      document.getElementById('moConta').textContent = textoConta(Object.assign({ motorista: res.motorista }, res.conta));
+    })
+    .withFailureHandler(function (err) { mensagem('msgMot', 'Não foi possível guardar: ' + err.message, true); })
+    .guardarMovimentoMotorista(dados);
+}
+
 /* ---- separador Faturação: registar a fatura de uma viagem ---- */
 var CFG_FAT = null;
 function carregarFaturacao() {
@@ -887,6 +1034,9 @@ function recarregar() {
       document.getElementById('abCodigo').innerHTML = opcoes || '<option value="">(sem viagens)</option>';
       document.getElementById('mvViagem').innerHTML = '<option value="">— sem viagem —</option>' + opcoes;
       document.getElementById('ivViagem').innerHTML = '<option value="">— sem viagem —</option>' + opcoes;
+      var mo = document.getElementById('moViagem'), antesMo = mo.value;
+      mo.innerHTML = '<option value="">— escolher —</option>' + opcoes;
+      if (antesMo) mo.value = antesMo;
     })
     .listarViagens();
 }
@@ -897,6 +1047,7 @@ document.getElementById('abData').value = hoje;
 document.getElementById('mvData').value = hoje;
 document.getElementById('ivData').value = hoje;
 document.getElementById('ftData').value = hoje;
+document.getElementById('moData').value = hoje;
 recarregar();
 </script>
 </body>

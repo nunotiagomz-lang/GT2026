@@ -91,6 +91,30 @@ Corre no Google Apps Script, dentro da conta Google da empresa.
   `Por entregar`), criada no fim da folha no primeiro lançamento que a precise.
   As linhas antigas ficam sem estado e não contam como pendentes.
 
+- **Motorista** — o dinheiro que se adianta ao motorista para a viagem
+  (portagens, despesas extras, diárias). Escolhes a viagem e vês logo a conta
+  dele; depois um de três movimentos:
+
+  | Movimento | Quando | O que grava |
+  |---|---|---|
+  | **Adiantamento** | no início, e sempre que mandares mais | `Adiantamento ao motorista`, Meio Caixa / Banco / Sócio. Se foi um sócio: **Adiantamento** (a empresa deve-lhe) ou **Investimento**, também no livro dos investidores |
+  | **Despesa** | o que ele pagou: portagens, extras, diárias… | `Despesa`, **Meio = Motorista**. Tudo pede recibo **menos as diárias**; sem recibo fica *por justificar* (aparece em Recibos) |
+  | **Devolução** | o que sobrou e ele devolveu | `Devolução do motorista`, Meio Caixa / Banco |
+
+  O adiantamento **não é despesa** (o dinheiro só mudou de mão); a despesa é o
+  que ele gasta. Na tesouraria, o adiantamento sai da Caixa/Banco e a devolução
+  volta; as despesas com Meio Motorista já não voltam a sair (saíram no
+  adiantamento).
+
+  A conta é **adiantado − justificado − devolvido**: positivo, o motorista tem
+  de justificar ou devolver; negativo, a empresa deve-lhe (gastou mais do que
+  levou). Cada lançamento — e cada recibo marcado como entregue — atualiza
+  sozinho as colunas da folha `Viagens`: `Adiantamento Total Motorista`,
+  `Despesas Total Justificadas`, `Saldo Motorista`, `Devolvido Motorista`,
+  `Saldo Final Motorista` e `Diárias`. **Células com fórmula não são tocadas.**
+
+  No **Abastecimento** há também a opção *Pelo motorista, do adiantamento*:
+  entra como despesa da viagem com Meio Motorista e abate à conta dele.
 - **Sócios** (antes «Investimentos») — o dinheiro dos sócios. Tem os mesmos campos, mas em vez de
   um valor único tem **uma caixa por sócio**; o **total é a soma** dessas caixas
   e vai-se atualizando à medida que escreves.

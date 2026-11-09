@@ -75,8 +75,22 @@ var FOLHA_FATURAS = 'Faturas';
 var COLUNAS_FATURAS = ['Nº Fatura', 'Data', 'Cliente', 'VF', 'Valor (MZN)', 'Vencimento', 'Nota'];
 var PRAZO_PAGAMENTO_DIAS = 30;     // vencimento sugerido
 
+/* Conta do motorista numa viagem. O dinheiro adiantado fica à guarda dele;
+   as despesas que paga com esse dinheiro levam Meio = Motorista; o que
+   sobra volta à caixa ou ao banco. Saldo a prestar contas =
+   adiantado − justificado (diárias + despesas com recibo entregue) − devolvido. */
+var TIPO_ADIANT_MOTORISTA = 'Adiantamento ao motorista';
+var TIPO_DEVOL_MOTORISTA  = 'Devolução do motorista';
+var MEIO_MOTORISTA        = 'Motorista';
+function classeMotorista_(tipo) {
+  var t = semAcentos_(tipo);
+  if (/^adiantamento (ao|para o) motorista/.test(t)) return 'ad';
+  if (/^(devolucao|reembolso) (do|pelo) motorista/.test(t)) return 'dev';
+  return null;
+}
+
 /* Categorias sugeridas mesmo antes de existirem no histórico. */
-var CATEGORIAS_BASE = ['Combustível', 'Portagens', 'Manutenção', 'Estadias', 'Diárias', 'Parqueamento'];
+var CATEGORIAS_BASE = ['Combustível', 'Portagens', 'Manutenção', 'Estadias', 'Diárias', 'Parqueamento', 'Despesas extras'];
 
 /* Quem pode lançar dados. Lista vazia = qualquer pessoa com o link
    (só faz sentido se a app for publicada apenas para a organização). */
@@ -421,8 +435,8 @@ function guardarAbastecimento(codigo, dados) {
     /* como foi pago — valida ANTES de escrever o que quer que seja:
        Caixa / Banco → despesa normal da empresa;
        Sócio         → despesa + conta do sócio (adiantamento ou investimento) */
-    if (!/^(Caixa|Banco|Sócio)$/.test(dados.meio || '')) {
-      throw new Error('Indica como foi pago: Caixa, Banco ou Sócio.');
+    if (!/^(Caixa|Banco|Sócio|Motorista)$/.test(dados.meio || '')) {
+      throw new Error('Indica como foi pago: Caixa, Banco, Sócio ou Motorista.');
     }
     var pago = pagamentoDoSocio_(dados);
     var nomeFolha = 'VF' + String(codigo).replace(/\D/g, '');
@@ -488,6 +502,8 @@ function guardarAbastecimento(codigo, dados) {
         else escritas.push(FOLHA_MOVS);
       }
     }
+    /* pago pelo motorista, do adiantamento: atualiza a conta dele na viagem */
+    if (dados.meio === MEIO_MOTORISTA) sincronizarContaMotorista_(nomeFolha);
     return { ok: true, folha: nomeFolha, total: total, folhas: escritas, aviso: aviso,
              fica: pago ? pago.fica : null, socio: pago ? pago.socio : null };
   } finally {
@@ -636,7 +652,10 @@ function escreverGeral_(dados) {
 
 /** Estado do recibo de uma despesa (vazio quando não se aplica). */
 function estadoRecibo_(dados) {
-  if (dados.tipo !== 'Despesa' || !dados.viagem || !precisaRecibo_(dados.categoria)) return '';
+  if (dados.tipo !== 'Despesa' || !dados.viagem) return '';
+  /* o que o motorista paga do adiantamento justifica-se com recibo — tudo menos as diárias */
+  var doMotorista = dados.meio === MEIO_MOTORISTA && !/diari/.test(semAcentos_(dados.categoria));
+  if (!doMotorista && !precisaRecibo_(dados.categoria)) return '';
   return dados.reciboEntregue ? RECIBO_ENTREGUE : RECIBO_PENDENTE;
 }
 
@@ -792,6 +811,8 @@ function guardarInvestimento(dados) {
 
 /** Entrada (dinheiro que chega) ou saída, a partir do tipo. */
 function sentidoDe_(tipo) {
+  var cm = classeMotorista_(tipo);
+  if (cm) return cm === 'dev' ? 'Entrada' : 'Saída';
   var cl = classeAdiant_(tipo);
   if (cl) return SINAL_ADIANT[cl] > 0 ? 'Entrada' : 'Saída';
   var t = String(tipo || '').toLowerCase();
@@ -893,7 +914,7 @@ function saldosAdiantamentos_() {
  */
 function registarDespesaDoSocio_(socio, d) {
   try {
-    var tipo = d.fica === FICA_INVESTIMENTO ? 'Investimento' : TIPO_DESPESA_SOCIO;
+    var tipo = d.fica === FICA_INVESTIMENTO ? 'Investimento' : (d.tipoAdiantamento || TIPO_DESPESA_SOCIO);
     var sh = folhaEntre_(PLANO_ID, [FOLHA_MOVS, FOLHA_MOVS_ALT]);
     /* a coluna Tipo só é obrigatória quando não é investimento: uma linha sem
        tipo neste livro sempre contou como investimento */
@@ -1004,6 +1025,10 @@ function marcarReciboEntregue(linha, conferir) {
       throw new Error('Esta linha mudou na folha entretanto — recarrega a lista e tenta outra vez.');
     }
     sh.getRange(linha, iR + 1).setValue(RECIBO_ENTREGUE);
+    var iVF = indiceDe_(cab.cols, [/^(vf|viagem)$/i]);
+    if (iVF >= 0 && String(r[iVF]).replace(/\D/g, '')) {
+      try { sincronizarContaMotorista_(r[iVF]); } catch (e) { /* a folha Viagens não impede o recibo */ }
+    }
     return { ok: true };
   } finally {
     lock.releaseLock();
@@ -1160,6 +1185,154 @@ function guardarFatura(dados) {
   } finally {
     lock.releaseLock();
   }
+}
+
+/* ------------------------------------------------------------------
+   Conta do motorista
+   ------------------------------------------------------------------ */
+
+/**
+ * Conta do motorista numa viagem, a partir do livro geral:
+ *   adiantado   = Adiantamentos ao motorista
+ *   gasto       = despesas com Meio = Motorista (todas)
+ *   justificado = diárias + despesas que não precisam de recibo + as com recibo entregue
+ *   devolvido   = Devoluções do motorista
+ *   saldo       = adiantado − justificado      (o que ainda tem de justificar)
+ *   saldoFinal  = saldo − devolvido            (> 0: tem de devolver ou justificar;
+ *                                               < 0: a empresa deve-lhe)
+ */
+function contaMotorista_(codigo) {
+  var vf = String(codigo).replace(/\D/g, '');
+  var c = { adiantado: 0, gasto: 0, justificado: 0, porJustificar: 0, diarias: 0, devolvido: 0 };
+  var sh = folha_(PLANO_ID, FOLHA_GERAL);
+  var cab = cabecalho_(sh);
+  if (sh.getLastRow() <= cab.linha) return fecharConta_(c);
+  var ix = {
+    tipo: indiceDe_(cab.cols, [/^tipo$/i]), cat: indiceDe_(cab.cols, [/categoria/i]),
+    meio: indiceDe_(cab.cols, [/^meio/i]), vf: indiceDe_(cab.cols, [/^(vf|viagem)$/i]),
+    val: indiceDe_(cab.cols, [/^valor/i, /montante/i]), rec: indiceDe_(cab.cols, [/^recibo/i])
+  };
+  if (ix.vf < 0 || ix.val < 0) return fecharConta_(c);
+  sh.getRange(cab.linha + 1, 1, sh.getLastRow() - cab.linha, cab.cols.length).getValues()
+    .forEach(function (r) {
+      if (String(r[ix.vf]).replace(/\D/g, '') !== vf) return;
+      var v = num_(r[ix.val]), tipo = String(r[ix.tipo] || '');
+      var cm = classeMotorista_(tipo);
+      if (cm === 'ad') { c.adiantado += v; return; }
+      if (cm === 'dev') { c.devolvido += v; return; }
+      if (!/^despesa/i.test(tipo) || ix.meio < 0 || !/^motorista/i.test(String(r[ix.meio]).trim())) return;
+      var cat = String(r[ix.cat] || '');
+      c.gasto += v;
+      if (/diari/.test(semAcentos_(cat))) c.diarias += v;
+      var semRecibo = ix.rec >= 0 && String(r[ix.rec]).trim() === RECIBO_PENDENTE;
+      if (semRecibo) c.porJustificar += v; else c.justificado += v;
+    });
+  return fecharConta_(c);
+}
+function fecharConta_(c) {
+  var r2 = function (x) { return Math.round(x * 100) / 100; };
+  c.saldo = r2(c.adiantado - c.justificado);
+  c.saldoFinal = r2(c.saldo - c.devolvido);
+  return c;
+}
+
+/**
+ * Escreve a conta do motorista nas colunas da viagem na folha Viagens
+ * (Adiantamento Total Motorista, Despesas Total Justificadas, Saldo
+ * Motorista, Devolvido Motorista, Saldo Final Motorista e Diárias).
+ * Só escreve em células SEM fórmula, e só nas colunas que existirem.
+ */
+function sincronizarContaMotorista_(codigo) {
+  var vf = String(codigo).replace(/\D/g, '');
+  var sh = folha_(PLANO_ID, FOLHA_VIAGENS);
+  var cab = cabecalho_(sh);
+  var iVF = indiceDe_(cab.cols, [/^vf$/i, /c[óo]digo/i]);
+  if (iVF < 0 || sh.getLastRow() <= cab.linha) return null;
+  var vals = sh.getRange(cab.linha + 1, iVF + 1, sh.getLastRow() - cab.linha, 1).getValues();
+  var linha = -1;
+  for (var i = 0; i < vals.length; i++) if (String(vals[i][0]).replace(/\D/g, '') === vf) { linha = cab.linha + 1 + i; break; }
+  if (linha < 0) return null;
+  var c = contaMotorista_(vf);
+  var escrever = function (padroes, valor) {
+    var k = indiceDe_(cab.cols, padroes);
+    if (k < 0) return;
+    var cel = sh.getRange(linha, k + 1);
+    if (cel.getFormula && cel.getFormula()) return;     // não estragar fórmulas
+    cel.setValue(valor);
+  };
+  escrever([/adiantamento\s*total\s*motorista/i, /^adiantamento.*motorista/i], c.adiantado);
+  escrever([/despesas?\s*total\s*justificad/i, /^despesas?\s*justificad/i], c.justificado);
+  escrever([/^saldo\s*motorista$/i], c.saldo);
+  escrever([/^devolvido\s*motorista/i, /^devolvido$/i], c.devolvido);
+  escrever([/saldo\s*final\s*motorista/i], c.saldoFinal);
+  if (c.diarias) escrever([/^di[áa]rias$/i], c.diarias);
+  return c;
+}
+
+/**
+ * Separador «Motorista»: adiantamento, despesa paga pelo motorista ou
+ * devolução, sempre ligado a uma viagem.
+ * `dados`: { movimento: 'adiantamento' | 'despesa' | 'devolucao', viagem, data,
+ *            valor, meio, socio, fica, categoria, descricao, reciboEntregue, nota }
+ */
+function guardarMovimentoMotorista(dados) {
+  verificarAcesso_();
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var vf = String(dados.viagem || '').replace(/\D/g, '');
+    var valor = num_(dados.valor);
+    if (!vf) throw new Error('Escolhe a viagem.');
+    if (!(valor > 0)) throw new Error('Indica o valor.');
+    var motorista = dadosDaViagem_('VF' + vf).motorista || 'Motorista';
+    var folhas = [FOLHA_GERAL], aviso = null, linha;
+
+    if (dados.movimento === 'adiantamento') {
+      if (!/^(Caixa|Banco|Sócio)$/.test(dados.meio || '')) throw new Error('Indica de onde saiu o dinheiro: Caixa, Banco ou Sócio.');
+      var pago = pagamentoDoSocio_(dados);
+      linha = { data: dados.data, tipo: TIPO_ADIANT_MOTORISTA, categoria: 'Adiantamento motorista',
+        descricao: dados.descricao || ('Adiantamento a ' + motorista + ' · VF' + vf), valor: valor,
+        meio: dados.meio, quem: motorista, viagem: vf, nota: dados.nota || (pago ? 'pago por ' + pago.socio : '') };
+      escreverGeral_(linha);
+      if (pago) {
+        aviso = registarDespesaDoSocio_(pago.socio, { data: dados.data, categoria: 'Adiantamento motorista',
+          descricao: 'Adiantamento a ' + motorista + ' · VF' + vf, valor: valor, viagem: vf,
+          fica: pago.fica, tipoAdiantamento: 'Adiantamento do sócio' });
+        if (!aviso) folhas.push(FOLHA_MOVS); else aviso = 'Conta de ' + pago.socio + ': ' + aviso;
+      }
+    } else if (dados.movimento === 'despesa') {
+      if (!String(dados.categoria || '').trim()) throw new Error('Indica a categoria (Portagens, Diárias, Despesas extras…).');
+      linha = { data: dados.data, tipo: 'Despesa', categoria: dados.categoria,
+        descricao: dados.descricao || (dados.categoria + ' · VF' + vf), valor: valor,
+        meio: MEIO_MOTORISTA, quem: motorista, viagem: vf, nota: dados.nota, reciboEntregue: dados.reciboEntregue };
+      linha.recibo = estadoRecibo_(linha);
+      escreverGeral_(linha);
+    } else if (dados.movimento === 'devolucao') {
+      if (!/^(Caixa|Banco)$/.test(dados.meio || '')) throw new Error('Indica para onde voltou o dinheiro: Caixa ou Banco.');
+      escreverGeral_({ data: dados.data, tipo: TIPO_DEVOL_MOTORISTA, categoria: 'Adiantamento motorista',
+        descricao: dados.descricao || ('Devolução de ' + motorista + ' · VF' + vf), valor: valor,
+        meio: dados.meio, quem: motorista, viagem: vf, nota: dados.nota });
+    } else {
+      throw new Error('Escolhe o tipo de movimento.');
+    }
+
+    var conta = null;
+    try { conta = sincronizarContaMotorista_(vf); folhas.push(FOLHA_VIAGENS); }
+    catch (e) { aviso = (aviso ? aviso + ' · ' : '') + 'Folha Viagens: ' + (e.message || e); }
+    return { ok: true, folhas: folhas, aviso: aviso, conta: conta || contaMotorista_(vf), motorista: motorista };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Conta do motorista de uma viagem, para o formulário. */
+function obterContaMotorista(codigo) {
+  verificarAcesso_();
+  var vf = String(codigo || '').replace(/\D/g, '');
+  if (!vf) return null;
+  var c = contaMotorista_(vf);
+  c.motorista = dadosDaViagem_('VF' + vf).motorista;
+  return c;
 }
 
 /** Códigos de viagem existentes, para o formulário de abastecimentos. */
