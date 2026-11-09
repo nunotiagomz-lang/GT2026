@@ -18,7 +18,7 @@ sub-separadores no topo mostram as folhas do Excel dessa área.
 | Área (em baixo) | Sub-separador (em cima) | Folha do Excel | Apresentação |
 |---|---|---|---|
 | Dashboard | — | todas as folhas | Painel de gestão — ver abaixo |
-| Operações | — | `Viagens` | Lista com margem por viagem → detalhe → abastecimentos e consumo |
+| Operações | — | `Viagens` (+ `Movimentos Geral`) | Lista com estado do pagamento, margem e recibos → ficha completa da viagem → abastecimentos e consumo |
 | Financeiro | Movimentos Correntes | `Movimentos Geral` | Contabilidade e tesouraria de toda a empresa |
 | Financeiro | Movimentos Sócios | `Movimentos dos Investidores` (+ sócios, acertos) | Tudo o que passa pelos sócios: Capital · Adiantamentos · Movimentos · Acertos |
 | Frota | — | `Viaturas` (+ `Viagens`) | Frota com consumo esperado → ficha da viatura e as suas viagens |
@@ -191,6 +191,27 @@ escrita com qualquer acento (`Província`, `Provìncia`). O **trajecto** sai de
 uma coluna própria (`Trajecto`, `Rota`, `Percurso`) se existir; se não, de
 `Destino` + `Província` — ex.: «Maxixe, Inhambane».
 
+### Viagens: pagamento, custos e recibos
+
+Cada viagem junta a sua linha da folha `Viagens` com todos os movimentos do
+`Movimentos Geral` que têm o mesmo **VF**:
+
+- **Valor combinado** (coluna `Valor Combinado (MZN)`) − **recebimentos** com o
+  VF = **pendente**. Estado: *Por receber* → *Parcial* → **Concluído** quando está
+  tudo pago. Sem valor combinado, mostra só o que já se recebeu.
+- **Custos** = despesas do livro com o VF (se não houver, a coluna `Despesas
+  Total` da folha). **Margem** = combinado − custos, e margem/km.
+- **Recibos do motorista** — as despesas que precisam de recibo (combustível,
+  manutenção, portagens, estadias; as diárias não) com o estado da coluna
+  `Recibo`: entregue ou por entregar.
+
+A **ficha da viagem** mostra isso tudo, mais **todos os campos da folha**
+(agrupados em identificação, valores, rota e datas, equipa e viatura,
+transferências e justificação do motorista — os vazios aparecem com «—») e os
+movimentos ligados. No painel, *A receber · clientes* soma o pendente de todas as
+viagens, e as Próximas Ações avisam das viagens por receber e dos recibos por
+entregar.
+
 ### Abastecimentos (ficheiro separado)
 
 Os abastecimentos vêm de um segundo ficheiro no Drive, chamado
@@ -208,6 +229,10 @@ podes acrescentar ou tirar linhas de título sem configurar nada.
 Para ligar: partilhar esse ficheiro como «Qualquer pessoa com o link — Leitor»
 e colocar o ID do ficheiro na constante `ABASTECIMENTOS_ID` no topo do
 `<script>` de `index.html` (o ID é a parte do link entre `/d/` e `/edit`).
+
+A app encontra o cabeçalho da tabela pelos **nomes** das colunas (Data,
+Litros, Preço, Valor, Km, Local, Bomba) — um valor solto numa coluna sem título,
+ou o bloco de identificação no topo, não a confundem.
 
 Um abastecimento lançado pelo back office entra **nos dois sítios**: na folha da
 viagem (litros, preço, km — que é o que dá o consumo) e no `Movimentos Geral`

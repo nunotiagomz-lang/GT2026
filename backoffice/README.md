@@ -27,10 +27,27 @@ Corre no Google Apps Script, dentro da conta Google da empresa.
 
   Assim, quem abre a folha no telemóvel sabe logo de que viatura e de que
   percurso se trata, sem ter de ir à outra planilha.
+
+  **Valor combinado** — o valor acordado com o cliente. O campo aparece sempre
+  no formulário; a coluna `Valor Combinado (MZN)` é criada no fim da folha
+  `Viagens` na primeira viagem que o tiver. Os **recebimentos** lançados em
+  Contas com o VF da viagem vão abatendo: a app mostra *Por receber → Parcial →
+  Concluído*, com o pendente, e o formulário Contas mostra-o ao escolher a viagem
+  num recebimento («combinado 50 000 · já recebido 20 000 · falta 30 000»).
 - **Abastecimento** — escolhes a viagem e lanças data, **nome da bomba**, local,
-  litros, preço, km, quem recebeu o pagamento e o meio. O valor total é
-  calculado (litros × preço) e **aparece no ecrã enquanto escreves**, e a linha
-  vai para a folha dessa viagem.
+  litros, preço e km. O valor total é calculado (litros × preço) e **aparece no
+  ecrã enquanto escreves**, e a linha vai para a folha dessa viagem.
+
+  **Como foi pago** é obrigatório, e decide onde o abastecimento é lançado:
+
+  | Como foi pago | Livro geral | Livro dos investidores |
+  |---|---|---|
+  | Caixa da empresa / Banco | Despesa de combustível, Meio Caixa/Banco | — |
+  | Por um sócio → **Adiantamento** | Despesa de combustível, Meio Sócio | `Despesa paga pelo sócio` — a empresa fica a dever-lhe (ou abate ao que ele levou) |
+  | Por um sócio → **Investimento** | Despesa de combustível, Meio Sócio | `Investimento` — capital, conta para as quotas |
+
+  Nos três casos o combustível é **despesa** da operação; o que muda é quem a
+  financiou. Há ainda a caixa **Recibo entregue pelo motorista** (ver Recibos).
 
   Nos litros, no preço e em qualquer campo de valor podes escrever **casas
   decimais com vírgula** (`240,5`, `82,5`) ou com ponto — tanto faz. A bomba
@@ -46,11 +63,21 @@ Corre no Google Apps Script, dentro da conta Google da empresa.
   sócio), viagem e nota. Escreve em `Movimentos Geral`.
 
   **Despesa paga do bolso de um sócio** (tipo `Despesa`, `Meio = Sócio`, e o
-  sócio em `Pago Por`): entra também no livro dos investidores como
-  `Despesa paga pelo sócio`, a favor dele nos adiantamentos — abate ao que ele
-  tinha levado da empresa, ou passa a ser a empresa a dever-lhe. Se o dinheiro
-  for para ficar como **capital**, lança-o antes em **Sócios** como
-  `Investimento`. O mesmo vale para um **abastecimento** com `Meio = Sócio`.
+  sócio em `Pago Por`): o formulário pergunta como fica — **Adiantamento** (a
+  empresa devolve-lhe, ou abate ao que ele levou) ou **Investimento** (capital) —
+  e lança-a também no livro dos investidores, como no abastecimento.
+
+  **Despesa de uma viagem que precisa de recibo** (combustível, manutenção,
+  portagens, estadias, parqueamento): aparece a caixa *Recibo entregue pelo
+  motorista*. As **diárias não têm recibo** e não a mostram.
+- **Recibos** — a lista das despesas de viagens com o recibo **por entregar**,
+  com o total. Quando o motorista entregar, carregas em **Entregue**. Antes de
+  marcar, o formulário confere a linha (descrição e valor): se a folha tiver
+  mudado entretanto, não toca em nada e pede para recarregar.
+
+  O estado vai para a coluna **`Recibo`** do `Movimentos Geral` (`Entregue` /
+  `Por entregar`), criada no fim da folha no primeiro lançamento que a precise.
+  As linhas antigas ficam sem estado e não contam como pendentes.
 
 - **Sócios** (antes «Investimentos») — o dinheiro dos sócios. Tem os mesmos campos, mas em vez de
   um valor único tem **uma caixa por sócio**; o **total é a soma** dessas caixas
