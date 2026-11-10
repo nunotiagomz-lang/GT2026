@@ -3030,7 +3030,9 @@ function viagemEmCursoHTML(c) {
     O consumo é calculado quando a viagem for fechada no back office (km e litros à chegada).</div>`;
 }
 
-/* consumo real da viagem vs o esperado para a viatura */
+/* consumo da viagem pela fórmula combinada:
+   (litros saída + abastecidos − litros chegada) ÷ (km chegada − km saída).
+   Sem esses quatro valores não há consumo — diz o que falta. */
 function consumoHTML(t, header, dataRows, blocoRows) {
   const cols = header.map((c, i) => ({ name: (c || "").trim(), i })).filter(c => c.name);
   const iLitros = findCol(cols, /^litros?$/i, /litros?/i);
@@ -3038,43 +3040,57 @@ function consumoHTML(t, header, dataRows, blocoRows) {
   const c = consumoViagem(t, lerBlocoKm(blocoRows), litros);
   if (c.lkm) return consumoCardHTML(t, c);
   if (c.aberta) return viagemEmCursoHTML(c);
-  if (!litros) return "";
+  const falta = [["Km à saída", c.kmSaida], ["Km à chegada", c.kmChegada], ["Litros à saída", c.lSaida], ["Litros à chegada", c.lChegada]]
+    .filter(x => x[1] == null).map(x => x[0].toLowerCase());
+  return `<div class="card" style="font-size:12.5px;color:var(--ink-2);line-height:1.55">
+    <b style="color:var(--ink)">Consumo por calcular.</b> ${litros ? `Foram abastecidos <b style="color:var(--ink)">${Number(litros).toLocaleString("pt-PT", { maximumFractionDigits: 2 })} L</b>. ` : ""}
+    ${falta.length ? `Faltam: ${falta.join(", ")}. ` : ""}Lança-os no back office em <b style="color:var(--ink)">Viagem → Fechar viagem</b>.</div>`;
+}
 
-  /* km: da folha de viagens, ou pela diferença de leituras do conta-km */
-  let km = t.km;
-  if (km == null) {
-    const iKm = findCol(cols, /^km$/i, /conta[\s-]?km|od[óo]metro|quil[óo]metr/i);
-    if (iKm >= 0) {
-      const leituras = dataRows.map(r => parseNum(r[iKm])).filter(v => v != null && v > 0);
-      if (leituras.length >= 2) km = Math.max(...leituras) - Math.min(...leituras);
-    }
+/* O Google, ao exportar, pode juntar as linhas do bloco de título num só
+   cabeçalho («Viagem Matrícula … Litros Chegada Data»). Fica o nome real
+   da coluna, que é a última palavra conhecida. */
+const RE_PALAVRA_CAB = /(^|\s)(data|local|bomba|posto|litros?|pre[çc]o|valor|montante|total|km|kms|quil[óo]metr|od[óo]metro|conta)/gi;
+function nomeColunaAbast(nome) {
+  const t = String(nome || "").trim();
+  if (!/^(viagem|vf\s*\d)/i.test(t) || !/\s/.test(t)) return t;
+  let p = -1, m;
+  RE_PALAVRA_CAB.lastIndex = 0;
+  while ((m = RE_PALAVRA_CAB.exec(t))) p = m.index + m[1].length;
+  return p > 0 ? t.slice(p) : t;
+}
+
+/* identificação da viagem, à parte da tabela: do bloco da folha (se vier
+   linha a linha) ou da folha Viagens */
+function tituloAbastHTML(t, code, blocoRows) {
+  const lab = {};
+  for (const r of blocoRows || []) {
+    const k = deaccent(String(r[0] || "")).toLowerCase().trim(), v = String(r[1] || "").trim();
+    if (!v) continue;
+    if (/^matricula|^viatura/.test(k)) lab.matricula = v;
+    else if (/^motorista/.test(k)) lab.motorista = v;
+    else if (/^trajec?to|^rota|^destino/.test(k)) lab.trajecto = v;
   }
-  if (!km) {
-    return `<div class="card" style="font-size:12px;color:var(--ink-2)">
-      Total de <b style="color:var(--ink)">${fmtNumRaw(String(litros))} litros</b> nesta viagem.
-      Para calcular o consumo, acrescenta os <b style="color:var(--ink)">km</b> à folha de viagens
-      (ou as leituras do conta-quilómetros aos abastecimentos).</div>`;
-  }
-
-  const real = litros / km * 100;               // l/100km
-  const v = viaturaInfo(t.viatura);
-  const esperado = v ? (v.consumoSeco ?? v.consumoCarr) : null;
-  const desvio = esperado ? (real - esperado) / esperado * 100 : null;
-  const mau = desvio != null && desvio > 10;
-
+  const c = consumoViagem(t, lerBlocoKm(blocoRows), null);
+  const n = v => v == null ? `<span style="color:var(--ink-muted);font-weight:500">—</span>` : Number(v).toLocaleString("pt-PT", { maximumFractionDigits: 2 });
+  const cel = (rot, v, extra) => `<div style="min-width:0${extra || ""}"><div style="font-size:11px;color:var(--ink-muted)">${rot}</div>
+    <b style="font-size:14.5px;overflow-wrap:anywhere">${v}</b></div>`;
+  const txt = v => v ? esc(v) : `<span style="color:var(--ink-muted);font-weight:500">—</span>`;
   return `<div class="card">
-    <div style="display:flex;gap:18px;flex-wrap:wrap">
-      <div><div style="font-size:11px;color:var(--ink-muted)">Consumo real</div>
-        <b style="font-size:17px">${fmtNumRaw(real.toFixed(1))} <small style="font-size:11px;color:var(--ink-muted)">l/100km</small></b></div>
-      ${esperado ? `<div><div style="font-size:11px;color:var(--ink-muted)">Esperado</div>
-        <b style="font-size:17px">${fmtNumRaw(String(esperado))} <small style="font-size:11px;color:var(--ink-muted)">l/100km</small></b></div>` : ""}
-      <div><div style="font-size:11px;color:var(--ink-muted)">Litros · Km</div>
-        <b style="font-size:17px">${fmtNumRaw(String(litros))} · ${fmtMZN(km)}</b></div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span class="chip" style="background:#1c5cab;color:#fff;border-color:transparent;font-size:14px;padding:6px 12px;font-weight:750">${esc(code.toUpperCase())}</span>
+      <span style="font-size:15px;font-weight:700;min-width:0;overflow-wrap:anywhere">${txt(lab.trajecto || t.rota)}</span>
     </div>
-    ${desvio != null ? `<div class="status ${mau ? "warn" : "good"}" style="margin-top:10px;font-size:12.5px">
-      ${mau ? "!" : "✓"} ${desvio >= 0 ? "+" : ""}${fmtNumRaw(desvio.toFixed(1))}% face ao esperado${mau ? " — vale a pena verificar" : ""}
-    </div>` : `<div style="font-size:11.5px;color:var(--ink-muted);margin-top:8px">
-      Acrescenta o consumo esperado desta viatura à folha «Viaturas» para veres o desvio.</div>`}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin-top:12px">
+      ${cel("Matrícula", txt(lab.matricula || t.viatura))}
+      ${cel("Motorista", txt(lab.motorista || t.motorista))}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px;margin-top:12px;padding-top:12px;border-top:1px solid var(--hairline)">
+      ${cel("Km à saída", n(c.kmSaida))}
+      ${cel("Km à chegada", n(c.kmChegada))}
+      ${cel("Litros à saída", n(c.lSaida))}
+      ${cel("Litros à chegada", n(c.lChegada))}
+    </div>
   </div>`;
 }
 
@@ -3121,10 +3137,12 @@ function abastHTML(td) {
 
   const clean = entry.rows.filter(r => !isRowEmpty(r));
   const hi = linhaCabecalhoAbast(clean);
-  const header = clean[hi], dataRows = clean.slice(hi + 1);
+  const header = clean[hi].map(nomeColunaAbast), dataRows = clean.slice(hi + 1);
+  const bloco = clean.slice(0, hi);
+  const titulo = tituloAbastHTML(t, code, bloco);
   if (!dataRows.length) {
-    const c = consumoViagem(t, lerBlocoKm(clean.slice(0, hi)), 0);
-    return head + (c.lkm ? consumoCardHTML(t, c) : c.aberta ? viagemEmCursoHTML(c) : "") +
+    const c = consumoViagem(t, lerBlocoKm(bloco), 0);
+    return head + titulo + (c.lkm ? consumoCardHTML(t, c) : c.aberta ? viagemEmCursoHTML(c) : "") +
       emptyState("Sem abastecimentos registados nesta viagem.");
   }
 
@@ -3137,10 +3155,12 @@ function abastHTML(td) {
 
   return head +
     `<div style="font-size:11px;color:var(--ink-muted);margin:-4px 2px 8px">Folha «${esc(entry.sheetName || code)}» da Planilha de Abastecimentos CNET</div>` +
-    consumoHTML(t, header, dataRows, clean.slice(0, hi)) +
+    titulo +
+    consumoHTML(t, header, dataRows, bloco) +
+    `<div class="section-title" style="margin-top:6px">Abastecimentos · ${dataRows.length}</div>` +
     tableHTML(header, dataRows) +
     (totais.length ? `<div class="card" style="display:flex;flex-wrap:wrap;gap:6px 18px">
-      ${totais.map(c => `<div style="font-size:12px;color:var(--ink-2)">${esc(c.name)}: <b style="color:var(--ink);font-variant-numeric:tabular-nums">${fmtMZN(c.sum)}</b></div>`).join("")}
+      ${totais.map(c => `<div style="font-size:12px;color:var(--ink-2)">${esc(c.name)}: <b style="color:var(--ink);font-variant-numeric:tabular-nums">${/litro/i.test(c.name) ? c.sum.toLocaleString("pt-PT", { maximumFractionDigits: 2 }) : fmtMZN(c.sum)}</b></div>`).join("")}
     </div>` : "");
 }
 
