@@ -3036,7 +3036,8 @@ function viagemEmCursoHTML(c) {
 function consumoHTML(t, header, dataRows, blocoRows) {
   const cols = header.map((c, i) => ({ name: (c || "").trim(), i })).filter(c => c.name);
   const iLitros = findCol(cols, /^litros?$/i, /litros?/i);
-  const litros = iLitros < 0 ? 0 : dataRows.reduce((a, r) => a + (parseNum(r[iLitros]) || 0), 0);
+  /* sem coluna de litros legível, usa-se o consumo gravado ao fechar a viagem */
+  const litros = iLitros < 0 ? null : dataRows.reduce((a, r) => a + (parseNum(r[iLitros]) || 0), 0);
   const c = consumoViagem(t, lerBlocoKm(blocoRows), litros);
   if (c.lkm) return consumoCardHTML(t, c);
   if (c.aberta) return viagemEmCursoHTML(c);
@@ -3044,7 +3045,8 @@ function consumoHTML(t, header, dataRows, blocoRows) {
     .filter(x => x[1] == null).map(x => x[0].toLowerCase());
   return `<div class="card" style="font-size:12.5px;color:var(--ink-2);line-height:1.55">
     <b style="color:var(--ink)">Consumo por calcular.</b> ${litros ? `Foram abastecidos <b style="color:var(--ink)">${Number(litros).toLocaleString("pt-PT", { maximumFractionDigits: 2 })} L</b>. ` : ""}
-    ${falta.length ? `Faltam: ${falta.join(", ")}. ` : ""}Lança-os no back office em <b style="color:var(--ink)">Viagem → Fechar viagem</b>.</div>`;
+    ${falta.length ? `Faltam: ${falta.join(", ")}. Lança-os no back office em <b style="color:var(--ink)">Viagem → Fechar viagem</b>.`
+                   : "Os valores não batem certo (litros consumidos ou km a zero ou negativos) — confirma-os em Viagem → Fechar viagem."}</div>`;
 }
 
 /* O Google, ao exportar, pode juntar as linhas do bloco de título num só
@@ -3067,9 +3069,9 @@ function tituloAbastHTML(t, code, blocoRows) {
   for (const r of blocoRows || []) {
     const k = deaccent(String(r[0] || "")).toLowerCase().trim(), v = String(r[1] || "").trim();
     if (!v) continue;
-    if (/^matricula|^viatura/.test(k)) lab.matricula = v;
-    else if (/^motorista/.test(k)) lab.motorista = v;
-    else if (/^trajec?to|^rota|^destino/.test(k)) lab.trajecto = v;
+    if (/^matricula|^viatura/.test(k)) lab.matricula = lab.matricula || v;
+    else if (/^motorista/.test(k)) lab.motorista = lab.motorista || v;
+    else if (/^trajec?to|^rota|^destino/.test(k)) lab.trajecto = lab.trajecto || v;
   }
   const c = consumoViagem(t, lerBlocoKm(blocoRows), null);
   const n = v => v == null ? `<span style="color:var(--ink-muted);font-weight:500">—</span>` : Number(v).toLocaleString("pt-PT", { maximumFractionDigits: 2 });
@@ -3114,6 +3116,41 @@ function linhaCabecalhoAbast(rows) {
   return hi;
 }
 
+/* abastecimentos em lista (cabe no telemóvel sem deslizar para o lado):
+   data, bomba e local à esquerda; valor, litros × preço e km à direita */
+function abastListaHTML(header, dataRows) {
+  const cols = header.map((c, i) => ({ name: (c || "").trim(), i })).filter(c => c.name);
+  const ix = {
+    data: findCol(cols, /^data/i), local: findCol(cols, /^local/i), bomba: findCol(cols, /^(bomba|posto)/i),
+    litros: findCol(cols, /^litros?$/i, /^litros?/i), preco: findCol(cols, /^pre[çc]o/i),
+    valor: findCol(cols, /^(valor|montante|total)/i), km: findCol(cols, /^km/i, /od[óo]metro|quil[óo]metr|conta/i),
+  };
+  if (ix.litros < 0 || ix.data < 0) return null;
+  const usadas = new Set(Object.values(ix));
+  const outras = cols.filter(c => !usadas.has(c.i));
+  const g = (r, i) => i >= 0 ? String(r[i] || "").trim() : "";
+  const n = (v, d) => v == null ? "" : v.toLocaleString("pt-PT", { maximumFractionDigits: d });
+  return `<div class="card">` + dataRows.map(r => {
+    const litros = parseNum(g(r, ix.litros)), preco = parseNum(g(r, ix.preco)), km = parseNum(g(r, ix.km));
+    let valor = parseNum(g(r, ix.valor));
+    if (valor == null && litros != null && preco != null) valor = litros * preco;
+    const onde = [g(r, ix.bomba), g(r, ix.local)].filter(Boolean).join(" · ");
+    const extra = outras.map(c => g(r, c.i) ? `${c.name}: ${g(r, c.i)}` : "").filter(Boolean).join(" · ");
+    return `<div class="mov" style="padding:11px 0;align-items:flex-start">
+      <div class="m-main">
+        <div class="m-item" style="font-size:14px">${esc(g(r, ix.data)) || "—"}</div>
+        <div class="m-date">${esc(onde) || "sem bomba / local"}</div>
+        ${km != null ? `<div class="m-date">${n(km, 0)} km no painel</div>` : ""}
+        ${extra ? `<div class="m-date">${esc(extra)}</div>` : ""}
+      </div>
+      <div class="m-side" style="text-align:right">
+        <div class="m-val" style="font-size:14px">${valor != null ? fmtMZN(valor) + ' <small style="font-size:10.5px;color:var(--ink-muted);font-weight:600">MZN</small>' : "—"}</div>
+        <div class="m-date" style="color:var(--ink-2)"><b style="color:var(--ink)">${n(litros, 2) || "—"} L</b>${preco != null ? ` × ${n(preco, 2)}` : ""}</div>
+      </div>
+    </div>`;
+  }).join("") + `</div>`;
+}
+
 function abastHTML(td) {
   const t = td.trips.find(x => x.cod === viagemNav.sel);
   const code = (t.cod || "").trim();
@@ -3135,10 +3172,32 @@ function abastHTML(td) {
       `Não foi encontrada nenhuma folha chamada «${code}» na Planilha de Abastecimentos CNET. O nome do separador (em baixo, no Google Sheets) tem de ser exatamente o código da viagem — ex.: «${code.toUpperCase()}».`);
   }
 
-  const clean = entry.rows.filter(r => !isRowEmpty(r));
-  const hi = linhaCabecalhoAbast(clean);
-  const header = clean[hi].map(nomeColunaAbast), dataRows = clean.slice(hi + 1);
-  const bloco = clean.slice(0, hi);
+  let clean = entry.rows.filter(r => !isRowEmpty(r));
+  let hi = linhaCabecalhoAbast(clean);
+  /* identificação: as linhas rótulo/valor, onde quer que tenham ficado */
+  const bloco = (entry.ident || []).concat(entry.tabela ? clean : clean.slice(0, hi));
+  if (entry.tabela) { clean = entry.tabela; hi = 0; }
+  let header = clean[hi].map(nomeColunaAbast), dataRows = clean.slice(hi + 1);
+  if (!entry.tabela && !cabecalhoLimpo(header)) {
+    /* último recurso (o Google apagou parte do cabeçalho): os abastecimentos
+       são as linhas que começam por uma data; os nomes em falta deduzem-se —
+       as colunas de números vêm sempre por esta ordem */
+    const datas = clean.filter(r => parseDate(String(r[0] || "").trim()));
+    if (datas.length) {
+      const k = clean.indexOf(datas[0]);
+      const cab = k > 0 && /^data$/i.test(String(clean[k - 1][0] || "").trim()) ? clean[k - 1].map(c => String(c || "").trim()) : [];
+      const larg = Math.max(...datas.map(r => r.length));
+      const numericas = ["Litros", "Preço/Litro", "Valor (MZN)", "Km"], texto = ["Local", "Bomba"].filter(x => !cab.some(c => new RegExp("^" + x, "i").test(c)));
+      header = Array.from({ length: larg }, (_, i) => {
+        if (i === 0) return "Data";
+        if (cab[i]) return cab[i];
+        const vals = datas.map(r => String(r[i] || "").trim()).filter(Boolean);
+        if (vals.length && vals.every(v => parseNum(v) != null)) return numericas.shift() || "";
+        return vals.length || texto.length ? (texto.shift() || "") : "";
+      });
+      dataRows = datas;
+    }
+  }
   const titulo = tituloAbastHTML(t, code, bloco);
   if (!dataRows.length) {
     const c = consumoViagem(t, lerBlocoKm(bloco), 0);
@@ -3158,17 +3217,41 @@ function abastHTML(td) {
     titulo +
     consumoHTML(t, header, dataRows, bloco) +
     `<div class="section-title" style="margin-top:6px">Abastecimentos · ${dataRows.length}</div>` +
-    tableHTML(header, dataRows) +
+    (abastListaHTML(header, dataRows) || tableHTML(header, dataRows)) +
     (totais.length ? `<div class="card" style="display:flex;flex-wrap:wrap;gap:6px 18px">
       ${totais.map(c => `<div style="font-size:12px;color:var(--ink-2)">${esc(c.name)}: <b style="color:var(--ink);font-variant-numeric:tabular-nums">${/litro/i.test(c.name) ? c.sum.toLocaleString("pt-PT", { maximumFractionDigits: 2 }) : fmtMZN(c.sum)}</b></div>`).join("")}
     </div>` : "");
 }
 
-function abastUrl(name) {
+/* `linha`: pede só a tabela, a começar nessa linha da folha (o cabeçalho) */
+function abastUrl(name, linha) {
   return SRC_OVERRIDE
-    ? SRC_OVERRIDE.replace(/\/$/, "") + "/abast-" + encodeURIComponent(name) + ".csv"
+    ? SRC_OVERRIDE.replace(/\/$/, "") + "/abast-" + encodeURIComponent(name) + (linha === "ident" ? "-ident" : linha ? "-L" + linha : "") + ".csv"
     : "https://docs.google.com/spreadsheets/d/" + ABASTECIMENTOS_ID +
-      "/gviz/tq?tqx=out:csv&sheet=" + encodeURIComponent(name) + "&t=" + Date.now();
+      "/gviz/tq?tqx=out:csv&sheet=" + encodeURIComponent(name) +
+      (linha === "ident" ? "&range=A1:B4&headers=0" : linha ? "&range=A" + linha + ":Z&headers=1" : "") + "&t=" + Date.now();
+}
+/* a primeira linha é mesmo o cabeçalho da tabela (Data, Litros, Valor…)? */
+function cabecalhoLimpo(row) {
+  if (!row) return false;
+  const cels = row.map(c => String(c || "").trim()).filter(Boolean);
+  return cels.filter(c => RE_CAB_ABAST.test(c)).length >= 3 && !cels.some(c => /^(viagem|vf\s*\d)/i.test(c) && /\s/.test(c));
+}
+/* O Google adivinha os tipos de cada coluna pela folha inteira: com o bloco
+   de título por cima (texto e números misturados na mesma coluna), funde
+   linhas no cabeçalho e apaga células. Por isso pede-se a tabela à parte, a
+   começar na linha do cabeçalho — como a linha varia (11 nas folhas novas,
+   menos nas antigas), tentam-se as possíveis e fica a que devolver um
+   cabeçalho limpo. */
+const LINHAS_CAB_ABAST = [11, 10, 12, 6, 5, 9, 8, 7, 13, 14, 15, 4, 3, 2];
+async function tabelaAbast(name) {
+  const textos = await Promise.all(LINHAS_CAB_ABAST.map(l => fetchCsvText(abastUrl(name, l))));
+  for (const t of textos) {
+    if (t == null) continue;
+    const rows = parseCSV(t).filter(r => !isRowEmpty(r));
+    if (rows.length && cabecalhoLimpo(rows[0])) return rows;
+  }
+  return null;
 }
 async function fetchCsvText(url) {
   try {
@@ -3219,7 +3302,19 @@ async function loadAbastecimentos(code) {
     if (canary != null && text === canary && !codeRe.test(norm(text))) {
       continue; // é a primeira folha devolvida por engano — não é esta viagem
     }
-    abastCache[key] = { rows: parseCSV(text), sheetName: name };
+    const rows = parseCSV(text);
+    const limpas = rows.filter(r => !isRowEmpty(r));
+    /* só se confia na leitura da folha inteira se a tabela começar logo na
+       1.ª linha; com bloco de título, pede-se a tabela à parte */
+    let tabela = null, ident = null;
+    if (!cabecalhoLimpo(limpas[0])) {
+      /* as 4 linhas de identificação (Viagem / Matrícula / Motorista /
+         Trajecto) são só texto: pedidas sozinhas, vêm inteiras */
+      const [tb, id] = await Promise.all([tabelaAbast(name), fetchCsvText(abastUrl(name, "ident"))]);
+      tabela = tb;
+      ident = id != null ? parseCSV(id).filter(r => !isRowEmpty(r)) : null;
+    }
+    abastCache[key] = { rows, tabela, ident, sheetName: name };
     repaintViagens();
     return;
   }
