@@ -2275,7 +2275,13 @@ function tripsData() {
     /* valor acordado com o cliente — na folha chama-se «Valor Rate» */
     combinado: findCol(C, /valor\s*(combinado|(do\s*|da\s*)?rate)|^rate|\brate\b|tarifa|pre[çc]o\s*(acordado|combinado)/i),
     fatura:    findCol(C, /^(factura|fatura)/i),
-    regresso:  findCol(C, /^regresso/i, /^chegada/i),
+    regresso:  findCol(C, /^regresso/i, /^chegada$/i),
+    /* km e litros à saída e à chegada, e o consumo (gravados ao fechar a viagem) */
+    kmSaida:   findCol(C, /^km\s*(de\s*)?sa[íi]da/i),
+    kmChegada: findCol(C, /^km\s*(de\s*)?chegada/i),
+    lSaida:    findCol(C, /^litros\s*(de\s*)?sa[íi]da/i),
+    lChegada:  findCol(C, /^litros\s*(de\s*)?chegada/i),
+    lConsumo:  findCol(C, /^litros\s*consumid/i),
     receita:   findCol(C, /receita|frete|faturad/i, /valor\s*(da\s*)?(viagem|servi|frete)/i),
     despesa:   findCol(C, /despesas?\s*total/i, /^despesas?/i),
     saldoMot:  findCol(C, /saldo\s*final\s*motorista/i, /saldo\s*motorista/i),
@@ -2299,6 +2305,11 @@ function tripsData() {
     combinado: num(t.row, ix.combinado),
     faturaCol: get(t.row, ix.fatura),
     regresso:  parseDate(get(t.row, ix.regresso)),
+    kmSaida:   num(t.row, ix.kmSaida),
+    kmChegada: num(t.row, ix.kmChegada),
+    lSaida:    num(t.row, ix.lSaida),
+    lChegada:  num(t.row, ix.lChegada),
+    lConsumidos: num(t.row, ix.lConsumo),
     receitaCol: num(t.row, ix.receita),
     despesaCol: num(t.row, ix.despesa),
     saldoMot:  num(t.row, ix.saldoMot),
@@ -2725,6 +2736,13 @@ function entityDetailHTML(key, nome, backAttr) {
   const saldo = key === "motorista" && saldos.length ? saldos[saldos.length - 1] : null;
 
   const vinfo = key === "viatura" ? viaturaInfo(nome) : null;
+  /* consumo real médio das viagens fechadas: litros consumidos ÷ km */
+  let consReal = null;
+  if (key === "viatura") {
+    const fechadas = shown.map(t => consumoViagem(t, null, null)).filter(c => c.lkm);
+    const kmF = fechadas.reduce((a, c) => a + c.km, 0), lF = fechadas.reduce((a, c) => a + c.consumidos, 0);
+    if (kmF) consReal = { l100: lF / kmF * 100, n: fechadas.length };
+  }
 
   return backBtn(backAttr, "Voltar") + periodBar() +
     `<div class="card">
@@ -2735,6 +2753,7 @@ function entityDetailHTML(key, nome, backAttr) {
         ${despesa ? `<div><div style="font-size:11.5px;color:var(--ink-muted)">Despesas</div><b style="font-size:15px">${fmtMZN(despesa)}</b></div>` : ""}
         ${margem != null ? `<div><div style="font-size:11.5px;color:var(--ink-muted)">Margem</div><b style="font-size:15px;color:${margem >= 0 ? "var(--good-text)" : "var(--serious)"}">${fmtMZN(margem)}</b></div>` : ""}
         ${saldo != null ? `<div><div style="font-size:11.5px;color:var(--ink-muted)">Saldo do motorista</div><b style="font-size:15px;color:${saldo >= 0 ? "var(--ink)" : "var(--serious)"}">${fmtMZN(saldo)} MZN</b></div>` : ""}
+        ${consReal ? `<div><div style="font-size:11.5px;color:var(--ink-muted)">Consumo real · ${consReal.n} viage${consReal.n === 1 ? "m" : "ns"}</div><b style="font-size:15px">${fmtNumRaw(consReal.l100.toFixed(1))} l/100km</b></div>` : ""}
         ${vinfo && vinfo.consumoSeco != null ? `<div><div style="font-size:11.5px;color:var(--ink-muted)">Consumo esperado</div><b style="font-size:15px">${fmtNumRaw(String(vinfo.consumoSeco))} l/100km</b></div>` : ""}
       </div>
     </div>
@@ -2809,6 +2828,7 @@ const GRUPOS_VIAGEM = [
   { t: "Valores",             re: /valor|combinado|receita|\brate\b|tarifa|frete/i },
   { t: "Motorista: adiantamentos, diárias e justificação",
                               re: /di[áa]ria|transf|despesa|saldo|justific|adiantament|devolvid|portage|combust/i },
+  { t: "Km, litros e consumo", re: /^(km|litros)\s*(de\s*)?(sa[íi]da|chegada)|consum/i },
   { t: "Rota e datas",        re: /destino|origem|prov|trajec|rota|percurso|partida|regresso|chegada|^km|dias|data/i },
   { t: "Equipa e viatura",    re: /cliente|motorista|ajudante|viatura|trailer|matr|reboque/i },
 ];
@@ -2907,6 +2927,13 @@ function viagemDetalheHTML(td) {
     </div>`;
   }
 
+  /* ---- consumo (gravado ao fechar a viagem) ---- */
+  {
+    const c = consumoViagem(t, null, null);
+    if (c.lkm) html += consumoCardHTML(t, c);
+    else if (c.aberta) html += viagemEmCursoHTML(c);
+  }
+
   /* ---- todos os campos da folha, agrupados ---- */
   const usados = new Set();
   const grupos = GRUPOS_VIAGEM.map(g => ({ t: g.t, cols: td.cols.filter(c => {
@@ -2945,12 +2972,72 @@ function viagemDetalheHTML(td) {
   return html;
 }
 
+/* Km e litros à saída/chegada: o bloco do topo da folha de abastecimentos
+   (rótulo na coluna A, valor na B) prevalece; senão, as colunas da folha
+   Viagens. Consumo = (litros saída + abastecidos − litros chegada) ÷ km. */
+const RE_BLOCO_KM = { kmSaida: /^km\s*(de\s*)?saida/, kmChegada: /^km\s*(de\s*)?chegada/,
+                      lSaida: /^litros\s*(de\s*)?saida/, lChegada: /^litros\s*(de\s*)?chegada/ };
+function lerBlocoKm(rows) {
+  const out = {};
+  for (const r of rows || []) {
+    const rot = deaccent(String(r[0] || "")).toLowerCase().replace(/\s+/g, " ").trim();
+    for (const k in RE_BLOCO_KM) if (out[k] == null && RE_BLOCO_KM[k].test(rot)) {
+      const v = parseNum(String(r[1] || "").trim());
+      if (v != null) out[k] = v;
+    }
+  }
+  return out;
+}
+function consumoViagem(t, bloco, abastecidos) {
+  const b = bloco || {};
+  const v = k => b[k] != null ? b[k] : t[k];
+  const c = { kmSaida: v("kmSaida"), kmChegada: v("kmChegada"), lSaida: v("lSaida"), lChegada: v("lChegada"), abastecidos };
+  c.aberta = c.kmSaida != null && (c.kmChegada == null || c.lChegada == null);
+  if (c.kmSaida != null && c.kmChegada != null && c.kmChegada > c.kmSaida) c.km = c.kmChegada - c.kmSaida;
+  if (c.lSaida != null && c.lChegada != null && abastecidos != null) c.consumidos = c.lSaida + abastecidos - c.lChegada;
+  else if (t.lConsumidos != null) c.consumidos = t.lConsumidos;      // gravado ao fechar
+  if (c.km && c.consumidos > 0) { c.lkm = c.consumidos / c.km; c.l100 = c.lkm * 100; }
+  return c;
+}
+function consumoCardHTML(t, c) {
+  const v = viaturaInfo(t.viatura);
+  const esperado = v ? (v.consumoSeco ?? v.consumoCarr) : null;
+  const desvio = esperado && c.l100 ? (c.l100 - esperado) / esperado * 100 : null;
+  const mau = desvio != null && desvio > 10;
+  const n = (x, d) => Number(x).toLocaleString("pt-PT", { maximumFractionDigits: d == null ? 0 : d });
+  const kpi = (rot, val, un) => `<div><div style="font-size:11px;color:var(--ink-muted)">${rot}</div>
+    <b style="font-size:17px">${val}${un ? ` <small style="font-size:11px;color:var(--ink-muted)">${un}</small>` : ""}</b></div>`;
+  return `<div class="card">
+    <div class="card-t">${svgIc("camiao")}<h3>Consumo da viagem</h3></div>
+    <div style="display:flex;gap:18px;flex-wrap:wrap">
+      ${kpi("Consumo", n(c.lkm, 3), "L/km")}
+      ${kpi("Por 100 km", n(c.l100, 1), "L/100km")}
+      ${esperado ? kpi("Esperado", fmtNumRaw(String(esperado)), "L/100km") : ""}
+    </div>
+    <div style="font-size:12.5px;color:var(--ink-2);margin-top:10px;line-height:1.6">
+      Km: ${fmtMZN(c.kmSaida)} → ${fmtMZN(c.kmChegada)} = <b style="color:var(--ink)">${fmtMZN(c.km)} km</b><br>
+      ${c.lSaida != null && c.lChegada != null && c.abastecidos != null
+        ? `Litros: ${n(c.lSaida, 2)} à saída + ${n(c.abastecidos, 2)} abastecidos − ${n(c.lChegada, 2)} à chegada = <b style="color:var(--ink)">${n(c.consumidos, 2)} L</b>`
+        : `Litros consumidos: <b style="color:var(--ink)">${n(c.consumidos, 2)} L</b>`}
+    </div>
+    ${desvio != null ? `<div class="status ${mau ? "warn" : "good"}" style="margin-top:10px;font-size:12.5px">
+      ${mau ? "!" : "✓"} ${desvio >= 0 ? "+" : ""}${fmtNumRaw(desvio.toFixed(1))}% face ao esperado${mau ? " — vale a pena verificar" : ""}</div>` : ""}
+  </div>`;
+}
+function viagemEmCursoHTML(c) {
+  return `<div class="card" style="font-size:12.5px;color:var(--ink-2)">
+    <b style="color:var(--ink)">Viagem em curso</b> — saiu com ${fmtMZN(c.kmSaida)} km${c.lSaida != null ? ` e ${fmtNumRaw(String(c.lSaida))} L no depósito` : ""}${c.abastecidos ? `; ${fmtNumRaw(String(Math.round(c.abastecidos * 100) / 100))} L abastecidos até agora` : ""}.
+    O consumo é calculado quando a viagem for fechada no back office (km e litros à chegada).</div>`;
+}
+
 /* consumo real da viagem vs o esperado para a viatura */
-function consumoHTML(t, header, dataRows) {
+function consumoHTML(t, header, dataRows, blocoRows) {
   const cols = header.map((c, i) => ({ name: (c || "").trim(), i })).filter(c => c.name);
-  const iLitros = findCol(cols, /litros?/i);
-  if (iLitros < 0) return "";
-  const litros = dataRows.reduce((a, r) => a + (parseNum(r[iLitros]) || 0), 0);
+  const iLitros = findCol(cols, /^litros?$/i, /litros?/i);
+  const litros = iLitros < 0 ? 0 : dataRows.reduce((a, r) => a + (parseNum(r[iLitros]) || 0), 0);
+  const c = consumoViagem(t, lerBlocoKm(blocoRows), litros);
+  if (c.lkm) return consumoCardHTML(t, c);
+  if (c.aberta) return viagemEmCursoHTML(c);
   if (!litros) return "";
 
   /* km: da folha de viagens, ou pela diferença de leituras do conta-km */
@@ -3035,7 +3122,11 @@ function abastHTML(td) {
   const clean = entry.rows.filter(r => !isRowEmpty(r));
   const hi = linhaCabecalhoAbast(clean);
   const header = clean[hi], dataRows = clean.slice(hi + 1);
-  if (!dataRows.length) return head + emptyState("Sem abastecimentos registados nesta viagem.");
+  if (!dataRows.length) {
+    const c = consumoViagem(t, lerBlocoKm(clean.slice(0, hi)), 0);
+    return head + (c.lkm ? consumoCardHTML(t, c) : c.aberta ? viagemEmCursoHTML(c) : "") +
+      emptyState("Sem abastecimentos registados nesta viagem.");
+  }
 
   /* totais das colunas de litros/valores */
   const totais = header.map((c, i) => ({ name: (c || "").trim(), i }))
@@ -3046,7 +3137,7 @@ function abastHTML(td) {
 
   return head +
     `<div style="font-size:11px;color:var(--ink-muted);margin:-4px 2px 8px">Folha «${esc(entry.sheetName || code)}» da Planilha de Abastecimentos CNET</div>` +
-    consumoHTML(t, header, dataRows) +
+    consumoHTML(t, header, dataRows, clean.slice(0, hi)) +
     tableHTML(header, dataRows) +
     (totais.length ? `<div class="card" style="display:flex;flex-wrap:wrap;gap:6px 18px">
       ${totais.map(c => `<div style="font-size:12px;color:var(--ink-2)">${esc(c.name)}: <b style="color:var(--ink);font-variant-numeric:tabular-nums">${fmtMZN(c.sum)}</b></div>`).join("")}

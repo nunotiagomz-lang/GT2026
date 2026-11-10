@@ -284,8 +284,9 @@ function obterConfiguracao() {
  * Grava uma viagem nova na folha Viagens.
  * `valores` é um objeto { "Nome da coluna": valor }.
  */
-function guardarViagem(valores) {
+function guardarViagem(valores, saida) {
   verificarAcesso_();
+  saida = lerSaida_(saida);
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);                    // evita duas gravações em simultâneo
   try {
@@ -294,6 +295,15 @@ function guardarViagem(valores) {
     /* valor combinado preenchido e a coluna ainda não existe: cria-a no fim */
     if (num_(valores[COL_COMBINADO]) && indiceDe_(cab.cols, [RE_COMBINADO]) < 0) {
       cab = garantirColuna_(sh, COL_COMBINADO, [RE_COMBINADO]).cab;
+    }
+    /* km e litros à saída: nas colunas da viagem (criadas no fim se faltarem) */
+    if (saida.km != null || saida.litros != null) {
+      [['kmSaida', saida.km], ['litrosSaida', saida.litros]].forEach(function (p) {
+        if (p[1] == null) return;
+        var c = CAMPOS_KM[p[0]];
+        cab = garantirColuna_(sh, c.nome, [c.re]).cab;
+        valores[cab.cols[indiceDe_(cab.cols, [c.re])]] = p[1];
+      });
     }
     var iVF = indiceDe_(cab.cols, [/^vf$/i, /c[óo]digo/i]);
 
@@ -312,7 +322,10 @@ function guardarViagem(valores) {
 
     /* cria a folha da viagem na planilha de abastecimentos */
     var nomeFolha = 'VF' + String(codigo).replace(/\D/g, '');
-    criarFolhaAbastecimentos_(nomeFolha);
+    criarFolhaAbastecimentos_(nomeFolha, saida);
+    if (saida.km != null || saida.litros != null) {
+      escreverBlocoKm_(nomeFolha, { kmSaida: saida.km, litrosSaida: saida.litros });
+    }
 
     return { ok: true, codigo: nomeFolha };
   } finally {
@@ -366,20 +379,239 @@ function criarFolhaAbastecimentos_(nomeFolha) {
   if (ss.getSheetByName(nomeFolha)) return;
   var sh = ss.insertSheet(nomeFolha);
 
-  /* identificação da viagem, em pares rótulo/valor para não se confundirem
-     com o cabeçalho da tabela (que é a linha com mais células preenchidas) */
+  /* identificação da viagem e, por baixo, km e litros à saída e à chegada
+     (os de chegada ficam vazios até se fechar a viagem). Pares rótulo/valor,
+     para não se confundirem com o cabeçalho da tabela. */
   var v = dadosDaViagem_(nomeFolha);
-  sh.appendRow(['Viagem', nomeFolha]);
-  sh.appendRow(['Matrícula', v.matricula]);
-  sh.appendRow(['Motorista', v.motorista]);
-  sh.appendRow(['Trajecto', v.trajecto]);
-  sh.appendRow([]);
-  sh.getRange(1, 1, 4, 1).setFontWeight('bold');
+  var bloco = [
+    ['Viagem', nomeFolha],
+    ['Matrícula', v.matricula],
+    ['Motorista', v.motorista],
+    ['Trajecto', v.trajecto]
+  ].concat(ORDEM_KM.map(function (k) { return [CAMPOS_KM[k].nome, '']; }));
+  sh.getRange(1, 1, bloco.length, 2).setValues(bloco);
+  sh.getRange(1, 1, bloco.length, 1).setFontWeight('bold');
 
-  sh.appendRow(COLUNAS_ABAST);
-  var linhaCab = sh.getLastRow();
+  var linhaCab = bloco.length + 3;            // duas linhas em branco antes da tabela
+  sh.getRange(linhaCab, 1, 1, COLUNAS_ABAST.length).setValues([COLUNAS_ABAST]);
   sh.getRange(linhaCab, 1, 1, COLUNAS_ABAST.length).setFontWeight('bold');
   sh.setFrozenRows(linhaCab);
+}
+
+/* ---------- Km e litros à saída e à chegada · consumo da viagem ----------
+   Na folha de abastecimentos ficam no bloco do topo (rótulo na coluna A,
+   valor na B); na folha Viagens, em colunas próprias (criadas no fim se
+   faltarem). Consumo = (litros saída + abastecidos − litros chegada) ÷
+   (km chegada − km saída). */
+var CAMPOS_KM = {
+  kmSaida:       { nome: 'Km Saída',       re: /^km\s*(de\s*)?sa[íi]da/i },
+  kmChegada:     { nome: 'Km Chegada',     re: /^km\s*(de\s*)?chegada/i },
+  litrosSaida:   { nome: 'Litros Saída',   re: /^litros\s*(de\s*)?sa[íi]da/i },
+  litrosChegada: { nome: 'Litros Chegada', re: /^litros\s*(de\s*)?chegada/i }
+};
+var ORDEM_KM = ['kmSaida', 'kmChegada', 'litrosSaida', 'litrosChegada'];
+var COL_LITROS_CONSUMIDOS = { nome: 'Litros Consumidos', re: /^litros\s*consumid/i };
+var COL_CONSUMO = { nome: 'Consumo (L/km)', re: /^consumo/i };
+
+/** número ou null (vazio) — aceita vírgula decimal */
+function numOuNada_(v) {
+  if (v === null || v === undefined || String(v).trim() === '') return null;
+  var n = num_(v);
+  return isNaN(n) ? null : n;
+}
+function lerSaida_(saida) {
+  saida = saida || {};
+  var out = { km: numOuNada_(saida.km), litros: numOuNada_(saida.litros) };
+  if (out.km != null && out.km < 0) throw new Error('Km à saída inválidos.');
+  if (out.litros != null && out.litros < 0) throw new Error('Litros à saída inválidos.');
+  return out;
+}
+
+/** Linhas do bloco km/litros numa folha de abastecimentos: { kmSaida: 5, … } */
+function blocoKm_(sh) {
+  var cab = cabecalhoAbast_(sh);
+  var fim = cab.cols.length ? cab.linha - 1 : Math.min(sh.getLastRow(), 12);
+  var out = { cab: cab, linhas: {}, valores: {}, ultimaTexto: 0 };
+  if (fim < 1) return out;
+  sh.getRange(1, 1, fim, 2).getValues().forEach(function (r, i) {
+    var rot = String(r[0]).trim();
+    if (rot) out.ultimaTexto = i + 1;
+    ORDEM_KM.forEach(function (k) {
+      if (!out.linhas[k] && CAMPOS_KM[k].re.test(semAcentos_(rot))) {
+        out.linhas[k] = i + 1;
+        out.valores[k] = numOuNada_(r[1]);
+      }
+    });
+  });
+  return out;
+}
+
+/** Escreve valores no bloco km/litros, acrescentando as linhas que faltem
+    (folhas antigas) por baixo da identificação da viagem. */
+function escreverBlocoKm_(nomeFolha, valores) {
+  var sh = folha_(ABAST_ID, nomeFolha);
+  var b = blocoKm_(sh);
+  var falta = ORDEM_KM.filter(function (k) { return !b.linhas[k]; });
+  if (falta.length) {
+    if (!b.cab.cols.length) throw new Error('A folha ' + nomeFolha + ' não tem cabeçalho de tabela.');
+    var pos = b.ultimaTexto;
+    if (pos > 0) sh.insertRowsAfter(pos, falta.length);
+    else sh.insertRowsBefore(1, falta.length + 1);
+    var inicio = pos > 0 ? pos + 1 : 1;
+    sh.getRange(inicio, 1, falta.length, 2).setValues(falta.map(function (k) { return [CAMPOS_KM[k].nome, '']; }));
+    sh.getRange(inicio, 1, falta.length, 1).setFontWeight('bold');
+    b = blocoKm_(sh);
+  }
+  ORDEM_KM.forEach(function (k) {
+    if (valores[k] !== undefined && valores[k] !== null) sh.getRange(b.linhas[k], 2).setValue(valores[k]);
+  });
+}
+
+/** Litros abastecidos e última leitura do conta-km, da folha da viagem. */
+function abastecidosDaFolha_(sh) {
+  var cab = cabecalhoAbast_(sh);
+  var out = { litros: 0, n: 0, ultimoKm: null };
+  if (!cab.cols.length || sh.getLastRow() <= cab.linha) return out;
+  var iL = indiceDe_(cab.cols, [/^litros?$/i, /^litros?\b(?!.*(sa[íi]da|chegada|consum))/i]);
+  var iK = indiceDe_(cab.cols, [/^km/i, /conta|od[óo]metro|quil[óo]metr/i]);
+  sh.getRange(cab.linha + 1, 1, sh.getLastRow() - cab.linha, cab.cols.length).getValues().forEach(function (r) {
+    var l = iL >= 0 ? num_(r[iL]) : 0;
+    if (l > 0) { out.litros += l; out.n++; }
+    var k = iK >= 0 ? num_(r[iK]) : 0;
+    if (k > 0 && (out.ultimoKm == null || k > out.ultimoKm)) out.ultimoKm = k;
+  });
+  out.litros = Math.round(out.litros * 100) / 100;
+  return out;
+}
+
+/** Linha da viagem na folha Viagens (0 se não existir). */
+function linhaDaViagem_(sh, cab, vf) {
+  var iVF = indiceDe_(cab.cols, [/^vf$/i, /c[óo]digo/i]);
+  if (iVF < 0 || sh.getLastRow() <= cab.linha) return 0;
+  var vals = sh.getRange(cab.linha + 1, iVF + 1, sh.getLastRow() - cab.linha, 1).getValues();
+  for (var i = vals.length - 1; i >= 0; i--) {
+    if (String(vals[i][0]).replace(/\D/g, '') === vf) return cab.linha + 1 + i;
+  }
+  return 0;
+}
+
+/** Estado de uma viagem para o fecho: saída, chegada, litros abastecidos. */
+function obterFechoViagem(codigo) {
+  verificarAcesso_();
+  var vf = String(codigo || '').replace(/\D/g, '');
+  if (!vf) return null;
+  var out = { vf: vf, kmSaida: null, kmChegada: null, litrosSaida: null, litrosChegada: null,
+              regresso: '', litrosAbastecidos: 0, nAbast: 0, ultimoKm: null, temFolha: false };
+  var d = dadosDaViagem_('VF' + vf);
+  out.motorista = d.motorista; out.matricula = d.matricula; out.trajecto = d.trajecto;
+
+  /* folha Viagens */
+  var sv = folha_(PLANO_ID, FOLHA_VIAGENS), cv = cabecalho_(sv);
+  var lv = linhaDaViagem_(sv, cv, vf);
+  if (lv) {
+    var row = sv.getRange(lv, 1, 1, cv.cols.length).getValues()[0];
+    ORDEM_KM.forEach(function (k) {
+      var i = indiceDe_(cv.cols, [CAMPOS_KM[k].re]);
+      if (i >= 0) out[k] = numOuNada_(row[i]);
+    });
+    var iR = indiceDe_(cv.cols, [/^regresso/i, /^chegada$/i]);
+    if (iR >= 0 && row[iR]) {
+      var r = row[iR];
+      out.regresso = r instanceof Date ? Utilities.formatDate(r, 'Africa/Maputo', 'dd/MM/yyyy') : String(r);
+    }
+  }
+  /* folha de abastecimentos: o bloco do topo prevalece (é onde se escreve à mão) */
+  var sa = null;
+  try { sa = folha_(ABAST_ID, 'VF' + vf); } catch (e) { sa = null; }
+  if (sa) {
+    out.temFolha = true;
+    var b = blocoKm_(sa);
+    ORDEM_KM.forEach(function (k) { if (b.valores[k] != null) out[k] = b.valores[k]; });
+    var a = abastecidosDaFolha_(sa);
+    out.litrosAbastecidos = a.litros; out.nAbast = a.n; out.ultimoKm = a.ultimoKm;
+  }
+  out.fechada = out.kmChegada != null && out.litrosChegada != null;
+  return out;
+}
+
+/**
+ * Fecha a viagem: km e litros à chegada (e os de saída, se faltarem) na
+ * folha de abastecimentos e na folha Viagens, com a data de regresso, os
+ * litros consumidos e o consumo em L/km.
+ * `dados`: { viagem, data, kmSaida, litrosSaida, kmChegada, litrosChegada }
+ */
+function fecharViagem(dados) {
+  verificarAcesso_();
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var vf = String(dados.viagem || '').replace(/\D/g, '');
+    if (!vf) throw new Error('Escolhe a viagem.');
+    var atual = obterFechoViagem(vf);
+    if (!atual.temFolha) throw new Error('Não existe a folha VF' + vf + ' na planilha de abastecimentos.');
+    var kmS = numOuNada_(dados.kmSaida);   if (kmS == null) kmS = atual.kmSaida;
+    var lS  = numOuNada_(dados.litrosSaida); if (lS == null) lS = atual.litrosSaida;
+    var kmC = numOuNada_(dados.kmChegada), lC = numOuNada_(dados.litrosChegada);
+    if (kmS == null) throw new Error('Faltam os km à saída.');
+    if (lS == null) throw new Error('Faltam os litros à saída.');
+    if (kmC == null) throw new Error('Indica os km à chegada.');
+    if (lC == null) throw new Error('Indica os litros à chegada.');
+    if (kmC <= kmS) throw new Error('Os km à chegada (' + kmC + ') têm de ser mais do que os da saída (' + kmS + ').');
+    if (lC < 0 || lS < 0) throw new Error('Litros inválidos.');
+    var km = Math.round((kmC - kmS) * 100) / 100;
+    var consumidos = Math.round((lS + atual.litrosAbastecidos - lC) * 100) / 100;
+    if (!(consumidos > 0)) {
+      throw new Error('Os litros não batem certo: ' + lS + ' à saída + ' + atual.litrosAbastecidos +
+        ' abastecidos − ' + lC + ' à chegada = ' + consumidos + '. Confirma os valores.');
+    }
+    var lkm = Math.round(consumidos / km * 1000) / 1000;
+
+    /* 1. folha de abastecimentos */
+    escreverBlocoKm_('VF' + vf, { kmSaida: kmS, kmChegada: kmC, litrosSaida: lS, litrosChegada: lC });
+
+    /* 2. folha Viagens */
+    var avisos = [];
+    var sv = folha_(PLANO_ID, FOLHA_VIAGENS);
+    var cv = cabecalho_(sv);
+    if (!linhaDaViagem_(sv, cv, vf)) throw new Error('A viagem VF' + vf + ' não está na folha Viagens.');
+    var escrever = function (col, valor) {
+      cv = garantirColuna_(sv, col.nome, [col.re]).cab;
+      var lv = linhaDaViagem_(sv, cv, vf);
+      var cel = sv.getRange(lv, indiceDe_(cv.cols, [col.re]) + 1);
+      if (cel.getFormula && cel.getFormula()) return;      // não estragar fórmulas
+      cel.setValue(valor);
+    };
+    escrever(CAMPOS_KM.kmSaida, kmS);
+    escrever(CAMPOS_KM.kmChegada, kmC);
+    escrever(CAMPOS_KM.litrosSaida, lS);
+    escrever(CAMPOS_KM.litrosChegada, lC);
+    escrever(COL_LITROS_CONSUMIDOS, consumidos);
+    escrever(COL_CONSUMO, lkm);
+    /* regresso e km da viagem: só se a coluna existir e a célula estiver vazia
+       (o regresso pode ser corrigido no formulário: aí escreve-se) */
+    var lv = linhaDaViagem_(sv, cv, vf);
+    var iR = indiceDe_(cv.cols, [/^regresso/i, /^chegada$/i]);
+    if (iR >= 0 && dados.data) {
+      var cR = sv.getRange(lv, iR + 1);
+      if (!(cR.getFormula && cR.getFormula())) cR.setValue(dados.data);
+    }
+    var iK = indiceDe_(cv.cols, [/^km$/i]);
+    if (iK >= 0) {
+      var cK = sv.getRange(lv, iK + 1);
+      if (!String(cK.getValue()).trim() && !(cK.getFormula && cK.getFormula())) cK.setValue(km);
+      else if (Math.abs(num_(cK.getValue()) - km) > 0.5) {
+        avisos.push('a coluna KM tem ' + cK.getValue() + ' e o conta-quilómetros dá ' + km + ' — ficou como estava');
+      }
+    }
+    if (atual.ultimoKm != null && kmC < atual.ultimoKm) {
+      avisos.push('o último abastecimento foi aos ' + atual.ultimoKm + ' km, mais do que os km à chegada');
+    }
+    return { ok: true, vf: 'VF' + vf, km: km, litrosAbastecidos: atual.litrosAbastecidos,
+             consumidos: consumidos, lPorKm: lkm, l100: Math.round(consumidos / km * 1000) / 10,
+             aviso: avisos.length ? avisos.join(' · ') : null };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /**

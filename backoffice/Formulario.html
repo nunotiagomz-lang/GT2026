@@ -34,6 +34,12 @@
   .bloco-socio { border-left: 3px solid var(--accent); padding-left: 12px; margin-top: 10px; }
   .destaque { border: 1px solid var(--accent); border-radius: 12px; padding: 2px 12px 10px; margin-top: 12px; }
   .destaque label { color: var(--ink); font-size: 13px; }
+  .segmento { display: flex; gap: 6px; margin-bottom: 12px; }
+  .segmento button { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--border);
+    background: transparent; color: var(--ink-2); font-weight: 650; font-size: 13.5px; cursor: pointer; }
+  .segmento button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .conta-linha { display: flex; justify-content: space-between; font-size: 13px; color: var(--ink-2); padding: 3px 0; }
+  .conta-linha b { color: var(--ink); font-variant-numeric: tabular-nums; }
   details.opcional { margin-top: 16px; border-top: 1px solid var(--hairline); padding-top: 10px; }
   details.opcional summary { font-size: 13px; font-weight: 650; color: var(--ink-2); cursor: pointer; padding: 6px 0; }
   .recibo { display: flex; gap: 10px; align-items: center; padding: 11px 0; border-bottom: 1px solid var(--hairline); }
@@ -91,9 +97,37 @@
 </div>
 
 <div id="painelViagem">
-  <div class="card" id="camposViagem"><div class="loading">A carregar as colunas da folha…</div></div>
-  <button class="primary" id="btnViagem" onclick="gravarViagem()" disabled>Guardar viagem</button>
-  <div class="msg" id="msgViagem"></div>
+  <div class="segmento">
+    <button id="vgNova" class="on" onclick="modoViagem('nova')">Nova viagem</button>
+    <button id="vgFechar" onclick="modoViagem('fechar')">Fechar viagem</button>
+  </div>
+  <div id="vgBlocoNova">
+    <div class="card" id="camposViagem"><div class="loading">A carregar as colunas da folha…</div></div>
+    <button class="primary" id="btnViagem" onclick="gravarViagem()" disabled>Guardar viagem</button>
+    <div class="msg" id="msgViagem"></div>
+  </div>
+  <div id="vgBlocoFechar" style="display:none">
+    <div class="card">
+      <label for="fcViagem">Viagem</label>
+      <select id="fcViagem" onchange="carregarFecho()"><option value="">A carregar…</option></select>
+      <div class="hint" id="fcInfo">Escolhe a viagem que terminou.</div>
+      <label for="fcData">Data de chegada</label>
+      <input id="fcData" type="date">
+      <div class="titulo" style="margin-top:16px">À saída</div>
+      <label for="fcKmSaida">Km no conta-quilómetros</label>
+      <input id="fcKmSaida" type="text" inputmode="decimal" oninput="contaFecho()">
+      <label for="fcLitrosSaida">Litros no depósito</label>
+      <input id="fcLitrosSaida" type="text" inputmode="decimal" oninput="contaFecho()">
+      <div class="titulo" style="margin-top:16px">À chegada</div>
+      <label for="fcKmChegada">Km no conta-quilómetros</label>
+      <input id="fcKmChegada" type="text" inputmode="decimal" oninput="contaFecho()">
+      <label for="fcLitrosChegada">Litros no depósito</label>
+      <input id="fcLitrosChegada" type="text" inputmode="decimal" oninput="contaFecho()">
+      <div id="fcConta" style="margin-top:14px;padding-top:10px;border-top:1px solid var(--hairline)"></div>
+    </div>
+    <button class="primary" id="btnFechar" onclick="gravarFecho()">Fechar viagem</button>
+    <div class="msg" id="msgFechar"></div>
+  </div>
 </div>
 
 <div id="painelAbast" style="display:none">
@@ -398,12 +432,16 @@ function somarAbastecimento() {
    ser o 31.º campo, três ecrãs abaixo. */
 var RE_CAMPO_OPCIONAL = /di[áa]ria|transf|despesa|saldo|justific|adiantament|devolvid|^dias|^factura|^fatura/i;
 /* o valor acordado com o cliente — na folha chama-se «Valor Rate» */
+/* km e litros à saída/chegada e consumo: têm campos próprios (saída aqui,
+   chegada em «Fechar viagem»), não entram na lista genérica */
+var RE_KM_LITROS = /^(km|litros)\s*(de\s*)?(sa[íi]da|chegada)|^litros\s*consumid|^consumo/i;
 var RE_COMBINADO = /valor\s*(combinado|(do\s*|da\s*)?rate)|^rate|\brate\b|tarifa|pre[çc]o\s*(acordado|combinado)/i;
 
 function construirViagem(cfg) {
   CONFIG = cfg;
   var listas = cfg.listas || {};
-  var campos = cfg.colunas.map(function (nome) { return { nome: nome, html: campoViagem(nome, cfg, listas) }; });
+  var campos = cfg.colunas.filter(function (nome) { return !RE_KM_LITROS.test(nome); })
+    .map(function (nome) { return { nome: nome, html: campoViagem(nome, cfg, listas) }; });
   var eCombinado = function (c) { return RE_COMBINADO.test(c.nome); };
   var combinado = campos.filter(eCombinado);
   var principais = campos.filter(function (c) { return !eCombinado(c) && !RE_CAMPO_OPCIONAL.test(c.nome); });
@@ -416,6 +454,13 @@ function construirViagem(cfg) {
     principais.splice(k + 1, 0, { nome: combinado[0].nome, html: '<div class="destaque">' + combinado[0].html + '</div>' });
   }
   var html = principais.map(function (c) { return c.html; }).join('') +
+    '<div class="destaque"><label style="margin-top:10px">Saída da viatura</label>' +
+    '<label for="vKmSaida">Km no conta-quilómetros à saída</label>' +
+    '<input id="vKmSaida" type="text" inputmode="decimal" placeholder="Ex.: 89900">' +
+    '<label for="vLitrosSaida">Litros no depósito à saída</label>' +
+    '<input id="vLitrosSaida" type="text" inputmode="decimal" placeholder="Ex.: 120">' +
+    '<div class="hint">Ficam no topo da folha de abastecimentos da viagem e na folha Viagens. ' +
+    'Os de chegada lançam-se no fim, em «Fechar viagem» — é com eles que se calcula o consumo.</div></div>' +
     (opcionais.length
       ? '<details class="opcional"><summary>Transferências, diárias e despesas do motorista · opcional (' +
         opcionais.length + ')</summary>' + opcionais.map(function (c) { return c.html; }).join('') + '</details>'
@@ -487,6 +532,8 @@ function gravarViagem() {
     valores[nome] = el.type === 'date' ? formatarData(el.value)
       : (el.dataset.num && el.value ? numero(el.value) : el.value);
   });
+  var vazio = function (id) { var v = document.getElementById(id).value.trim(); return v ? numero(v) : null; };
+  var saida = { km: vazio('vKmSaida'), litros: vazio('vLitrosSaida') };
 
   google.script.run
     .withSuccessHandler(function (res) {
@@ -498,7 +545,89 @@ function gravarViagem() {
       btn.disabled = false; btn.textContent = 'Guardar viagem';
       mensagem('msgViagem', 'Não foi possível guardar: ' + err.message, true);
     })
-    .guardarViagem(valores);
+    .guardarViagem(valores, saida);
+}
+
+/* ---------- Fechar viagem ---------- */
+var FECHO = null;
+function modoViagem(m) {
+  document.getElementById('vgNova').className = m === 'nova' ? 'on' : '';
+  document.getElementById('vgFechar').className = m === 'fechar' ? 'on' : '';
+  document.getElementById('vgBlocoNova').style.display = m === 'nova' ? '' : 'none';
+  document.getElementById('vgBlocoFechar').style.display = m === 'fechar' ? '' : 'none';
+}
+function fmtN(v, casas) {
+  return Number(v).toLocaleString('pt-PT', { minimumFractionDigits: 0, maximumFractionDigits: casas == null ? 2 : casas });
+}
+function preencher(id, v) { document.getElementById(id).value = v == null ? '' : String(v).replace('.', ','); }
+function carregarFecho() {
+  var vf = document.getElementById('fcViagem').value;
+  FECHO = null; contaFecho();
+  ['fcKmSaida', 'fcLitrosSaida', 'fcKmChegada', 'fcLitrosChegada'].forEach(function (id) { preencher(id, null); });
+  if (!vf) { document.getElementById('fcInfo').textContent = 'Escolhe a viagem que terminou.'; return; }
+  document.getElementById('fcInfo').textContent = 'A ler a viagem…';
+  google.script.run
+    .withSuccessHandler(function (f) {
+      if (!f || document.getElementById('fcViagem').value !== vf) return;
+      FECHO = f;
+      preencher('fcKmSaida', f.kmSaida); preencher('fcLitrosSaida', f.litrosSaida);
+      preencher('fcKmChegada', f.kmChegada); preencher('fcLitrosChegada', f.litrosChegada);
+      if (f.regresso) {
+        var p = f.regresso.split('/');
+        if (p.length === 3) document.getElementById('fcData').value = p[2] + '-' + ('0' + p[1]).slice(-2) + '-' + ('0' + p[0]).slice(-2);
+      }
+      var partes = [f.matricula, f.motorista, f.trajecto].filter(Boolean);
+      document.getElementById('fcInfo').textContent = (partes.length ? partes.join(' · ') + ' — ' : '') +
+        (f.temFolha ? f.nAbast + ' abastecimento' + (f.nAbast === 1 ? '' : 's') + ', ' + fmtN(f.litrosAbastecidos) + ' L'
+                    : 'sem folha de abastecimentos') +
+        (f.fechada ? ' · já fechada: podes corrigir os valores.' : '');
+      contaFecho();
+    })
+    .withFailureHandler(function (err) { document.getElementById('fcInfo').textContent = 'Erro: ' + err.message; })
+    .obterFechoViagem(vf);
+}
+function contaFecho() {
+  var el = document.getElementById('fcConta');
+  var v = function (id) { var t = document.getElementById(id).value.trim(); return t ? numero(t) : null; };
+  var kmS = v('fcKmSaida'), kmC = v('fcKmChegada'), lS = v('fcLitrosSaida'), lC = v('fcLitrosChegada');
+  if (!FECHO) { el.innerHTML = ''; return; }
+  var ab = FECHO.litrosAbastecidos || 0;
+  var linhas = '';
+  var km = kmS != null && kmC != null ? kmC - kmS : null;
+  linhas += '<div class="conta-linha"><span>Km da viagem</span><b>' + (km != null ? fmtN(km) + ' km' : '—') + '</b></div>';
+  var cons = lS != null && lC != null ? lS + ab - lC : null;
+  linhas += '<div class="conta-linha"><span>Litros: saída + abastecidos − chegada</span><b>' +
+    (cons != null ? fmtN(lS) + ' + ' + fmtN(ab) + ' − ' + fmtN(lC) + ' = ' + fmtN(cons) + ' L' : fmtN(ab) + ' L abastecidos') + '</b></div>';
+  if (km != null && km > 0 && cons != null && cons > 0) {
+    linhas += '<div class="total"><span>Consumo</span><span>' + fmtN(cons / km, 3) + ' L/km · ' + fmtN(cons / km * 100, 1) + ' L/100km</span></div>';
+  } else if (km != null && km <= 0) {
+    linhas += '<div class="hint" style="color:var(--bad)">Os km à chegada têm de ser mais do que os da saída.</div>';
+  } else if (cons != null && cons <= 0) {
+    linhas += '<div class="hint" style="color:var(--bad)">Os litros não batem certo — confirma os valores.</div>';
+  }
+  el.innerHTML = linhas;
+}
+function gravarFecho() {
+  var vf = document.getElementById('fcViagem').value;
+  if (!vf) { mensagem('msgFechar', 'Escolhe a viagem.', true); return; }
+  var v = function (id) { var t = document.getElementById(id).value.trim(); return t ? numero(t) : null; };
+  var dados = { viagem: vf, data: formatarData(document.getElementById('fcData').value),
+    kmSaida: v('fcKmSaida'), litrosSaida: v('fcLitrosSaida'), kmChegada: v('fcKmChegada'), litrosChegada: v('fcLitrosChegada') };
+  if (dados.kmChegada == null || dados.litrosChegada == null) { mensagem('msgFechar', 'Indica os km e os litros à chegada.', true); return; }
+  var btn = document.getElementById('btnFechar');
+  btn.disabled = true; btn.textContent = 'A fechar…';
+  google.script.run
+    .withSuccessHandler(function (r) {
+      btn.disabled = false; btn.textContent = 'Fechar viagem';
+      mensagem('msgFechar', '✓ ' + r.vf + ' fechada: ' + fmtN(r.km) + ' km, ' + fmtN(r.consumidos) + ' L consumidos — ' +
+        fmtN(r.lPorKm, 3) + ' L/km (' + fmtN(r.l100, 1) + ' L/100km).' + (r.aviso ? ' Atenção: ' + r.aviso + '.' : ''), false);
+      carregarFecho();
+    })
+    .withFailureHandler(function (err) {
+      btn.disabled = false; btn.textContent = 'Fechar viagem';
+      mensagem('msgFechar', 'Não foi possível fechar: ' + err.message, true);
+    })
+    .fecharViagem(dados);
 }
 
 function gravarAbastecimento() {
@@ -1034,6 +1163,9 @@ function recarregar() {
       document.getElementById('abCodigo').innerHTML = opcoes || '<option value="">(sem viagens)</option>';
       document.getElementById('mvViagem').innerHTML = '<option value="">— sem viagem —</option>' + opcoes;
       document.getElementById('ivViagem').innerHTML = '<option value="">— sem viagem —</option>' + opcoes;
+      var fc = document.getElementById('fcViagem'), antesFc = fc.value;
+      fc.innerHTML = '<option value="">— escolher —</option>' + opcoes;
+      if (antesFc) fc.value = antesFc;
       var mo = document.getElementById('moViagem'), antesMo = mo.value;
       mo.innerHTML = '<option value="">— escolher —</option>' + opcoes;
       if (antesMo) mo.value = antesMo;
@@ -1048,6 +1180,7 @@ document.getElementById('mvData').value = hoje;
 document.getElementById('ivData').value = hoje;
 document.getElementById('ftData').value = hoje;
 document.getElementById('moData').value = hoje;
+document.getElementById('fcData').value = hoje;
 recarregar();
 </script>
 </body>

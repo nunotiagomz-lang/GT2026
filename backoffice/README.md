@@ -28,6 +28,42 @@ Corre no Google Apps Script, dentro da conta Google da empresa.
   Assim, quem abre a folha no telemóvel sabe logo de que viatura e de que
   percurso se trata, sem ter de ir à outra planilha.
 
+  **Saída da viatura** — na nova viagem indicas os **km no conta-quilómetros**
+  e os **litros no depósito** à saída. Vão para o topo da folha de
+  abastecimentos (por baixo do Trajecto, com as linhas de chegada ainda
+  vazias) e para as colunas `Km Saída` / `Litros Saída` da folha `Viagens`
+  (criadas no fim na primeira vez):
+
+  ```
+  Viagem          VF53
+  Matrícula       ALM 226 MP
+  Motorista       Cesar Timbana
+  Trajecto        Matola, Maxixe
+  Km Saída        89900
+  Km Chegada
+  Litros Saída    60
+  Litros Chegada
+
+  Data  Local  Bomba  Litros  Preço/Litro  Valor (MZN)  Km
+  ```
+
+  **Fechar viagem** (botão ao lado de *Nova viagem*) — no regresso escolhes a
+  viagem e lanças a data, os **km** e os **litros à chegada** (os de saída vêm
+  preenchidos e podem ser corrigidos). O formulário mostra a conta antes de
+  gravar:
+
+  - km da viagem = km chegada − km saída
+  - litros consumidos = litros saída + litros abastecidos (soma da folha) − litros chegada
+  - consumo = litros consumidos ÷ km (em **L/km** e L/100km)
+
+  Grava os quatro valores no bloco da folha de abastecimentos (nas folhas
+  antigas, acrescenta as linhas que faltem sem mexer nos abastecimentos) e na
+  folha `Viagens`: `Km Chegada`, `Litros Chegada`, `Litros Consumidos`,
+  `Consumo (L/km)` e o `Regresso`. A coluna `KM` só é preenchida se estiver
+  vazia; se for diferente do conta-quilómetros, o formulário avisa. Recusa km
+  de chegada abaixo dos de saída e litros que deem consumo zero ou negativo.
+  Uma viagem já fechada pode ser fechada outra vez para corrigir.
+
   **Valor combinado** — o valor acordado com o cliente, na coluna **`Valor
   Rate`** da folha `Viagens` (também são reconhecidas `Valor Combinado`, `Rate`
   e `Tarifa`). Aparece logo a seguir ao Cliente, em destaque; os campos do

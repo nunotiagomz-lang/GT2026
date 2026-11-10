@@ -247,6 +247,18 @@ movimentos ligados. No painel, *A receber · clientes* soma o pendente de todas 
 viagens, e as Próximas Ações avisam das viagens por receber e dos recibos por
 entregar.
 
+### Consumo da viagem
+
+Ao abrir a viagem ficam registados os km e os litros no depósito à saída; ao
+fechá-la (back office, *Viagem → Fechar viagem*), os de chegada. A app calcula
+**(litros saída + abastecidos − litros chegada) ÷ (km chegada − km saída)** e
+mostra-o em L/km e L/100km, com o desvio face ao consumo esperado da viatura
+(folha `Viaturas`). Lê o bloco do topo da folha de abastecimentos e, se não o
+encontrar, as colunas `Km Saída` / `Km Chegada` / `Litros Saída` / `Litros
+Chegada` / `Litros Consumidos` da folha `Viagens`. Viagens com saída mas sem
+chegada aparecem como *Viagem em curso*. Na ficha da viatura aparece o consumo
+real médio das viagens fechadas.
+
 ### Abastecimentos (ficheiro separado)
 
 Os abastecimentos vêm de um segundo ficheiro no Drive, chamado
