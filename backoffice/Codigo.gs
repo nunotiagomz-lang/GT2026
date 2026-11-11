@@ -1535,6 +1535,20 @@ function guardarMovimentoMotorista(dados) {
     if (dados.movimento === 'adiantamento') {
       if (!/^(Caixa|Banco|Sócio)$/.test(dados.meio || '')) throw new Error('Indica de onde saiu o dinheiro: Caixa, Banco ou Sócio.');
       var pago = pagamentoDoSocio_(dados);
+      /* divisão do adiantamento (portagens, diárias, extras…): além do
+         adiantamento, ficam logo lançadas as despesas a que se destina —
+         as diárias justificadas, o resto à espera do recibo. Valida tudo
+         ANTES de escrever. */
+      var partes = [], somaPartes = 0;
+      var divisao = dados.divisao || {};
+      for (var cat in divisao) {
+        var vp = num_(divisao[cat]);
+        if (vp < 0) throw new Error('Valor inválido em «' + cat + '».');
+        if (vp > 0) { partes.push({ categoria: cat, valor: vp }); somaPartes += vp; }
+      }
+      if (somaPartes > valor + 0.01) {
+        throw new Error('A divisão (' + somaPartes + ') é maior do que o valor adiantado (' + valor + ').');
+      }
       linha = { data: dados.data, tipo: TIPO_ADIANT_MOTORISTA, categoria: 'Adiantamento motorista',
         descricao: dados.descricao || ('Adiantamento a ' + motorista + ' · VF' + vf), valor: valor,
         meio: dados.meio, quem: motorista, viagem: vf, nota: dados.nota || (pago ? 'pago por ' + pago.socio : '') };
@@ -1545,6 +1559,13 @@ function guardarMovimentoMotorista(dados) {
           fica: pago.fica, tipoAdiantamento: 'Adiantamento do sócio' });
         if (!aviso) folhas.push(FOLHA_MOVS); else aviso = 'Conta de ' + pago.socio + ': ' + aviso;
       }
+      partes.forEach(function (p) {
+        var ld = { data: dados.data, tipo: 'Despesa', categoria: p.categoria,
+          descricao: p.categoria + ' · VF' + vf, valor: p.valor,
+          meio: MEIO_MOTORISTA, quem: motorista, viagem: vf, nota: 'do adiantamento', reciboEntregue: false };
+        ld.recibo = estadoRecibo_(ld);
+        escreverGeral_(ld);
+      });
     } else if (dados.movimento === 'despesa') {
       if (!String(dados.categoria || '').trim()) throw new Error('Indica a categoria (Portagens, Diárias, Despesas extras…).');
       linha = { data: dados.data, tipo: 'Despesa', categoria: dados.categoria,
