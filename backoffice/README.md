@@ -170,6 +170,16 @@ Corre no Google Apps Script, dentro da conta Google da empresa.
     sócio`, `Adiantamento ao sócio`, `Devolução do sócio`. Dinheiro que tem de
     voltar; não mexe nas quotas.
 
+  **`Adiantamento do sócio`** pergunta o que foi feito com o dinheiro:
+
+  - **Pagou uma despesa** (combustível, manutenção…) — no `Movimentos Geral`
+    entra como **`Despesa`** com `Meio = Sócio` (conta nos custos e na margem
+    da viagem, não mexe na Caixa nem no Banco); no livro dos investidores fica
+    `Adiantamento do sócio` na coluna dele — a empresa fica a dever-lhe.
+    A categoria é obrigatória.
+  - **Entregou dinheiro à empresa** — entra na Caixa ou no Banco, para lhe ser
+    devolvido.
+
   Nos adiantamentos, devoluções e dividendos o formulário pede **por onde passou
   o dinheiro na empresa** (Caixa ou Banco) — é o que os põe na tesouraria. Ao
   escolher um tipo de adiantamento, cada sócio mostra o **pendente** («a empresa

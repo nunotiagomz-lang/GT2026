@@ -337,6 +337,15 @@
     <label for="ivTipo">Tipo</label>
     <select id="ivTipo" onchange="atualizarDicaInv()"></select>
     <div class="hint" id="ivTipoHint"></div>
+    <div id="ivDestinoBloco" class="bloco-socio" style="display:none">
+      <label>O que foi feito com o dinheiro</label>
+      <div class="escolha">
+        <label><input type="radio" name="ivDestino" value="despesa" checked onchange="atualizarDicaInv()">
+          <span>Pagou uma despesa<small>combustível, manutenção… conta nos custos; a empresa fica a dever-lhe</small></span></label>
+        <label><input type="radio" name="ivDestino" value="caixa" onchange="atualizarDicaInv()">
+          <span>Entregou dinheiro à empresa<small>entra na Caixa ou no Banco, para lhe ser devolvido</small></span></label>
+      </div>
+    </div>
     <div id="ivMeioBloco" style="display:none">
       <label for="ivMeio">Por onde passou o dinheiro na empresa</label>
       <select id="ivMeio">
@@ -789,7 +798,11 @@ function atualizarDicaInv() {
       ? 'Dinheiro que sai para os sócios — desconta ao que cada um tem investido.'
       : 'Dinheiro que os sócios põem na empresa como capital — conta para as quotas.';
   /* adiantamentos, devoluções e dividendos passam pela caixa ou pelo banco */
-  document.getElementById('ivMeioBloco').style.display = (cl || saiParaSocio) ? '' : 'none';
+  document.getElementById('ivDestinoBloco').style.display = cl === 'do' ? '' : 'none';
+  var pagouDespesa = cl === 'do' && escolhido('ivDestino') === 'despesa';
+  document.getElementById('ivMeioBloco').style.display = (cl || saiParaSocio) && !pagouDespesa ? '' : 'none';
+  if (pagouDespesa) document.getElementById('ivTipoHint').textContent =
+    'O sócio pagou do bolso uma despesa da empresa: entra como Despesa no livro geral (indica a categoria e, se for de uma viagem, a viagem) e a empresa fica a dever-lhe o valor.';
 
   /* pendente de cada sócio, para saber quanto devolver */
   var saldos = (CFG_MOV && CFG_MOV.adiantamentos) || {};
@@ -835,7 +848,13 @@ function gravarInvestimento() {
   if (!somarInvestimento()) { mensagem('msgInv', 'Preenche o valor de pelo menos um sócio.', true); return; }
   var tipoInv = document.getElementById('ivTipo').value;
   var meioInv = document.getElementById('ivMeio').value;
-  if ((classeAdiant(tipoInv) || /devolu|dividend/i.test(tipoInv)) && !meioInv) {
+  var destinoInv = classeAdiant(tipoInv) === 'do' ? escolhido('ivDestino') : '';
+  if (destinoInv === 'despesa') {
+    meioInv = '';
+    if (!document.getElementById('ivCategoria').value.trim()) {
+      mensagem('msgInv', 'Indica a categoria da despesa que o sócio pagou.', true); return;
+    }
+  } else if ((classeAdiant(tipoInv) || /devolu|dividend/i.test(tipoInv)) && !meioInv) {
     mensagem('msgInv', 'Indica por onde passou o dinheiro: Caixa ou Banco.', true); return;
   }
 
@@ -865,6 +884,7 @@ function gravarInvestimento() {
     .guardarInvestimento({
       data: formatarData(document.getElementById('ivData').value),
       tipo: tipoInv,
+      destino: destinoInv,
       meio: meioInv,
       categoria: document.getElementById('ivCategoria').value,
       descricao: document.getElementById('ivDescricao').value,

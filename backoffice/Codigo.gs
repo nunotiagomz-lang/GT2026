@@ -954,7 +954,17 @@ function guardarInvestimento(dados) {
 
     /* adiantamentos e devoluções passam pela caixa ou pelo banco da empresa */
     var meio = 'Sócio';
-    if (classe || /devolu|dividend/i.test(semAcentos_(dados.tipo))) {
+    /* «Adiantamento do sócio» pode ser duas coisas:
+       - pagou do bolso uma despesa da empresa → no livro geral é uma DESPESA
+         (Meio = Sócio), para contar nos custos e na margem; a dívida ao
+         sócio fica no livro dos investidores;
+       - entregou dinheiro à empresa → entra na Caixa ou no Banco. */
+    var pagouDespesa = classe === 'do' && dados.destino === 'despesa';
+    if (pagouDespesa) {
+      if (!String(dados.categoria || '').trim()) {
+        throw new Error('Indica a categoria da despesa que o sócio pagou (Combustível, Manutenção…).');
+      }
+    } else if (classe || /devolu|dividend/i.test(semAcentos_(dados.tipo))) {
       meio = dados.meio || '';
       if (!/^(caixa|banco)$/i.test(meio)) {
         throw new Error('Indica por onde passou o dinheiro na empresa: Caixa ou Banco.');
@@ -1020,17 +1030,20 @@ function guardarInvestimento(dados) {
     shI.appendRow(linhaI);
 
     /* 2) livro geral: uma linha com o SOMATÓRIO */
-    var avisoInv = tentarEscreverGeral_({
+    var linhaG = {
       data: dados.data,
-      tipo: dados.tipo,
+      tipo: pagouDespesa ? 'Despesa' : dados.tipo,
       categoria: dados.categoria,
       descricao: dados.descricao,
       valor: total,
       meio: meio,
       quem: contribuintes.join(', '),
       viagem: dados.viagem,
-      nota: dados.nota
-    });
+      nota: dados.nota,
+      reciboEntregue: dados.reciboEntregue
+    };
+    if (pagouDespesa) linhaG.recibo = estadoRecibo_(linhaG);
+    var avisoInv = tentarEscreverGeral_(linhaG);
 
     var folhasInv = [shI.getName()];
     if (!avisoInv) folhasInv.push(FOLHA_GERAL);

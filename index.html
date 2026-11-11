@@ -2530,10 +2530,15 @@ function extractGeral(rows) {
                          : cm ? cm === "dev"
                          : cl ? ADIANT_DO_SOCIO[cl]
                          : (tipo === "Suprimento" || tipo === "Recebimento");
+    /* «Adiantamento do sócio» com Meio = Sócio: o dinheiro nunca entrou na
+       Caixa nem no Banco — o sócio pagou a despesa diretamente. No livro
+       geral conta como despesa (a dívida ao sócio está no livro dos
+       investidores). */
+    const pagoPeloSocio = (cl === "do" || cl === "despesa") && /^s[óo]cio/i.test(get(r, ix.meio));
     movs.push({
       data: get(r, ix.data), date: parseDate(get(r, ix.data)),
-      tipo, categoria: get(r, ix.cat), desc,
-      valor: Math.abs(valor), entrada,
+      tipo: pagoPeloSocio ? "Despesa" : tipo, categoria: get(r, ix.cat), desc,
+      valor: Math.abs(valor), entrada: pagoPeloSocio ? false : entrada,
       meio: get(r, ix.meio), quem: get(r, ix.quem),
       viagem: ix.vf >= 0 ? tripCode(get(r, ix.vf)) : "",
       recibo: get(r, ix.recibo),
