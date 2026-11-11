@@ -266,8 +266,8 @@
     </div>
     <label for="moData">Data</label>
     <input id="moData" type="date">
-    <label for="moValor">Valor (MZN)</label>
-    <input id="moValor" type="text" inputmode="decimal" placeholder="0">
+    <label for="moValor" id="moValorRot">Valor (MZN)</label>
+    <input id="moValor" type="text" inputmode="decimal" placeholder="0" oninput="somarDivisao()">
 
     <div id="moBlocoAd">
       <label for="moMeio">De onde saiu o dinheiro</label>
@@ -288,6 +288,14 @@
             <span>Investimento<small>capital, conta para as quotas</small></span></label>
         </div>
       </div>
+    </div>
+
+    <div id="moBlocoDivisao">
+      <div class="titulo" style="margin-top:16px">Para quê · opcional</div>
+      <div class="socio-linha"><label for="moDivPortagens">Portagens</label><input id="moDivPortagens" type="text" inputmode="decimal" placeholder="0" oninput="somarDivisao(true)"></div>
+      <div class="socio-linha"><label for="moDivDiarias">Diárias</label><input id="moDivDiarias" type="text" inputmode="decimal" placeholder="0" oninput="somarDivisao(true)"></div>
+      <div class="socio-linha"><label for="moDivExtras">Despesas extras</label><input id="moDivExtras" type="text" inputmode="decimal" placeholder="0" oninput="somarDivisao(true)"></div>
+      <div class="hint" id="moDivDica"></div>
     </div>
 
     <div id="moBlocoDesp" style="display:none">
@@ -1008,17 +1016,38 @@ function ajustarMotorista() {
   var t = escolhido('moTipo');
   document.getElementById('moBlocoAd').style.display = t === 'adiantamento' ? '' : 'none';
   document.getElementById('moBlocoDesp').style.display = t === 'despesa' ? '' : 'none';
+  document.getElementById('moBlocoDivisao').style.display = t === 'adiantamento' ? '' : 'none';
+  document.getElementById('moValorRot').textContent = t === 'adiantamento' ? 'Valor total entregue (MZN)' : 'Valor (MZN)';
   document.getElementById('moBlocoDev').style.display = t === 'devolucao' ? '' : 'none';
   document.getElementById('moBlocoSocio').style.display =
     t === 'adiantamento' && document.getElementById('moMeio').value === 'Sócio' ? '' : 'none';
   var cat = document.getElementById('moCategoria').value;
   document.getElementById('moReciboBloco').style.display = precisaReciboMotorista(cat) ? '' : 'none';
   document.getElementById('moDica').textContent =
-    t === 'adiantamento' ? 'Não é despesa: o dinheiro fica à guarda do motorista até ele o justificar ou devolver. Podes lançar vários adiantamentos na mesma viagem.'
+    t === 'adiantamento' ? 'Um só lançamento: o valor entregue e, se quiseres, para que é. Não repitas depois as mesmas despesas em «Despesa».'
     : t === 'despesa' ? (precisaReciboMotorista(cat) ? 'Conta como despesa da viagem. Sem recibo, fica por justificar até o motorista o entregar.'
                                             : 'Conta como despesa da viagem e fica logo justificada (não precisa de recibo).')
     : 'O que sobrou do adiantamento volta à empresa e abate ao que o motorista tem de justificar.';
 }
+/* divisão do adiantamento: soma enquanto se escreve; se o total estiver
+   vazio (ou tiver sido preenchido pela soma), acompanha a soma */
+var DIV_MOT = [['moDivPortagens', 'Portagens'], ['moDivDiarias', 'Diárias'], ['moDivExtras', 'Despesas extras']];
+var totalAutomatico = true;
+function somarDivisao(daDivisao) {
+  var soma = 0;
+  DIV_MOT.forEach(function (d) { soma += valorNum(d[0]); });
+  var total = document.getElementById('moValor');
+  if (!daDivisao) totalAutomatico = !total.value.trim();
+  else if (totalAutomatico && soma) total.value = String(soma).replace('.', ',');
+  var t = valorNum('moValor'), dica = document.getElementById('moDivDica');
+  dica.style.color = '';
+  if (!soma) dica.textContent = 'Se indicares a divisão, ficam logo lançadas as despesas: as diárias já justificadas, portagens e extras à espera do recibo.';
+  else if (soma > t + 0.01) { dica.textContent = 'A divisão (' + soma.toLocaleString('pt-PT') + ') é maior do que o total entregue.'; dica.style.color = 'var(--bad)'; }
+  else if (t - soma > 0.01) dica.textContent = 'Soma ' + soma.toLocaleString('pt-PT') + ' — sobram ' + (t - soma).toLocaleString('pt-PT') + ' sem destino, que o motorista justifica ou devolve depois.';
+  else dica.textContent = 'Soma ' + soma.toLocaleString('pt-PT') + ' MZN — igual ao total entregue.';
+  return soma;
+}
+
 function gravarMotorista() {
   var t = escolhido('moTipo');
   var dados = {
@@ -1034,6 +1063,11 @@ function gravarMotorista() {
     descricao: document.getElementById('moDescricao').value,
     reciboEntregue: document.getElementById('moRecibo').checked
   };
+  if (t === 'adiantamento') {
+    dados.divisao = {};
+    DIV_MOT.forEach(function (d) { var v = valorNum(d[0]); if (v) dados.divisao[d[1]] = v; });
+    if (somarDivisao(true) > dados.valor + 0.01) { mensagem('msgMot', 'A divisão é maior do que o total entregue.', true); return; }
+  }
   if (!dados.viagem) { mensagem('msgMot', 'Escolhe a viagem.', true); return; }
   if (!dados.valor) { mensagem('msgMot', 'Indica o valor.', true); return; }
   if (t === 'adiantamento' && !dados.meio) { mensagem('msgMot', 'Indica de onde saiu o dinheiro.', true); return; }
@@ -1043,7 +1077,8 @@ function gravarMotorista() {
     .withSuccessHandler(function (res) {
       mensagem('msgMot', (res.aviso ? '✓ Guardado, mas: ' + res.aviso : '✓ Guardado em: ' + res.folhas.reduce(juntarPT, '') + '.') +
         ' ' + textoConta(res.conta), !!res.aviso);
-      ['moValor', 'moDescricao'].forEach(function (id) { document.getElementById(id).value = ''; });
+      ['moValor', 'moDescricao', 'moDivPortagens', 'moDivDiarias', 'moDivExtras'].forEach(function (id) { document.getElementById(id).value = ''; });
+      totalAutomatico = true; somarDivisao(true);
       document.getElementById('moRecibo').checked = false;
       document.getElementById('moConta').textContent = textoConta(Object.assign({ motorista: res.motorista }, res.conta));
     })
@@ -1201,6 +1236,7 @@ document.getElementById('ivData').value = hoje;
 document.getElementById('ftData').value = hoje;
 document.getElementById('moData').value = hoje;
 document.getElementById('fcData').value = hoje;
+ajustarMotorista(); somarDivisao(true);
 recarregar();
 </script>
 </body>

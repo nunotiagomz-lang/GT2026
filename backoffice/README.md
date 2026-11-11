@@ -137,6 +137,13 @@ Corre no Google Apps Script, dentro da conta Google da empresa.
   | **Despesa** | o que ele pagou: portagens, extras, diárias… | `Despesa`, **Meio = Motorista**. Tudo pede recibo **menos as diárias**; sem recibo fica *por justificar* (aparece em Recibos) |
   | **Devolução** | o que sobrou e ele devolveu | `Devolução do motorista`, Meio Caixa / Banco |
 
+  No **Adiantamento** podes indicar logo **para que é** (Portagens, Diárias,
+  Despesas extras): com um só lançamento ficam gravados o adiantamento e as
+  despesas — as diárias já justificadas, portagens e extras com o recibo *por
+  entregar*. O total acompanha a soma; se entregares mais do que a soma, o
+  resto fica por justificar ou devolver. Não repitas depois as mesmas
+  despesas em «Despesa».
+
   O adiantamento **não é despesa** (o dinheiro só mudou de mão); a despesa é o
   que ele gasta. Na tesouraria, o adiantamento sai da Caixa/Banco e a devolução
   volta; as despesas com Meio Motorista já não voltam a sair (saíram no
