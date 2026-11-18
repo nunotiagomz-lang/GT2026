@@ -451,7 +451,7 @@ var RE_CAMPO_OPCIONAL = /di[áa]ria|transf|despesa|saldo|justific|adiantament|de
 /* o valor acordado com o cliente — na folha chama-se «Valor Rate» */
 /* km e litros à saída/chegada e consumo: têm campos próprios (saída aqui,
    chegada em «Fechar viagem»), não entram na lista genérica */
-var RE_KM_LITROS = /^(km|litros)\s*(de\s*)?(sa[íi]da|chegada)|^litros\s*consumid|^consumo/i;
+var RE_KM_LITROS = /^(km|litros)\s*(de\s*)?(sa[íi]da|chegada)|^litros\s*consumid|^consumo|^estado(\s*(da\s*)?viagem)?$/i;
 var RE_COMBINADO = /valor\s*(combinado|(do\s*|da\s*)?rate)|^rate|\brate\b|tarifa|pre[çc]o\s*(acordado|combinado)/i;
 
 function construirViagem(cfg) {
@@ -597,7 +597,7 @@ function carregarFecho() {
       document.getElementById('fcInfo').textContent = (partes.length ? partes.join(' · ') + ' — ' : '') +
         (f.temFolha ? f.nAbast + ' abastecimento' + (f.nAbast === 1 ? '' : 's') + ', ' + fmtN(f.litrosAbastecidos) + ' L'
                     : 'sem folha de abastecimentos') +
-        (f.fechada ? ' · já fechada: podes corrigir os valores.' : '');
+        (f.fechada ? ' · já fechada: podes corrigir os valores.' : ' · aberta: ao fechar, passa a contar nas estatísticas da app.');
       contaFecho();
     })
     .withFailureHandler(function (err) { document.getElementById('fcInfo').textContent = 'Erro: ' + err.message; })
@@ -637,8 +637,9 @@ function gravarFecho() {
     .withSuccessHandler(function (r) {
       btn.disabled = false; btn.textContent = 'Fechar viagem';
       mensagem('msgFechar', '✓ ' + r.vf + ' fechada: ' + fmtN(r.km) + ' km, ' + fmtN(r.consumidos) + ' L consumidos — ' +
-        fmtN(r.lPorKm, 3) + ' L/km (' + fmtN(r.l100, 1) + ' L/100km).' + (r.aviso ? ' Atenção: ' + r.aviso + '.' : ''), false);
+        fmtN(r.lPorKm, 3) + ' L/km (' + fmtN(r.l100, 1) + ' L/100km). Estado: fechada.' + (r.aviso ? ' Atenção: ' + r.aviso + '.' : ''), false);
       carregarFecho();
+      recarregar();
     })
     .withFailureHandler(function (err) {
       btn.disabled = false; btn.textContent = 'Fechar viagem';
@@ -1221,6 +1222,20 @@ function recarregar() {
       var fc = document.getElementById('fcViagem'), antesFc = fc.value;
       fc.innerHTML = '<option value="">— escolher —</option>' + opcoes;
       if (antesFc) fc.value = antesFc;
+      /* Fechar viagem: as abertas primeiro, cada uma com o estado */
+      google.script.run.withSuccessHandler(function (est) {
+        est = est || {};
+        var ab = [], fe = [];
+        lista.forEach(function (c) {
+          var n = String(c).replace(/\D/g, ''), e = est[n] || 'Aberta';
+          (e === 'Fechada' ? fe : ab).push('<option value="' + c + '">VF' + n + ' · ' + e.toLowerCase() + '</option>');
+        });
+        var antes = fc.value;
+        fc.innerHTML = '<option value="">— escolher —</option>' +
+          (ab.length ? '<optgroup label="Abertas">' + ab.join('') + '</optgroup>' : '') +
+          (fe.length ? '<optgroup label="Fechadas (para corrigir)">' + fe.join('') + '</optgroup>' : '');
+        if (antes) fc.value = antes;
+      }).withFailureHandler(function () {}).estadosViagens();
       var mo = document.getElementById('moViagem'), antesMo = mo.value;
       mo.innerHTML = '<option value="">— escolher —</option>' + opcoes;
       if (antesMo) mo.value = antesMo;

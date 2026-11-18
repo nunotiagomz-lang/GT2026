@@ -468,6 +468,9 @@
   .acao svg.i { width: 20px; height: 20px; flex: none; }
   .acao .txt { flex: 1; min-width: 0; font-size: 13.5px; line-height: 1.35; }
   .acao .seta { color: var(--ink-muted); }
+  .nota-fora { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: -4px 2px 12px;
+    font-size: 12px; color: var(--ink-2); cursor: pointer; }
+  .nota-fora b { color: var(--ink); }
   .selo-pag { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 650;
               color: var(--ink-2); padding: 3px 9px; border-radius: 999px; background: var(--surface-2);
               border: 1px solid var(--border); }
@@ -1355,8 +1358,15 @@ function renderResumo(rows) {
   const frota = extractViaturas(state.data["Viaturas"]);
   socios.forEach(s => socioColor(s.nome));
 
-  const geralPeriodo = geral.filter(m => inPeriod(m.date, state.period));
-  const viagens = td ? tripsInPeriod(td) : [];
+  /* movimentos das viagens em curso ficam fora das estatísticas */
+  const abertas = vfAbertas(td);
+  const daAberta = m => !!m.viagem && abertas.has(m.viagem);
+  const geralTodo = geral;                       // tesouraria: tudo
+  const geralA = geral.filter(m => !daAberta(m)); // análise: sem viagens em curso
+  const geralPeriodo = geralA.filter(m => inPeriod(m.date, state.period));
+  const viagensTodas = td ? tripsInPeriod(td) : [];
+  const viagens = fechadas(viagensTodas);
+  const emCursoP = viagensTodas.filter(t => !t.fechada);
   const lim = periodBounds(state.period);
 
   const conta = movs => {
@@ -1365,10 +1375,10 @@ function renderResumo(rows) {
     return { receitas, despesas, resultado: receitas - despesas };
   };
   const atual = conta(geralPeriodo);
-  const anterior = lim ? conta(geral.filter(m => entre(m.date, lim.iniAnt, lim.fimAnt))) : null;
-  const viagensAnt = lim && td ? td.trips.filter(t => entre(t.date, lim.iniAnt, lim.fimAnt)) : null;
+  const anterior = lim ? conta(geralA.filter(m => entre(m.date, lim.iniAnt, lim.fimAnt))) : null;
+  const viagensAnt = lim && td ? fechadas(td.trips).filter(t => entre(t.date, lim.iniAnt, lim.fimAnt)) : null;
 
-  const emCaixa = geral.filter(m => /caixa|banco/i.test(deaccent(m.meio)));
+  const emCaixa = geralTodo.filter(m => /caixa|banco/i.test(deaccent(m.meio)));
   const saldoTesouraria = emCaixa.reduce((a, m) => a + (m.entrada ? m.valor : -m.valor), 0);
   const totalInvestido = investidores.reduce((a, m) =>
     classeAdiant(m.tipo) ? a : a + (saidaParaSocio(m.tipo) ? -m.total : m.total), 0);
@@ -1395,13 +1405,23 @@ function renderResumo(rows) {
       sub: `Margem: <b style="color:var(--ink)">${margemPct == null ? "—" : fmtNumRaw(margemPct.toFixed(1)) + "%"}</b>`,
       goto: "contas:correntes" }) +
   `</div>`;
+  /* o que ficou de fora: movimentos das viagens em curso no período */
+  const foraP = geral.filter(m => daAberta(m) && inPeriod(m.date, state.period));
+  if (foraP.length) {
+    const rec = foraP.filter(ehReceita).reduce((a, m) => a + m.valor, 0);
+    const gas = foraP.filter(ehDespesa).reduce((a, m) => a + m.valor, 0);
+    const cods = [...new Set(foraP.map(m => m.viagem))].join(", ");
+    html += `<div class="nota-fora goto" data-goto="viagens:viagens">
+      <span class="selo-pag" style="--cor:var(--s3)"><i></i>Em curso</span>
+      <span>Fora destes valores até fechar: <b>${esc(cods)}</b>${rec ? ` · recebido ${fmtMZN(rec)}` : ""}${gas ? ` · custos ${fmtMZN(gas)}` : ""}</span></div>`;
+  }
 
   /* ---------- 2. caixa · contribuições · viagens · frota ---------- */
   const usoFrota = (() => {
     if (!frota || !frota.items.length) return null;
     const norm = x => String(x || "").toLowerCase().replace(/[\s\-_.]/g, "");
     const usadas = new Set();
-    for (const t of viagens) for (const c of t.row) {
+    for (const t of viagensTodas) for (const c of t.row) {   // em curso também: a viatura está na estrada
       const n = norm(c);
       if (n) for (const v of frota.items) if (norm(v.mat) === n) usadas.add(v.mat);
     }
@@ -1423,7 +1443,7 @@ function renderResumo(rows) {
           const p = viagensAnt ? tendencia(viagens.length, viagensAnt.length) : null;
           return p == null ? "" : ` <small style="color:${p >= 0 ? "var(--good-text)" : "var(--serious)"};font-weight:700">${p >= 0 ? "+" : "−"}${fmtNumRaw(Math.abs(p).toFixed(0))}%</small>`;
         })()}</div>
-        <div class="sub">${fmtMZN(viagens.reduce((a, t) => a + (t.km || 0), 0))} km</div>` }) +
+        <div class="sub">${viagens.length ? fmtMZN(viagens.reduce((a, t) => a + (t.km || 0), 0)) + " km" : "fechadas"}${emCursoP.length ? ` · ${emCursoP.length} em curso` : ""}</div>` }) +
     ktHTML({ rotulo: "Utilização da frota", icone: "conta", goto: "viaturas:viaturas",
       corpo: usoFrota
         ? `<div class="gauge"><div class="val">${fmtNumRaw(usoFrota.pct.toFixed(0))}%</div>${medidorHTML(usoFrota.pct)}</div>
@@ -1432,14 +1452,14 @@ function renderResumo(rows) {
   `</div>`;
 
   /* ---------- 3. evolução financeira · despesas por categoria ---------- */
-  const corCat = coresCategorias(geral.filter(ehDespesa));
+  const corCat = coresCategorias(geralA.filter(ehDespesa));
   const despesasP = geralPeriodo.filter(ehDespesa);
   const invP = geralPeriodo.filter(m => m.tipo === "Investimento");
-  const corInv = coresCategorias(geral.filter(m => m.tipo === "Investimento"));
+  const corInv = coresCategorias(geralA.filter(m => m.tipo === "Investimento"));
   /* sem despesas no período mas com investimento: o investimento ocupa o lugar
      do anel vazio, em vez de ficar lá em baixo */
   const invEmCima = !despesasP.length && invP.length > 0;
-  html += `<div class="grelha gc">` + evolucaoHTML(porMes(geral, 6)) +
+  html += `<div class="grelha gc">` + evolucaoHTML(porMes(geralA, 6)) +
     (invEmCima
       ? anelHTML("Investimento por Categoria", "moedas", fatiasPorCategoria(invP, corInv), "", "contas:correntes")
       : anelHTML("Despesas por Categoria", "moedas", fatiasPorCategoria(despesasP, corCat),
@@ -1481,7 +1501,7 @@ function renderResumo(rows) {
   let viagensHTML = "";
   if (td && td.trips.length) {
     const porM = new Map();
-    for (const t of td.trips) if (t.date) {
+    for (const t of fechadas(td.trips)) if (t.date) {
       const k = t.date.getFullYear() * 12 + t.date.getMonth();
       porM.set(k, (porM.get(k) || 0) + 1);
     }
@@ -1493,7 +1513,8 @@ function renderResumo(rows) {
     const p = viagensAnt ? tendencia(viagens.length, viagensAnt.length) : null;
     viagensHTML = `<div class="card goto" data-goto="viagens:viagens" style="cursor:pointer">
       <div class="card-t">${svgIc("estrada")}<h3>Viagens &amp; Operação</h3></div>
-      <div style="font-size:24px;font-weight:780">${viagens.length} <span style="font-size:14px;font-weight:600;color:var(--ink-2)">viage${viagens.length === 1 ? "m" : "ns"}</span></div>
+      <div style="font-size:24px;font-weight:780">${viagens.length} <span style="font-size:14px;font-weight:600;color:var(--ink-2)">viage${viagens.length === 1 ? "m" : "ns"} fechada${viagens.length === 1 ? "" : "s"}</span></div>
+      ${emCursoP.length ? `<div style="font-size:12px;color:var(--ink-2);margin-top:2px">+ ${emCursoP.length} em curso (${emCursoP.map(t => esc(t.cod)).join(", ")})</div>` : ""}
       ${p == null ? `<div class="sub" style="font-size:12px;color:var(--ink-2);margin-top:4px">${fmtMZN(viagens.reduce((a, t) => a + (t.km || 0), 0))} km no período</div>`
         : `<div style="font-size:12px;margin-top:4px;color:${p >= 0 ? "var(--good-text)" : "var(--serious)"};font-weight:700">${p >= 0 ? "+" : "−"}${fmtNumRaw(Math.abs(p).toFixed(0))}% <span style="color:var(--ink-2);font-weight:500">vs período anterior</span></div>`}
       ${tendenciaHTML(pontos, "var(--s3)")}
@@ -1538,7 +1559,7 @@ function renderResumo(rows) {
         ${indicador("Receita por km", km && receita ? fmtNumRaw((receita / km).toFixed(2)) : null, "MZN")}
       </div>
       <div style="font-size:11px;color:var(--ink-muted);margin-top:10px;text-align:center">
-        ${km ? `${fmtMZN(km)} km em ${viagens.length} viage${viagens.length === 1 ? "m" : "ns"}` : "sem quilómetros no período"}${!receita ? " · sem receitas de viagens lançadas" : ""}</div>
+        ${km ? `${fmtMZN(km)} km em ${viagens.length} viage${viagens.length === 1 ? "m" : "ns"} fechada${viagens.length === 1 ? "" : "s"}` : "sem viagens fechadas no período"}${!receita ? " · sem receitas de viagens lançadas" : ""}</div>
     </div>
   </div>`;
 
@@ -1606,12 +1627,12 @@ function renderResumo(rows) {
   }
 
   /* ---------- 9. mapa de calor: categoria × mês ---------- */
-  const meses = porMes(geral, 6);
+  const meses = porMes(geralA, 6);
   const topCats = fatiasPorCategoria(despesasP, corCat).filter(f => f.nome !== "Outras").map(f => f.nome);
   if (topCats.length >= 2 && meses.length >= 2) {
     const matriz = {}; let maior = 0;
     topCats.forEach(n => (matriz[n] = {}));
-    for (const m of geral) {
+    for (const m of geralA) {
       if (!ehDespesa(m) || !m.date || topCats.indexOf(m.categoria) < 0) continue;
       const k = m.date.getFullYear() * 12 + m.date.getMonth();
       matriz[m.categoria][k] = (matriz[m.categoria][k] || 0) + m.valor;
@@ -2285,7 +2306,7 @@ function tripsData() {
     receita:   findCol(C, /receita|frete|faturad/i, /valor\s*(da\s*)?(viagem|servi|frete)/i),
     despesa:   findCol(C, /despesas?\s*total/i, /^despesas?/i),
     saldoMot:  findCol(C, /saldo\s*final\s*motorista/i, /saldo\s*motorista/i),
-    estado:    findCol(C, /estado|situa/i),
+    estado:    findCol(C, /^estado(\s*(da\s*)?viagem)?$/i, /estado|situa/i),
   };
   const get = (r, i) => i >= 0 ? (r[i] || "").trim() : "";
   const num = (r, i) => i >= 0 ? parseNum(r[i]) : null;
@@ -2315,6 +2336,7 @@ function tripsData() {
     saldoMot:  num(t.row, ix.saldoMot),
   }));
   ligarAoLivroGeral(trips);
+  for (const t of trips) t.fechada = viagemFechada(t);
   return { cols: C, ix, trips,
     hasReceita: ix.combinado >= 0 || ix.receita >= 0 || trips.some(t => t.recebido > 0),
     hasKm: ix.km >= 0 };
@@ -2389,6 +2411,27 @@ const ESTADO_PAG = {
   recebido: { rot: "Recebido",    cls: "",        cor: "var(--accent)" },
   sem:      { rot: "Sem valor combinado", cls: "", cor: "var(--ink-muted)" },
 };
+/* Estado da viagem (coluna «Estado»): só as FECHADAS entram nas estatísticas
+   — margem, custos, km, consumo, resultado. Uma viagem aberta ainda não tem
+   os dados todos (recebimentos, recibos, km e litros à chegada).
+   Sem valor na coluna: fechada se já tiver os km à chegada. */
+function viagemFechada(t) {
+  const e = deaccent(t.estado || "").toLowerCase();
+  if (/fechad|conclu|terminad|finaliz/.test(e)) return true;
+  if (/abert|curso|andamento/.test(e)) return false;
+  return t.kmChegada != null;
+}
+const fechadas = trips => trips.filter(t => t.fechada);
+/* códigos das viagens abertas: os movimentos com esses VF ficam fora das
+   estatísticas (mas entram na tesouraria, que é dinheiro real) */
+function vfAbertas(td) {
+  return new Set(td ? td.trips.filter(t => !t.fechada).map(t => t.cod) : []);
+}
+function seloEstadoViagem(t) {
+  return t.fechada ? `<span class="selo-pag" style="--cor:var(--ink-muted)"><i></i>Fechada</span>`
+                   : `<span class="selo-pag" style="--cor:var(--s3)"><i></i>Em curso</span>`;
+}
+
 /* viagens dentro do período escolhido */
 function tripsInPeriod(td) {
   return td.trips.filter(t => inPeriod(t.date, state.period));
@@ -2404,9 +2447,11 @@ function entityStats(trips, key) {
   for (const t of trips) {
     const v = (t[key] || "").trim();
     if (!v) continue;
-    if (!map.has(v)) map.set(v, { nome: v, trips: [], receita: 0, despesa: 0, km: 0 });
+    if (!map.has(v)) map.set(v, { nome: v, trips: [], receita: 0, despesa: 0, km: 0, fechadas: 0, emCurso: 0 });
     const e = map.get(v);
     e.trips.push(t);
+    if (!t.fechada) { e.emCurso++; continue; }   // em curso: conta-se, mas não soma
+    e.fechadas++;
     e.receita += t.receita || 0;
     e.despesa += t.despesa || 0;
     e.km += t.km || 0;
@@ -2636,9 +2681,10 @@ function tripRowHTML(t, keyCols) {
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           ${t.cod ? `<span class="chip" style="background:#1c5cab;color:#fff;border-color:transparent;font-size:12px;padding:5px 10px;font-weight:700">${esc(t.cod)}</span>` : ""}
           ${t.dataTxt ? `<span style="font-size:11.5px;color:var(--ink-muted)">${esc(t.dataTxt)}</span>` : ""}
-          ${margem != null ? `<span class="status ${margem >= 0 ? "good" : "warn"}" style="font-size:11.5px;margin-left:auto">${margem >= 0 ? "+" : ""}${fmtMZN(margem)} MZN</span>` : ""}
+          ${!t.fechada ? `<span style="font-size:11.5px;margin-left:auto;color:var(--ink-muted)">margem ao fechar</span>`
+            : margem != null ? `<span class="status ${margem >= 0 ? "good" : "warn"}" style="font-size:11.5px;margin-left:auto">${margem >= 0 ? "+" : ""}${fmtMZN(margem)} MZN</span>` : ""}
         </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px">${seloPagamento(t)}
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px">${seloEstadoViagem(t)}${seloPagamento(t)}
           ${t.faturaNum ? `<span class="selo-pag" style="--cor:var(--s7)"><i></i>Fatura ${esc(t.faturaNum)}</span>` : ""}
           ${nRec ? `<span class="selo-pag" style="--cor:var(--warning)"><i></i>${nRec} recibo${nRec > 1 ? "s" : ""} por entregar</span>` : ""}
           ${t.motor && t.motor.ativo && Math.abs(t.motor.saldoFinal) > 0.5 ? `<span class="selo-pag" style="--cor:${t.motor.saldoFinal > 0 ? "var(--s5)" : "var(--serious)"}"><i></i>${t.motor.saldoFinal > 0 ? `Motorista: ${fmtMZN(t.motor.saldoFinal)} por acertar` : `Empresa deve ${fmtMZN(-t.motor.saldoFinal)} ao motorista`}</span>` : ""}</div>
@@ -2681,9 +2727,11 @@ function renderViagens() {
     return periodBar() + emptyState("Sem viagens neste período.",
       "Escolhe outro período em cima para veres mais viagens.");
   }
-  const receita = shown.reduce((a, t) => a + (t.receita || 0), 0);
-  const despesa = shown.reduce((a, t) => a + (t.despesa || 0), 0);
-  const margem = td.hasReceita ? receita - despesa : null;
+  /* margem e custos: só as fechadas; por receber e recibos: todas */
+  const fech = fechadas(shown), emCurso = shown.length - fech.length;
+  const receita = fech.reduce((a, t) => a + (t.receita || 0), 0);
+  const despesa = fech.reduce((a, t) => a + (t.despesa || 0), 0);
+  const margem = td.hasReceita && fech.length ? receita - despesa : null;
   const pendente = shown.reduce((a, t) => a + (t.pendente || 0), 0);
   const porReceber = shown.filter(t => t.pendente > 0.5).length;
   const recPend = shown.flatMap(t => t.recibosPendentes || []);
@@ -2692,9 +2740,9 @@ function renderViagens() {
 
   return periodBar() +
     `<div class="card" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px">
-      ${caixa("Viagens", shown.length)}
-      ${margem != null ? caixa("Margem", fmtMZN(margem) + ' <small style="font-size:11px;color:var(--ink-muted)">MZN</small>', margem >= 0 ? "var(--good-text)" : "var(--serious)")
-        : despesa ? caixa("Custos", fmtMZN(despesa) + ' <small style="font-size:11px;color:var(--ink-muted)">MZN</small>') : ""}
+      ${caixa("Viagens", shown.length, "", emCurso ? `${emCurso} em curso` : "todas fechadas")}
+      ${margem != null ? caixa("Margem", fmtMZN(margem) + ' <small style="font-size:11px;color:var(--ink-muted)">MZN</small>', margem >= 0 ? "var(--good-text)" : "var(--serious)", `${fech.length} fechada${fech.length === 1 ? "" : "s"}`)
+        : despesa ? caixa("Custos", fmtMZN(despesa) + ' <small style="font-size:11px;color:var(--ink-muted)">MZN</small>', "", "viagens fechadas") : ""}
       ${porReceber ? caixa("Por receber", fmtMZN(pendente) + ' <small style="font-size:11px;color:var(--ink-muted)">MZN</small>', "var(--serious)", `${porReceber} viage${porReceber > 1 ? "ns" : "m"}`) : ""}
       ${recPend.length ? caixa("Recibos por entregar", recPend.length, "var(--warning)", fmtMZN(recPend.reduce((a, m) => a + m.valor, 0)) + " MZN") : ""}
     </div>
@@ -2711,12 +2759,12 @@ function entityListHTML(key, titleSing, emptyMsg) {
   const ents = entityStats(shown, key);
   if (!ents.length) return periodBar() + emptyState(`Sem ${titleSing}s neste período.`);
   return periodBar() + `<div class="card">` + ents.map(e => {
-    const margem = td.hasReceita ? e.receita - e.despesa : null;
+    const margem = td.hasReceita && e.fechadas ? e.receita - e.despesa : null;
     return `<div class="mov" data-entity="${esc(key)}" data-entity-name="${esc(e.nome)}" style="cursor:pointer;align-items:center">
       <div class="m-main">
         <div style="font-size:14px;font-weight:650">${esc(e.nome)}</div>
         <div style="font-size:12px;color:var(--ink-2);margin-top:3px">
-          ${e.trips.length} viage${e.trips.length === 1 ? "m" : "ns"}${e.km ? ` · ${fmtMZN(e.km)} km` : ""}
+          ${e.trips.length} viage${e.trips.length === 1 ? "m" : "ns"}${e.emCurso ? ` (${e.emCurso} em curso)` : ""}${e.km ? ` · ${fmtMZN(e.km)} km` : ""}
         </div>
       </div>
       <div class="m-side">
@@ -2732,10 +2780,11 @@ function entityDetailHTML(key, nome, backAttr) {
   const td = tripsData();
   const all = td ? td.trips.filter(t => (t[key] || "").trim() === nome) : [];
   const shown = all.filter(t => inPeriod(t.date, state.period));
-  const receita = shown.reduce((a, t) => a + (t.receita || 0), 0);
-  const despesa = shown.reduce((a, t) => a + (t.despesa || 0), 0);
-  const km = shown.reduce((a, t) => a + (t.km || 0), 0);
-  const margem = td && td.hasReceita ? receita - despesa : null;
+  const fech = fechadas(shown), emCurso = shown.length - fech.length;
+  const receita = fech.reduce((a, t) => a + (t.receita || 0), 0);
+  const despesa = fech.reduce((a, t) => a + (t.despesa || 0), 0);
+  const km = fech.reduce((a, t) => a + (t.km || 0), 0);
+  const margem = td && td.hasReceita && fech.length ? receita - despesa : null;
   /* saldo do motorista: último valor conhecido nas viagens dele */
   const saldos = shown.map(t => t.saldoMot).filter(v => v != null);
   const saldo = key === "motorista" && saldos.length ? saldos[saldos.length - 1] : null;
@@ -2744,16 +2793,16 @@ function entityDetailHTML(key, nome, backAttr) {
   /* consumo real médio das viagens fechadas: litros consumidos ÷ km */
   let consReal = null;
   if (key === "viatura") {
-    const fechadas = shown.map(t => consumoViagem(t, null, null)).filter(c => c.lkm);
-    const kmF = fechadas.reduce((a, c) => a + c.km, 0), lF = fechadas.reduce((a, c) => a + c.consumidos, 0);
-    if (kmF) consReal = { l100: lF / kmF * 100, n: fechadas.length };
+    const comConsumo = fech.map(t => consumoViagem(t, null, null)).filter(c => c.lkm);
+    const kmF = comConsumo.reduce((a, c) => a + c.km, 0), lF = comConsumo.reduce((a, c) => a + c.consumidos, 0);
+    if (kmF) consReal = { l100: lF / kmF * 100, n: comConsumo.length };
   }
 
   return backBtn(backAttr, "Voltar") + periodBar() +
     `<div class="card">
       <div style="font-size:18px;font-weight:750;letter-spacing:-0.01em">${esc(nome)}</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;margin-top:12px">
-        <div><div style="font-size:11.5px;color:var(--ink-muted)">Viagens</div><b style="font-size:15px">${shown.length}</b></div>
+        <div><div style="font-size:11.5px;color:var(--ink-muted)">Viagens</div><b style="font-size:15px">${shown.length}</b>${emCurso ? `<div style="font-size:11px;color:var(--ink-muted)">${emCurso} em curso, fora dos totais</div>` : ""}</div>
         ${km ? `<div><div style="font-size:11.5px;color:var(--ink-muted)">Km</div><b style="font-size:15px">${fmtMZN(km)}</b></div>` : ""}
         ${despesa ? `<div><div style="font-size:11.5px;color:var(--ink-muted)">Despesas</div><b style="font-size:15px">${fmtMZN(despesa)}</b></div>` : ""}
         ${margem != null ? `<div><div style="font-size:11.5px;color:var(--ink-muted)">Margem</div><b style="font-size:15px;color:${margem >= 0 ? "var(--good-text)" : "var(--serious)"}">${fmtMZN(margem)}</b></div>` : ""}
@@ -2813,7 +2862,7 @@ function renderViaturas() {
       <div class="m-main">
         <div style="font-size:14px;font-weight:650">${esc(v.mat)}</div>
         <div style="font-size:12px;color:var(--ink-2);margin-top:3px">
-          ${e ? `${e.trips.length} viage${e.trips.length === 1 ? "m" : "ns"}` : "Sem viagens no período"}
+          ${e ? `${e.trips.length} viage${e.trips.length === 1 ? "m" : "ns"}${e.emCurso ? ` (${e.emCurso} em curso)` : ""}` : "Sem viagens no período"}
           ${v.consumoSeco != null ? ` · esperado ${fmtNumRaw(String(v.consumoSeco))} l/100km` : ""}
         </div>
       </div>
@@ -2849,7 +2898,7 @@ function viagemDetalheHTML(td) {
     <div class="card">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         ${t.cod ? `<span class="chip" style="background:#1c5cab;color:#fff;border-color:transparent;font-size:14px;padding:7px 13px;font-weight:750">${esc(t.cod)}</span>` : ""}
-        ${seloPagamento(t)}
+        ${seloEstadoViagem(t)}${seloPagamento(t)}
         <button data-abast class="chip" style="cursor:pointer;font-size:13px;font-weight:650;padding:8px 14px;border-color:var(--accent);color:var(--accent-text);margin-left:auto">⛽ Abastecimentos</button>
       </div>
       ${t.rota ? `<div style="font-size:18px;font-weight:750;margin-top:12px">${esc(t.rota)}</div>` : ""}
@@ -2891,7 +2940,8 @@ function viagemDetalheHTML(td) {
   }
   const custoTotal = t.custos.reduce((a, m) => a + m.valor, 0);
   html += `<div class="card">
-    <div class="card-t">${svgIc("despesas")}<h3>Custos e margem</h3></div>
+    <div class="card-t">${svgIc("despesas")}<h3>Custos e margem</h3>${t.fechada ? "" : `<span class="extra">provisório</span>`}</div>
+    ${t.fechada ? "" : `<div class="vazio-mini" style="margin:0 0 10px">Viagem em curso: os valores ainda podem mudar e não entram nas estatísticas. Passam a contar quando for fechada no back office (Viagem → Fechar viagem).</div>`}
     <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">
       ${num("Custos", t.despesa != null ? fmtMZN(t.despesa) + mzn : "—", "", custoTotal ? "do livro geral" : t.despesaCol != null ? "da folha Viagens" : "")}
       ${num("Margem", margem != null ? fmtMZN(margem) + mzn : "—", margem == null ? "" : margem >= 0 ? "var(--good-text)" : "var(--serious)")}

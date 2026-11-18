@@ -64,6 +64,10 @@ Corre no Google Apps Script, dentro da conta Google da empresa.
   de chegada abaixo dos de saída e litros que deem consumo zero ou negativo.
   Uma viagem já fechada pode ser fechada outra vez para corrigir.
 
+  **Estado da viagem** — coluna `Estado` da folha `Viagens`: **Aberta** ao
+  criar, **Fechada** ao fechar. Em *Fechar viagem* as abertas aparecem
+  primeiro. Na app, só as fechadas entram nas estatísticas.
+
   **Valor combinado** — o valor acordado com o cliente, na coluna **`Valor
   Rate`** da folha `Viagens` (também são reconhecidas `Valor Combinado`, `Rate`
   e `Tarifa`). Aparece logo a seguir ao Cliente, em destaque; os campos do

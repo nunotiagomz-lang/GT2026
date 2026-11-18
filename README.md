@@ -247,6 +247,21 @@ movimentos ligados. No painel, *A receber · clientes* soma o pendente de todas 
 viagens, e as Próximas Ações avisam das viagens por receber e dos recibos por
 entregar.
 
+### Viagens abertas e fechadas
+
+A coluna `Estado` da folha `Viagens` diz se a viagem está **Aberta** (em
+curso, com dados ainda por lançar) ou **Fechada** (pronta para analisar). Sem
+valor, conta como fechada se já tiver os km à chegada.
+
+Só as **fechadas** entram nas estatísticas: no painel, receitas, despesas e
+resultado (com a nota «Fora destes valores até fechar: VF…»), evolução,
+categorias, indicadores de gestão e viagens no período; em Operações, a
+margem; nas fichas de motoristas, clientes e viaturas, margem, km e consumo.
+Continuam a contar tudo: a **tesouraria** (é dinheiro real), o que os
+clientes devem, recibos, contas do motorista, faturação, a utilização da
+frota e o Financeiro (livro de movimentos). A viagem aberta aparece com o selo
+*Em curso* e a margem marcada como provisória.
+
 ### Consumo da viagem
 
 Ao abrir a viagem ficam registados os km e os litros no depósito à saída; ao
