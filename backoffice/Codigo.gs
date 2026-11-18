@@ -305,6 +305,9 @@ function guardarViagem(valores, saida) {
         valores[cab.cols[indiceDe_(cab.cols, [c.re])]] = p[1];
       });
     }
+    /* a viagem nasce aberta */
+    cab = garantirColuna_(sh, COL_ESTADO.nome, [COL_ESTADO.re]).cab;
+    valores[cab.cols[indiceDe_(cab.cols, [COL_ESTADO.re])]] = ESTADO_ABERTA;
     var iVF = indiceDe_(cab.cols, [/^vf$/i, /c[óo]digo/i]);
 
     /* recalcula o código no momento da gravação (o ecrã pode estar desatualizado) */
@@ -412,6 +415,11 @@ var CAMPOS_KM = {
 var ORDEM_KM = ['kmSaida', 'kmChegada', 'litrosSaida', 'litrosChegada'];
 var COL_LITROS_CONSUMIDOS = { nome: 'Litros Consumidos', re: /^litros\s*consumid/i };
 var COL_CONSUMO = { nome: 'Consumo (L/km)', re: /^consumo/i };
+/* Estado da viagem: «Aberta» ao criar, «Fechada» ao fechar (km e litros à
+   chegada). A app só usa as fechadas nas estatísticas. */
+var COL_ESTADO = { nome: 'Estado', re: /^estado(\s*(da\s*)?viagem)?$/i };
+var ESTADO_ABERTA = 'Aberta';
+var ESTADO_FECHADA = 'Fechada';
 
 /** número ou null (vazio) — aceita vírgula decimal */
 function numOuNada_(v) {
@@ -531,6 +539,11 @@ function obterFechoViagem(codigo) {
     out.litrosAbastecidos = a.litros; out.nAbast = a.n; out.ultimoKm = a.ultimoKm;
   }
   out.fechada = out.kmChegada != null && out.litrosChegada != null;
+  if (lv) {
+    var iE = indiceDe_(cv.cols, [COL_ESTADO.re]);
+    out.estado = iE >= 0 ? String(sv.getRange(lv, iE + 1).getValue() || '').trim() : '';
+    if (/fechad/i.test(out.estado)) out.fechada = true;
+  }
   return out;
 }
 
@@ -587,6 +600,7 @@ function fecharViagem(dados) {
     escrever(CAMPOS_KM.litrosChegada, lC);
     escrever(COL_LITROS_CONSUMIDOS, consumidos);
     escrever(COL_CONSUMO, lkm);
+    escrever(COL_ESTADO, ESTADO_FECHADA);
     /* regresso e km da viagem: só se a coluna existir e a célula estiver vazia
        (o regresso pode ser corrigido no formulário: aí escreve-se) */
     var lv = linhaDaViagem_(sv, cv, vf);
@@ -1086,6 +1100,11 @@ function garantirColuna_(sh, nome, padroes) {
   if (indiceDe_(cab.cols, padroes) >= 0) return { cab: cab, criada: false };
   var ultima = 0;
   for (var i = 0; i < cab.cols.length; i++) if (cab.cols[i]) ultima = i + 1;
+  /* a folha pode não ter colunas livres à direita (a grelha acaba na última
+     coluna usada): sem isto o getRange dava erro de dimensões */
+  if (sh.getMaxColumns && ultima + 1 > sh.getMaxColumns()) {
+    sh.insertColumnsAfter(sh.getMaxColumns(), ultima + 1 - sh.getMaxColumns());
+  }
   sh.getRange(cab.linha, ultima + 1).setValue(nome);
   return { cab: cabecalho_(sh), criada: true };
 }
@@ -1599,6 +1618,29 @@ function obterContaMotorista(codigo) {
   var c = contaMotorista_(vf);
   c.motorista = dadosDaViagem_('VF' + vf).motorista;
   return c;
+}
+
+/** Estado de cada viagem { "3": "Aberta", "2": "Fechada" }: da coluna
+    Estado; sem valor, fechada se já tiver km à chegada (como na app). */
+function estadosViagens() {
+  verificarAcesso_();
+  var sh = folha_(PLANO_ID, FOLHA_VIAGENS);
+  var cab = cabecalho_(sh);
+  var iVF = indiceDe_(cab.cols, [/^vf$/i, /c[óo]digo/i]);
+  var iE = indiceDe_(cab.cols, [COL_ESTADO.re]);
+  var iKC = indiceDe_(cab.cols, [CAMPOS_KM.kmChegada.re]);
+  var out = {};
+  if (iVF < 0 || sh.getLastRow() <= cab.linha) return out;
+  sh.getRange(cab.linha + 1, 1, sh.getLastRow() - cab.linha, cab.cols.length).getValues()
+    .forEach(function (r) {
+      var vf = String(r[iVF]).replace(/\D/g, '');
+      if (!vf) return;
+      var e = iE >= 0 ? semAcentos_(r[iE]) : '';
+      out[vf] = /fechad|conclu|terminad|finaliz/.test(e) ? ESTADO_FECHADA
+              : /abert|curso|andamento/.test(e) ? ESTADO_ABERTA
+              : (iKC >= 0 && String(r[iKC]).trim() ? ESTADO_FECHADA : ESTADO_ABERTA);
+    });
+  return out;
 }
 
 /** Códigos de viagem existentes, para o formulário de abastecimentos. */
